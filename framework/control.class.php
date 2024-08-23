@@ -1,4 +1,5 @@
 <?php declare(strict_types=1);
+
 /**
  * ZenTaoPHP的control类。
  * The control class file of ZenTaoPHP framework.
