@@ -1,4 +1,5 @@
 <?php declare(strict_types=1);
+
 /**
  * ZenTaoPHP的helper类。
  * The helper class file of ZenTaoPHP framework.
