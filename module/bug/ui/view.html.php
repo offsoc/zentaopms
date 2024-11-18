@@ -10,6 +10,7 @@ declare(strict_types=1);
  * @link        https://www.zentao.net
  */
 namespace zin;
+global $app;
 
 include($this->app->getModuleRoot() . 'ai/ui/promptmenu.html.php');
 
@@ -33,7 +34,7 @@ jsVar('executions',       $executions);
 jsVar('disableExecution', $lang->project->disableExecution);
 
 $isInModal    = isInModal();
-$canCreateBug = hasPriv('bug', 'create');
+$canCreateBug = $this->app->tab != 'devops' && hasPriv('bug', 'create');
 $canViewRepo  = hasPriv('repo', 'revision');
 $canViewMR    = hasPriv('mr', 'view');
 $canViewBug   = hasPriv('bug', 'view');
@@ -48,7 +49,8 @@ if(!$isInModal && $canCreateBug)
         'icon' => 'plus',
         'type' => 'primary',
         'text' => $lang->bug->create,
-        'url'  => createLink('bug', 'create', "productID={$product->id}&branch={$bug->branch}&extras=moduleID={$bug->module}")
+        'data-app' => $app->tab,
+        'url'  => createLink('bug', 'create', "productID={$product->id}&branch={$bug->branch}&extras=projectID={$bug->project},executionID={$bug->execution},moduleID={$bug->module}")
     );
 }
 
@@ -165,6 +167,7 @@ modal
     (
         on::change('#taskProjects', 'changeTaskProjects'),
         set::actions(''),
+        set::showExtra(false),
         formRow
         (
             formGroup

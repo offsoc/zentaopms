@@ -388,7 +388,8 @@ $lang->execution->copyTeamTitle        = "Choose a {$lang->project->common} or {
 /* Interactive prompts. */
 $lang->execution->confirmDelete                = "Möchten Sie {$lang->executionCommon}[%s] löschen?";
 $lang->execution->confirmUnlinkMember          = "Möchten Sie den Benutzer vom {$lang->executionCommon} entfernen?";
-$lang->execution->confirmUnlinkStory           = "After {$lang->SRCommon} is removed, cased linked to {$lang->SRCommon} will be reomoved and tasks linked to {$lang->SRCommon} will be cancelled. Do you want to continue?";
+$lang->execution->confirmUnlinkStory           = "After Story is removed, cased linked to Story will be reomoved and tasks linked to Story will be cancelled. Do you want to continue?";
+$lang->execution->confirmBatchUnlinkStory      = "After Story is removed, cased linked to Story will be reomoved and tasks linked to Story will be cancelled.";
 $lang->execution->confirmSync                  = "After modifying the {$lang->projectCommon}, in order to maintain the consistency of data, the data of {$lang->productCommon}s, {$lang->SRCommon}s, teams and whitelist associated with the implementation will be synchronized to the new {$lang->projectCommon}. Please know.";
 $lang->execution->confirmUnlinkExecutionStory  = "Do you want to unlink this Story from the {$lang->projectCommon}?";
 $lang->execution->notAllowedUnlinkStory        = "This {$lang->SRCommon} is linked to the {$lang->executionCommon} of the {$lang->projectCommon}. Remove it from the {$lang->executionCommon}, then try again.";
@@ -438,6 +439,8 @@ $lang->execution->hasSuspendedOrClosedChildren = "The sub-stages under stage %s 
 $lang->execution->hasNotClosedChildren         = "The sub-stages under stage %s are not all closed, cannot be modified, and have been filtered.";
 $lang->execution->hasStartedTask               = "The task under %s %s has already started, cannot be modified, and has been filtered.";
 $lang->execution->cannotManageProducts         = 'The ' . strtolower($lang->project->common). ' model of this ' . strtolower($lang->execution->common) . " is %s and this " . strtolower($lang->execution->common) . " cannot be associated with {$lang->productCommon}.";
+$lang->execution->confirmCloseExecution        = "There are unclosed tasks under this {$lang->executionCommon}: %s, are you sure you want to close the {$lang->executionCommon}?";
+$lang->execution->confirmBatchCloseExecution   = "There are unclosed tasks in %s, are you sure you want to close the {$lang->executionCommon}s";
 
 /* Statistics. */
 $lang->execution->charts = new stdclass();

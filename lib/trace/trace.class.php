@@ -46,7 +46,8 @@ class trace
             'querys'   => count(dao::$querys),
             'caches'   => 0,
             'files'    => count(get_included_files()),
-            'session'  => session_id()
+            'session'  => session_id(),
+            'php'      => phpversion()
         );
     }
 
@@ -85,6 +86,8 @@ class trace
         if($config->db->driver === 'dm') return;
 
         $profiling = $this->dao->dbh->query('SHOW PROFILES')->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach($profiling as $key => $profile) $profiling[$key]['Duration'] = number_format($profile['Duration'], 4);
 
         $this->trace['profiles'] = $profiling;
     }

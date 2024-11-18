@@ -249,6 +249,8 @@ class treeModel extends model
      */
     public function getModulePairs(int $rootID, string $viewType = 'story', string $showModule = 'end', string $extra = '')
     {
+        if(common::isTutorialMode()) $modulePairs = $this->loadModel('tutorial')->getModulePairs();
+
         if($viewType == 'task')
         {
             $products = array_keys($this->loadModel('product')->getProductPairsByProject($rootID));
@@ -529,16 +531,13 @@ class treeModel extends model
         $productNum = count($products);
         foreach($products as $id => $product)
         {
-            /* 如果一个执行或项目关联了多个产品，产品名也要放在树状菜单上。 If executon/project has multiple products, show the product in tree menu. */
-            if($productNum > 1)
-            {
-                $menuItem = new stdclass();
-                $menuItem->id     = "product-$id";
-                $menuItem->name   = $product;
-                $menuItem->parent = 0;
-                $menuItem->url    = helper::createLink('execution', 'task', "executionID=$rootID&status=byProduct&praram=$id");
-                $menu["product-$id"] = $menuItem;
-            }
+            /* 产品名也要放在树状菜单上。Show the product in tree menu. */
+            $menuItem = new stdclass();
+            $menuItem->id     = "product-$id";
+            $menuItem->name   = $product;
+            $menuItem->parent = 0;
+            $menuItem->url    = helper::createLink('execution', 'task', "executionID=$rootID&status=byProduct&praram=$id");
+            $menu["product-$id"] = $menuItem;
 
             /* tree menu. */
             if(empty($branchGroups[$id])) $branchGroups[$id]['0'] = '';
@@ -554,7 +553,7 @@ class treeModel extends model
                 {
                     if(!isset($executionModules[$module->id]) && strpos($extra['extra'], 'allModule') === false) continue;
 
-                    if($module->type == 'story' && $module->root > 0) $module->parent = "product-{$module->root}";
+                    if($module->type == 'story' && $module->root > 0 && $module->parent == 0) $module->parent = "product-{$module->root}";
                     $module->url = helper::createLink('execution', 'task', "executionID={$rootID}&type=byModule&param={$module->id}");
                     $menu[$module->id] = $module;
                 }
@@ -1557,6 +1556,8 @@ class treeModel extends model
      */
     public function getSons(int $rootID, int $moduleID, string $type = 'root', string $branch = '0'): array
     {
+        if(common::isTutorialMode()) return array();
+
         $syncConfig = $this->getSyncConfig($type);
 
         if($type  == 'line') $rootID = 0;
@@ -1660,7 +1661,7 @@ class treeModel extends model
      */
     public function getParents(int $moduleID, bool $queryAll = false): array
     {
-        if($moduleID == 0) return array();
+        if($moduleID == 0 || common::isTutorialMode()) return array();
         $path = $this->dao->select('path')->from(TABLE_MODULE)->where('id')->eq((int)$moduleID)->fetch('path');
         $path = trim($path, ',');
         if(!$path) return array();
@@ -1957,9 +1958,10 @@ class treeModel extends model
 
         if($self)
         {
+            if($type == 'ticket' || $type == 'feedback') $module->root = $self->root;
             if($type == 'host' || !isset($module->root)) $module->root = 0;
             if(strpos($this->config->tree->groupTypes, ",$type,") !== false) $module->root = $self->root;
-            if($self->root && !isset($module->root)) $module->root = $self->root;
+            if($self->root && !$module->root) $module->root = $self->root;
             if($self->parent != $module->parent || $self->root != $module->root)
             {
                 $maxOrder = $this->dao->select('MAX(`order`) AS `order`')->from(TABLE_MODULE)->where('parent')->eq($module->parent)->andWhere('root')->eq($module->root)->fetch('order');
@@ -1973,7 +1975,8 @@ class treeModel extends model
         if($repeatName)
         {
             $tips = in_array($self->type, array('doc', 'api')) ? $this->lang->tree->repeatDirName : $this->lang->tree->repeatName;
-            helper::end(js::alert(sprintf($tips, $repeatName)));
+            dao::$errors['name'] = sprintf($tips, $repeatName);
+            return false;
         }
 
         if((empty($module->root) || empty($module->name)) && in_array($self->type, array('doc', 'api')))
@@ -2180,9 +2183,6 @@ class treeModel extends model
                 $this->dao->update(TABLE_TICKET)->set('module')->eq($module->parent)->where('module')->in($childs)->exec();
                 $cookieName = 'ticketModule';
                 break;
-            case 'doc':
-                $this->dao->update(TABLE_DOC)->set('`module`')->eq($module->parent)->where('`module`')->in($childs)->exec();
-                break;
         }
         $sessionValue = $this->session->{$module->type . 'List'};
         if($sessionValue && strpos($sessionValue, 'param=' . $moduleID)) $this->session->set($module->type . 'List', str_replace('param=' . $moduleID, 'param=0', $sessionValue));
@@ -2330,6 +2330,8 @@ class treeModel extends model
      */
     public function getProductStructure(int $rootID, string $viewType, string $branchID = 'all', int $currentModuleID = 0): array
     {
+        if(common::isTutorialMode()) return array();
+
         if($viewType == 'line') $rootID = 0;
         $stmt  = $this->app->dbQuery($this->buildMenuQuery($rootID, $viewType, $currentModuleID, $branchID));
         $trees = $this->getDataStructure($stmt, $viewType, $rootID, array(), $branchID);

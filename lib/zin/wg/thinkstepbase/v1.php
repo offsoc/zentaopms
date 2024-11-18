@@ -19,12 +19,15 @@ namespace zin;
 class thinkStepBase extends wg
 {
     protected static array $defineProps = array(
-        'title?: string',         // 标题
-        'desc?: string',          // 描述
-        'isRun?: bool=false',     // 是否是分析活动
-        'step?: object',          // 整个步骤的对象
-        'mode?: string="detail"', // detail|create|edit
-        'type?: string="node"',   // node|transition/question
+        'title?: string',          // 标题
+        'desc?: string',           // 描述
+        'isRun?: bool=false',      // 是否是分析活动
+        'step?: object',           // 整个步骤的对象
+        'mode?: string="detail"',  // detail|create|edit
+        'type?: string="node"',    // node|transition/question
+        'quoteQuestions?: array'.  // 引用的问题
+        'quotedQuestions?: attay', // 被引用的问题
+        'isResult?: bool=false',   // 是否是结果页
     );
 
     public static function getPageCSS(): ?string
@@ -45,12 +48,13 @@ class thinkStepBase extends wg
         {
             $questionType = $options->questionType;
             $tips         = $lang->thinkstep->$questionType;
-            if($options->required && $questionType == 'checkbox' && $options->setOption == 0)
+            $setOption    = empty($options->setOption) || $options->setOption == 0;
+            if(!empty($options->required) && $questionType == 'checkbox' && $setOption)
             {
                 $tips = $lang->thinkrun->requiredTitle[$questionType];
                 $tips = str_replace(array('%min%', '%max%'), array($options->minCount, $options->maxCount), $tips);
             }
-            if($options->required && $questionType == 'tableInput')
+            if(!empty($options->required) && $questionType == 'tableInput')
             {
                 if($options->supportAdd)  $tips = sprintf($lang->thinkrun->tableInputTitle->notSupportAdd, count($options->fields), $options->requiredRows);
                 if(!$options->supportAdd) $tips = sprintf($lang->thinkrun->tableInputTitle->supportAdd, $options->requiredRows);
@@ -97,6 +101,100 @@ class thinkStepBase extends wg
                 )
             )
         );
+    }
+    protected function buildDetailTip(): array
+    {
+        global $lang, $app, $config;
+        $app->loadLang('thinkstep');
+        $app->loadLang('thinkrun');
+        list($quoteQuestions, $quotedQuestions, $step, $isRun) = $this->prop(array('quoteQuestions', 'quotedQuestions', 'step', 'isRun'));
+
+        if(!empty($step->options->fields)) $step->options->fields = is_string($step->options->fields) ? explode(', ', $step->options->fields) : array_values((array)$step->options->fields);
+
+        $questionType = !empty($step) && !empty($step->options) ? $step->options->questionType : '';
+        $isCheckBox   = !empty($step) && $step->type == 'question' && in_array($questionType, $config->thinkstep->quoteQuestionType);
+        $isQuoteItem  = $isCheckBox && !empty($step->options->setOption) && $step->options->setOption == 1;
+        $detailTip    = array();
+        $quotedItems  = array();
+        if(!empty($quotedQuestions))
+        {
+            foreach($quotedQuestions as $item)
+            {
+                $quotedItems[] = a
+               (
+                   setClass('block text-primary-500 leading-relaxed'),
+                   set::href(createLink('thinkstep', 'view', "marketID=0&&wizardID=$item->wizard&&stepID=$item->id&&from=detail")),
+                   setData('toggle', 'modal'),
+                   setData('dismiss', 'modal'),
+                   setData('size', 'sm'),
+                   $item->index . '. ' . $item->title
+                );
+            }
+        }
+
+        if($isQuoteItem && !empty($quoteQuestions))
+        {
+            foreach($quoteQuestions as $item)
+            {
+                if(!$isRun && $item->id == $step->options->quoteTitle) $sourceQuestion = $item;
+                if($isRun && $item->origin == $step->options->quoteTitle) $sourceQuestion = $item;
+            }
+        }
+        if($isRun && (!empty($quotedQuestions) || !empty($sourceQuestion)))
+        {
+            $tipType = $lang->thinkstep->label->option;
+            if(!empty($sourceQuestion))
+            {
+                $sourceQuestionType = is_string($sourceQuestion->options) ? json_decode($sourceQuestion->options)->questionType : $sourceQuestion->options->questionType;
+                if($sourceQuestionType == 'multicolumn') $tipType = sprintf($lang->thinkstep->entry, $step->options->selectColumn);
+            }
+            $detailTip[] = div
+            (
+                setClass('bg-primary-50 text-gray p-2 mt-3 leading-normal'),
+                !empty($quotedQuestions) ? div
+                (
+                    setClass('flex items-center'),
+                    icon(setClass('font text-warning mr-1'), 'about'),
+                    $lang->thinkrun->tips->quotedTip
+                ) : null,
+                !empty($sourceQuestion) ? div
+                (
+                    setClass('ml-4 pl-0.5'),
+                    sprintf($lang->thinkstep->tips->checkbox, $lang->thinkstep->tips->options[$questionType], ($sourceQuestion->index . '. ' . $sourceQuestion->title)),
+                    $tipType
+                ) : null
+            );
+        }
+        if(!$isRun)
+        {
+            $detailTip[] = array
+            (
+                !empty($sourceQuestion) ? array(
+                    div
+                    (
+                        setClass('bg-primary-50 leading-normal p-2 mt-3'),
+                        div(sprintf($lang->thinkstep->tips->sourceofOptions, $lang->thinkstep->tips->options[$questionType])),
+                        a
+                        (
+                            setClass('block text-primary-500 leading-relaxed'),
+                            set::href(createLink('thinkstep', 'view', "marketID=0&&wizardID=$sourceQuestion->wizard&&stepID=$sourceQuestion->id&&from=detail")),
+                            setData('toggle', 'modal'),
+                            setData('dismiss', 'modal'),
+                            setData('size', 'sm'),
+                            $sourceQuestion->index . '. ' . $sourceQuestion->title
+                        )
+                    ),
+                    (!empty($questionType) && $questionType == 'multicolumn') ? div(setClass('text-sm text-gray-400 leading-loose mt-2'), $lang->thinkstep->tips->multicolumn) : null
+                ): null,
+                !empty($quotedQuestions) ? div
+                (
+                    setClass('bg-primary-50 leading-normal p-2 mt-3'),
+                    div(sprintf($lang->thinkstep->tips->optionsAreReferenced, $questionType == 'multicolumn' ? $lang->thinkstep->inputItem : $lang->thinkstep->label->option)),
+                    $quotedItems
+                ) : null
+            );
+        }
+        return $detailTip;
     }
 
     protected function buildFormItem(): array
@@ -164,16 +262,26 @@ class thinkStepBase extends wg
 
     protected function build(): wg|node|array
     {
-        $content = $this->prop('isRun') ? div
+        list($isResult, $step, $isRun) = $this->prop(array('isResult', 'step', 'isRun'));
+        $questionType = '';
+        if($isResult && isset($step->options->questionType)) $questionType = $step->options->questionType;
+
+        $content = $isRun ? div
         (
             setClass('w-full col bg-white items-center pt-4 pb-10 px-8 mb-4'),
             div
             (
                 setStyle(array('max-width' => '878px')),
                 setClass('w-full'),
-                $this->buildDetail()
+                $this->buildDetail(),
+                $this->buildDetailTip()
             )
-        ) : $this->buildDetail();
+        ) : div
+        (
+            $questionType == 'tableInput' ? setStyle(array('min-width' => '220px')) : null,
+            $this->buildDetail(),
+            $this->buildDetailTip()
+        );
         return $this->prop('mode') == 'detail' ? $content : $this->buildForm();
     }
 }

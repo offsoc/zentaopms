@@ -27,7 +27,7 @@ class datatableModel extends model
         /* Load corresponding module. */
         if(!isset($this->config->$module)) $this->loadModel($module);
 
-        $config = $this->config->$module;
+        $config = isset($this->config->$module) ? $this->config->$module : new stdclass();
         if(!empty($method) && isset($config->$method) && isset($config->$method->dtable)) $config = $config->$method;
 
         $fieldList = isset($config->dtable->fieldList) ? $config->dtable->fieldList : array();
@@ -57,13 +57,8 @@ class datatableModel extends model
             }
         }
 
-        /* Logic except open source version .*/
-        if($this->config->edition != 'open')
-        {
-            $fields            = $this->loadModel('workflowfield')->getList($module);
-            $workflowFieldList = $this->loadModel('flow')->buildDtableCols($fields);
-            $fieldList         = array_merge($fieldList, $workflowFieldList);
-        }
+        /* 加载工作流字段配置。 */
+        if($this->config->edition != 'open') $fieldList += $this->appendWorkflowFields($module, $method);
 
         return $fieldList;
     }
@@ -159,11 +154,9 @@ class datatableModel extends model
                     unset($fieldSetting['plan']);
                 }
             }
-
         }
 
         uasort($fieldSetting, array('datatableModel', 'sortCols'));
-
         return $fieldSetting;
     }
 
@@ -440,5 +433,89 @@ class datatableModel extends model
         if($widths['rightWidth'] <= 0 and $hasRightAuto) $widths['rightWidth'] = 140;
 
         return $widths;
+    }
+
+    /**
+     * 加载工作流字段配置到数据表字段配置中。
+     * Load workflow fields.
+     *
+     * @param  string $module
+     * @param  string $method
+     * @access public
+     * @return array
+     */
+    public function appendWorkflowFields(string $module, string $method): array
+    {
+        if(in_array($module, array('epic', 'story', 'requirement')))
+        {
+            $module = 'product';
+            $method = 'browse'; // 需求加载product-browse的layout配置。
+        }
+        elseif($module == 'build')
+        {
+            $module = 'execution';
+            $method = 'build'; // 版本加载execution-build的layout配置。
+        }
+        elseif($module == 'task')
+        {
+            $module = 'execution';
+            $method = 'task'; // 任务加载execution-task的layout配置。
+        }
+        elseif($module == 'bug' && $method == 'bug')
+        {
+            $method = 'browse'; // 执行bug列表加载bug-browse的layout配置。
+        }
+        elseif($module == 'testcase' && $method == 'testcase')
+        {
+            $method = 'browse'; // 执行用例列表加载testcase-browse的layout配置。
+        }
+        elseif($module == 'projectrelease')
+        {
+            $module = 'release'; // 项目发布加载release-browse的layout配置。
+        }
+
+        $this->loadModel('workflow');
+        $this->loadModel('workflowgroup');
+        $this->loadModel('workflowaction');
+        if(($this->app->tab == 'project' || $this->app->tab == 'execution') && in_array($module, $this->config->workflowgroup->modules['product']))
+        {
+            $groupIdList = array();
+            $fields      = array();
+            $projectID   = $this->app->tab == 'execution' ? $this->session->execution : $this->session->project;
+            $products    = $this->dao->select('t2.*')->from(TABLE_PROJECTPRODUCT)->alias('t1')
+                ->leftJoin(TABLE_PRODUCT)->alias('t2')->on('t1.product = t2.id')
+                ->where('t1.project')->eq((int)$projectID)
+                ->fetchAll('id');
+
+            foreach($products as $product) $groupIdList[] = $product->workflowGroup;
+            foreach(array_unique($groupIdList) as $groupID)
+            {
+                $flow = $this->workflow->getByModule($module, false, $groupID);
+                if(empty($flow)) countinue;
+
+                if($flow->buildin)
+                {
+                    $action = $this->workflowaction->getByModuleAndAction($module, $method, $groupID);
+                    if(!$action || (isset($action->extensionType) && $action->extensionType != 'extend')) continue; // 不扩展不追加字段。
+                }
+                $fields += $this->workflowaction->getPageFields($module, $method, true, array(), 0, $groupID);
+            }
+        }
+        else
+        {
+            $groupID = $this->workflowgroup->getGroupIDBySession($module);
+            $flow    = $this->workflow->getByModule($module, false, $groupID);
+            if(empty($flow)) return [];
+
+            if($flow->buildin)
+            {
+                $action = $this->workflowaction->getByModuleAndAction($module, $method, $groupID);
+                if(!$action || (isset($action->extensionType) && $action->extensionType != 'extend')) return []; // 不扩展不追加字段。
+            }
+
+            $fields = $this->workflowaction->getPageFields($module, $method, true, array(), 0, $groupID);
+        }
+
+        return $this->loadModel('flow')->buildDtableCols($fields, [], [], !$flow->buildin);
     }
 }

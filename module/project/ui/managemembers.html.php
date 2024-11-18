@@ -16,6 +16,7 @@ jsVar('projectID', $project->id);
 jsVar('copyProjectID', $copyProjectID);
 jsVar('oldAccountList', array_keys($currentMembers));
 jsVar('unlinkExecutionMembers', $lang->project->unlinkExecutionMembers);
+jsVar('executionMembers', $executionMembers);
 
 /* zin: Define the set::module('team') feature bar on main menu. */
 $copyTeamBox = '';
@@ -96,7 +97,7 @@ foreach($teamMembers as $member)
                     set::name("account[$i]"),
                     set::value($member->account),
                     set::items($users),
-                    set('data-max-list-count', $config->maxCount),
+                    set::maxItemsCount($config->maxCount),
                     set('onchange', "setRole(event, '{$i}')")
                 )
             ),
@@ -169,7 +170,7 @@ h::table
                 set::id("account{$i}"),
                 set::name("account[$i]"),
                 set::items($users),
-                set('data-max-list-count', $config->maxCount),
+                set::maxItemsCount($config->maxCount),
                 set('onchange', "setRole(event, '{$i}')")
             )
         ),
@@ -283,6 +284,7 @@ div
         ),
         set::actions(array(
             array(
+            'id'      => 'saveButton',
             'text'    => $lang->save,
             'type'    => 'primary',
             'btnType' => 'button',

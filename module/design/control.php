@@ -37,10 +37,11 @@ class design extends control
      * @param  int    $projectID
      * @param  int    $productID
      * @param  int    $designID
+     * @param  string $type
      * @access public
      * @return void
      */
-    public function commonAction(int $projectID = 0, int $productID = 0, int $designID = 0)
+    public function commonAction(int $projectID = 0, int $productID = 0, int $designID = 0, string $type = 'all')
     {
         $products    = $this->product->getProductPairsByProject($projectID);
         $products[0] = $this->lang->product->all;
@@ -49,6 +50,7 @@ class design extends control
 
         $productID = $this->product->getAccessibleProductID($productID, $products);
 
+        $this->designZen->setMenu($projectID, $productID, strtolower($type));
         $this->project->setMenu($projectID);
 
         $project = $this->project->getByID($projectID);
@@ -58,6 +60,9 @@ class design extends control
         $this->view->switcherParams   = "projectID={$projectID}&productID={$productID}";
         $this->view->switcherText     = zget($products, $productID);
         $this->view->switcherObjectID = $productID;
+
+        $this->lang->design->typeList = $project->model == 'waterfall' ? $this->lang->design->typeList : $this->lang->design->plusTypeList;
+        $this->config->design->dtable->fieldList['type']['statusMap'] = $this->lang->design->typeList;
 
         return $productID;
     }
@@ -79,7 +84,7 @@ class design extends control
      */
     public function browse(int $projectID = 0, int $productID = 0, string $type = 'all', int $param = 0, string $orderBy = 'id_desc', int $recTotal = 0, int $recPerPage = 20, int $pageID = 1)
     {
-        $productID = $this->commonAction($projectID, $productID);
+        $productID = $this->commonAction($projectID, $productID, 0, $type);
         $project   = $this->project->getByID($projectID);
 
         /* Save session for design list. */
@@ -116,6 +121,7 @@ class design extends control
         $this->view->orderBy   = $orderBy;
         $this->view->pager     = $pager;
         $this->view->users     = $this->loadModel('user')->getPairs('noletter');
+        $this->view->project   = $project;
 
         $this->display();
     }
@@ -132,7 +138,7 @@ class design extends control
      */
     public function create(int $projectID = 0, int $productID = 0, string $type = 'all')
     {
-        $productID = $this->commonAction($projectID, $productID);
+        $productID = $this->commonAction($projectID, $productID, 0, $type);
 
         if($_POST)
         {
@@ -152,14 +158,13 @@ class design extends control
         $productIdList = $productID ? $productID : array_keys($products);
         $stories       = $this->loadModel('story')->getProductStoryPairs($productIdList, 'all', 0, 'active,launched,developing', 'id_desc', 0, 'full', 'full');
 
-        $this->view->title      = $this->lang->design->common . $this->lang->hyphen . $this->lang->design->create;
-        $this->view->users      = $this->loadModel('user')->getPairs('noclosed');
-        $this->view->stories    = $this->story->addGradeLabel($stories);
-        $this->view->productID  = $productID;
-        $this->view->projectID  = $projectID;
-        $this->view->type       = $type;
-        $this->view->project    = $this->loadModel('project')->getByID($projectID);
-
+        $this->view->title     = $this->lang->design->common . $this->lang->hyphen . $this->lang->design->create;
+        $this->view->users     = $this->loadModel('user')->getPairs('noclosed');
+        $this->view->stories   = $this->story->addGradeLabel($stories);
+        $this->view->productID = $productID;
+        $this->view->projectID = $projectID;
+        $this->view->type      = $type;
+        $this->view->project   = $this->loadModel('project')->getByID($projectID);
         $this->display();
     }
 
@@ -175,7 +180,7 @@ class design extends control
      */
     public function batchCreate(int $projectID = 0, int $productID = 0, string $type = 'all')
     {
-        $productID = $this->commonAction($projectID, $productID);
+        $productID = $this->commonAction($projectID, $productID, 0, $type);
 
         if($_POST)
         {
@@ -213,7 +218,7 @@ class design extends control
     public function view(int $designID = 0)
     {
         $design = $this->design->getByID($designID);
-        $this->commonAction($design->project, $design->product, $designID);
+        $this->commonAction($design->project, $design->product, $designID, $design->type);
 
         $this->session->set('revisionList', $this->app->getURI(true));
         $this->session->set('storyList', $this->app->getURI(true), 'product');
@@ -246,7 +251,7 @@ class design extends control
     {
         $design = $this->design->getByID($designID);
         $design = $this->design->getAffectedScope($design);
-        $this->commonAction($design->project, $design->product, $designID);
+        $this->commonAction($design->project, $design->product, $designID, $design->type);
 
         if($_POST)
         {
@@ -292,7 +297,7 @@ class design extends control
      * @access public
      * @return void
      */
-    public function linkCommit(int $designID = 0, int $repoID = 0, string $begin = '', string $end = '', int $recTotal = 0, int $recPerPage = 50, int $pageID = 1)
+    public function linkCommit(int $designID = 0, int $repoID = 0, string $begin = '', string $end = '', int $recTotal = 0, int $recPerPage = 20, int $pageID = 1)
     {
         if($_POST)
         {
@@ -301,7 +306,7 @@ class design extends control
         }
 
         $design = $this->design->getByID($designID);
-        $this->commonAction($design->project, $design->product, $designID);
+        $this->commonAction($design->project, $design->product, $designID, $design->type);
 
         /* Get project and date. */
         $project = $this->loadModel('project')->getByID($design->project);
@@ -312,7 +317,11 @@ class design extends control
         $repos     = $this->loadModel('repo')->getRepoPairs('project', $design->project);
         $repoID    = $repoID ? $repoID : key($repos);
         $repo      = $this->loadModel('repo')->getByID((int)$repoID);
-        $revisions = $this->repo->getCommits($repo, '', 'HEAD', 'dir', null, $begin, date('Y-m-d 23:59:59', strtotime($end)));
+
+        /* Init pager. */
+        $this->app->loadClass('pager', true);
+        $pager     = new pager(0, $recPerPage, $pageID);
+        $revisions = $this->repo->getCommits($repo, '', 'HEAD', 'dir', $pager, $begin, date('Y-m-d 23:59:59', strtotime($end)));
 
         $this->session->set('designRevisions', $revisions);
 
@@ -326,11 +335,6 @@ class design extends control
             if(isset($linkedRevisions[$commit->id])) unset($revisions[$id]);
         }
 
-        /* Init pager. */
-        $this->app->loadClass('pager', true);
-        $pager          = new pager(count($revisions), $recPerPage, $pageID);
-        $chunkRevisions = array_chunk($revisions, $pager->recPerPage);
-
         $this->config->design->linkcommit->dtable->fieldList['revision']['link'] = sprintf($this->config->design->linkcommit->dtable->fieldList['revision']['link'], $repoID, $design->project);
         if(empty($repo->SCM) || $repo->SCM != 'Git') unset($this->config->design->linkcommit->dtable->fieldList['commit']);
 
@@ -338,7 +342,7 @@ class design extends control
         $this->view->repos     = $repos;
         $this->view->repoID    = $repoID;
         $this->view->repo      = $repo;
-        $this->view->revisions = empty($chunkRevisions) ? $chunkRevisions : $chunkRevisions[$pageID - 1];
+        $this->view->revisions = $revisions;
         $this->view->designID  = $designID;
         $this->view->begin     = $begin;
         $this->view->end       = $end;
@@ -384,7 +388,7 @@ class design extends control
         $pager = pager::init(0, $recPerPage, $pageID);
 
         $design = $this->design->getCommit($designID, $pager);
-        $this->commonAction($design->project, $design->product, $designID);
+        $this->commonAction($design->project, $design->product, $designID, $design->type);
 
         $this->config->design->viewcommit->dtable->fieldList['actions']['list']['unlinkCommit']['url'] = sprintf($this->config->design->viewcommit->actionList['unlinkCommit']['url'], $designID);
 

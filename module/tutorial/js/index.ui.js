@@ -1,683 +1,698 @@
-$(function()
+let currentGuide   = '';
+let currentTask    = '';
+let currentStep    = null;
+let popover        = null;
+let inited         = false;
+
+function showLog(name, step, moreTitles, moreInfos)
 {
-    var formatSetting = function(str)
+    if(!config.debug) return;
+    const titles = ['%c TUTORIAL '];
+    const titleColors = ['color:#fff;font-weight:bold;background:#9c27b0'];
+    if(step)
     {
-        var settings = {};
-        if(typeof str === 'string')
+        if(step.guide)
         {
-            $.each(str.split(','), function(idx, name)
+            titles.push(`%c ${step.guide.title || step.guide.name} `);
+            titleColors.push('background:rgba(156, 39, 176, 0.2);color:#9c27b0;');
+        }
+        if(step.task)
+        {
+            titles.push(`%c> ${step.task.title || step.task.name} `);
+            titleColors.push('background:rgba(156, 39, 176, 0.2);color:#9c27b0;');
+        }
+        titles.push(`%c> ${step.index + 1}: ${step.title || step.name} `);
+        titleColors.push('background:rgba(156, 39, 176, 0.2);color:#9c27b0;');
+    }
+    if(name)
+    {
+        titles.push(`%c ${name} `);
+        titleColors.push('color:#9c27b0;font-weight:bold;');
+    }
+    if(!Array.isArray(moreTitles) && moreTitles) moreTitles = [moreTitles];
+    if(Array.isArray(moreTitles) && typeof moreTitles[0] === 'string' && (moreTitles[0].startsWith('success:') || moreTitles[0].startsWith('error:')))
+    {
+        const message = moreTitles.shift();
+        const [type, content] = message.split(':', 2);
+        titles.push(`%c ${content} `);
+        titleColors.push(`color:${type === 'error' ? '#f56c6c' : '#67c23a'};`);
+    }
+    console.groupCollapsed(titles.join(''), ...titleColors, ...(moreTitles || []));
+    if(step) console.trace('step', step);
+    if(moreInfos)
+    {
+        if($.isPlainObject(moreInfos)) Object.keys(moreInfos).forEach((infoName) => console.log(infoName, moreInfos[infoName]));
+        else console.log(moreInfos);
+    }
+    console.groupEnd();
+}
+
+if(config.debug) showLog('Guides data', null, null, {guides});
+
+const stepPresenters =
+{
+    openApp: function(step)
+    {
+        const scope    = getStepScope(step);
+        const $menuNav = scope.$('#menuNav');
+
+        if(!$menuNav.data('tutorial.checkOpenAppStep'))
+        {
+            const checkOpenAppStep = (event, info) =>
             {
-                if(name) settings[name] = true;
+                if(!currentStep || currentStep.type !== 'openApp') return;
+                if((event.type === 'shown' || event.type === 'hidden') && info[0].options.target !== '#menuMoreList') return;
+                stepPresenters.openApp(currentStep);
+            };
+            scope.$(scope).on('resize', checkOpenAppStep);
+            scope.$('#menuMoreBtn').on('shown hidden', checkOpenAppStep);
+            $menuNav.append([
+                '<style>',
+                '.tutorial-not-open-app #menuNav .nav > li > a {pointer-events:none!important;}',
+                '.tutorial-not-open-app #menuNav .nav > li > a.active, .tutorial-not-open-app #menuNav .nav > li > a#menuMoreBtn {pointer-events:auto!important;}',
+                '</style>'
+            ].join('\n'));
+            $menuNav.data('tutorial.checkOpenAppStep', true);
+        }
+
+        const $menuMainNav = $menuNav.find('#menuMainNav');
+        const $appNav = $menuMainNav.children(`li[data-app="${step.app}"]`);
+        let $targetNav = $appNav;
+        if($appNav.hasClass('hidden'))
+        {
+            const $menuMoreList = $menuNav.find('#menuMoreList.in');
+            if($menuMoreList.length) $targetNav = $menuMoreList.children(`li[data-app="${step.app}"]`);
+            else                     $targetNav = $menuNav.find('#menuMoreBtn');
+        }
+
+        const popoverOptions = {placement: 'right'};
+        if($targetNav.is('#menuMoreBtn'))
+        {
+            $.extend(popoverOptions, {title: null, footer: undefined, content: lang.clickAndOpenIt.replace('%s', $targetNav.text().trim()).replace('%s', $appNav.text().trim()), notFinalTarget: true});
+        }
+        else
+        {
+            $targetNav = $targetNav.find('a');
+        }
+        if (!step.closedApp)
+        {
+            scope.$.apps.closeApp(step.app);
+            step.closedApp = true;
+        }
+        return highlightStepTarget($targetNav, step, popoverOptions);
+    },
+    click: function(step)
+    {
+        return highlightStepTarget((scope) => scope.$(step.target), step, {placement: 'bottom'});
+    },
+    clickNavbar: function(step)
+    {
+        return highlightStepTarget((scope) => scope.$('.#'.includes(step.target) ? step.target : `#navbar>.nav>.item>a[data-id="${step.target}"]`), step);
+    },
+    clickMainNavbar: function(step)
+    {
+        return highlightStepTarget((scope) => scope.$('.#'.includes(step.target) ? step.target : `#mainNavbar .nav>.item>a[data-id="${step.target}"]`), step);
+    },
+    form: function(step)
+    {
+        return highlightStepTarget((scope) => {
+            const $target = scope.$(step.target || 'form');
+
+            /* Check form. */
+            const $form = getStepForm(scope, $target);
+            if(!$form || !$form.length) console.error(`[TUTORIAL] Cannot find form for step "${step.guide.name} > ${step.task.name} > ${step.title}"`, step);
+            $form.attr('zui-tutorial-step', step.id);
+            $form.find('.open-url,[data-back],[data-load],.ajax-submit').addClass('pointer-events-none');
+            step.$form = $form;
+
+            const $panel = $target.closest('.panel');
+            return $panel.length ? $panel : $target;
+        }, step, (!step.popover || !step.popover.placement) ? {placement: 'right'} : null);
+    },
+    saveForm: function(step)
+    {
+        return highlightStepTarget((scope) => {
+            const $target = scope.$(step.target);
+
+            /* Check form. */
+            const $form = getStepForm(scope, $target);
+            if(!$form || !$form.length) console.error(`[TUTORIAL] Cannot find form for step "${step.guide.name} > ${step.task.name} > ${step.title}"`, step);
+            $form.attr('zui-tutorial-step', step.id);
+            step.$form = $form;
+
+            const $saveBtn = $form.find('[type="submit"]');
+            return $saveBtn.length ? $saveBtn : $target;
+        }, step);
+    },
+    selectRow: function(step)
+    {
+        return highlightStepTarget((scope) => {
+            const $target = scope.$(step.target || '.dtable');
+            let $table   = $target.closest('[z-use-dtable]');
+            if(!$table.length) $table = $target.find('[z-use-dtable]');
+            if(!$table.length) $table = scope.$('[z-use-dtable]');
+            if(!$table.length) console.error(`[TUTORIAL] Cannot find table for step "${step.guide.name} > ${step.task.name} > ${step.title}"`, step);
+            step.$table = $table;
+
+            if(!$table.data('tutorial.selectRowBinding'))
+            {
+                $table.data('tutorial.selectRowBinding', true);
+                const dtable = $table.zui('dtable');
+                dtable.setOptions({onCheckChange: function()
+                {
+                    if(!this.getChecks().length) return;
+                    activeNextStep(step);
+                }});
+            }
+
+            return $target;
+        }, step);
+    }
+};
+
+function toggleIframeMask(toggle)
+{
+    $('body').toggleClass('tutorial-has-mask', toggle);
+}
+
+function getStepForm(scope, $target)
+{
+    let $form   = $target.closest('form');
+    if(!$form.length) $form = $target.find('form');
+    if(!$form.length) $form = scope.$('form');
+
+    if(!$form.data('tutorial.formBinding'))
+    {
+        $form.data('tutorial.formBinding', true);
+        const ajaxForm = $form.zui('ajaxForm');
+        if(!ajaxForm) return console.error(`[TUTORIAL] Cannot find ajaxForm for step "${currentStep.guide.name} > ${currentStep.task.name} > ${currentStep.title}"`, currentStep);
+        ajaxForm.setOptions({beforeSubmit: () =>
+        {
+            if(currentStep.type === 'form')
+            {
+                const nextStep = currentStep.task.steps[currentStep.index + 1];
+                activeNextStep((nextStep && nextStep.type === 'saveForm') ? nextStep : currentStep);
+            }
+            return false;
+        }});
+    }
+
+    return $form;
+}
+
+function destroyPopover(callback, scope)
+{
+    if(config.debug) showLog('Destroy popover', currentStep, popover ? `${popover.gid}/${popover.options.key}` : 'no popover', {popover, callback, scope});
+    if(!popover)
+    {
+        if(scope && scope.$)
+        {
+            scope.$('.tutorial-hl').removeClass('tutorial-hl');
+            scope.$('.tutorial-light-box').addClass('opacity-0');
+        }
+        if(callback) callback();
+        return;
+    };
+    const $trigger = $(popover.trigger);
+    if($trigger.length)
+    {
+        $trigger.removeClass('tutorial-hl');
+        $trigger.closest('body').find('.tutorial-light-box').addClass('opacity-0');
+    }
+    if(callback) setTimeout(callback, popover.shown ? 300 : 200);
+    popover.hide(true);
+    popover = null;
+}
+
+function highlightStepTarget($target, step, popoverOptions)
+{
+    if(config.debug) showLog('Highlight', step, popover ? `${popover.gid}/${popover.options.key}` : 'no popover', {$target, popover, popoverOptions});
+    if(popover)
+    {
+        if(popover.options.key === step.id)
+        {
+            const target = (typeof $target === 'function' ? $target(getStepScope(step)) : $target)[0];
+            if(target === popover.trigger) return;
+        }
+        return destroyPopover(() => highlightStepTarget($target, step, popoverOptions));
+    }
+    ensureStepScope(step, (scope) =>
+    {
+        if(step !== currentStep) return;
+        if(typeof $target === 'function') $target = $target(scope);
+        $target = $target.first();
+        if(!$target.length) return console.error(`[TUTORIAL] Cannot find target for step "${step.guide.title || step.guide.name} > ${step.task.title || step.task.name} > ${step.title}"`, step);
+        if($target.is('[data-toggle="dropdown"]'))
+        {
+            if($target.is('[data-trigger="hover"]')) $target.attr('data-trigger', 'click');
+            const dropdown = $target.zui('dropdown');
+            if(dropdown && dropdown.options.trigger === 'hover') dropdown.destroy();
+        }
+        const isLastStep = step.index === step.task.steps.length - 1;
+        popoverOptions = $.extend(
+        {
+            $optionsFromDataset: false,
+            key             : step.id,
+            title           : step.title,
+            strategy        : 'fixed',
+            show            : true,
+            limitInScreen   : true,
+            mask            : false,
+            trigger         : 'manual',
+            destroyOnHide   : true,
+            closeBtn        : false,
+            content         : step.desc,
+            contentClass    : 'popover-content px-4 whitespace-pre-line',
+            className       : 'tutorial-popover rounded-md',
+            titleClass      : 'popover-title text-lg pl-1',
+            minWidth        : 280,
+            maxWidth        : 400,
+            headingClass    : 'popover-heading bg-transparent',
+            elementShowClass: 'with-popover-show tutorial-hl',
+            destroyOnHide   : true,
+            shift           : true,
+            hideOthers      : false,
+            hideNewOnHide   : false,
+            offset          : 32,
+            footer:
+            {
+                component: 'toolbar',
+                props:
+                {
+                    className: 'py-3 px-4 gap-3',
+                    items:
+                    [
+                        {component: 'span', children: `${step.index + 1}/${step.task.steps.length}`, className: 'flex-auto'},
+                        isLastStep ? null : {type: 'default', text: lang.exitStep, onClick: () => unactiveTask()},
+                        {type: 'primary', text: isLastStep ? lang.finish : lang.nextStep, onClick: () => goToNextStep(step)},
+                    ].filter(Boolean)
+                }
+            },
+            onHide: function()
+            {
+                if(this.options.key !== step.id) return;
+                $(this.trigger).closest('body').find('.tutorial-light-box').addClass('opacity-0');
+            },
+            onLayout: function(info)
+            {
+                const $trigger = $(info.trigger);
+                const $body    = $trigger.closest('body');
+                const rect     = info.trigger.getBoundingClientRect();
+                let $lightElement = $body.find('.tutorial-light-box');
+                if(!$lightElement.length) $lightElement = $('<div class="tutorial-light-box fixed pointer-events-none rounded" style="box-shadow: 0 0 10px rgba(0, 0, 0, 0.4), 0 0 0 9999px rgba(0, 0, 0, 0.4); z-index: 1690; transition: opacity .5s;"><div class="is-left pointer-events-auto absolute top-0 bottom-0"></div><div class="is-top pointer-events-auto absolute"></div><div class="is-right pointer-events-auto absolute top-0 bottom-0 left-full"></div><div class="is-bottom pointer-events-auto absolute top-full"></div><style>.tutorial-light-box.opacity-0>div{pointer-events:none!important}</style></div>').appendTo($body);
+                $lightElement.removeClass('opacity-0').css(
+                {
+                    top         : rect.top,
+                    left        : rect.left,
+                    width       : rect.width,
+                    height      : rect.height,
+                    borderRadius: $trigger.css('borderRadius'),
+                    zIndex      : this._zIndex - 1
+                }).appendTo($body);
+                $lightElement.find('.is-left').css({left: -rect.left, width: Math.round(rect.left)});
+                $lightElement.find('.is-right').css({width: Math.round(window.innerWidth - rect.right)});
+                $lightElement.find('.is-top').css({top: -rect.top, height: Math.round(rect.top), left: -rect.left, right: rect.right - window.innerWidth});
+                $lightElement.find('.is-bottom').css({height: Math.round(window.innerHeight - rect.bottom), left: -rect.left, right: rect.right - window.innerWidth});
+            }
+        }, step.popover, popoverOptions);
+        if(popoverOptions.title === null)
+        {
+            const text = $target.text().trim();
+            if(['openApp'].includes(step.type)) popoverOptions.title = lang.clickTipFormat.replace('%s', text);
+        }
+        step.$target = $target;
+        popover = new scope.zui.Popover($target, popoverOptions);
+        if(!popoverOptions.notFinalTarget) $target.attr('zui-tutorial-step', step.id);
+        $target.scrollIntoView();
+        if(config.debug) showLog('Show popover', step, `${popover.gid}/${popover.options.key}`, {$target, popover, popoverOptions});
+
+        const $doc = scope.$(scope.document);
+        if($doc.data('tutorial.checkBinding')) return;
+        $doc.data('tutorial.checkBinding', true).on('click', '[zui-tutorial-step]', function(event, info)
+        {
+            if(!currentStep || currentStep.checkType !== event.type) return;
+
+            const stepID = this.getAttribute('zui-tutorial-step');
+            if(stepID !== currentStep.id) return;
+
+            if(config.debug) showLog(`Step target ${event.type}`, currentStep, null, {stepID, event});
+            activeNextStep();
+        });
+        $doc.on('pageload.app', function()
+        {
+            presentStep();
+        });
+        if(scope.zui.Ajax.globalBeforeSends)
+        {
+            scope.zui.Ajax.globalBeforeSends.push(function(options)
+            {
+                options.headers['X-ZIN-Tutorial'] = getCurrentStepID();
             });
         }
-        return settings;
-    };
+    });
+}
 
-    var tasks        = tutorialTasks;
-    var current      = defaultTask;
-    var setting      = formatSetting(settingString);
-    var lang         =
+function updateTaskUI(task, change)
+{
+    if(change) $.extend(task, change);
+
+    const guideName = task.guide.name;
+    const taskName  = task.name;
+    const $guide = $('#tutorialTabs').find(`.tutorial-guide[data-name="${guideName}"]`);
+    if(!$guide.length) return;
+    const $task = $guide.find(`.tutorial-task[data-name="${taskName}"]`);
+    if(!$task.length) return;
+
+    $task.attr('data-status', task.status).toggleClass('active', !!task.active);
+    const $steps = $task.find('.tutorial-step').removeClass('active');
+    if(task.currentStepIndex !== undefined) $steps.filter(`[data-step="${task.currentStepIndex}"]`).addClass('active');
+
+    if(task.active)
     {
-        targetPageTip : langTargetPageTip,
-        targetAppTip  : langTargetAppTip,
-        target        : langTarget,
-        requiredTip   : langRequiredTip,
-    };
-
-    var $tasks        = $('#tasks'),
-        $task         = $('#task'),
-        $openTaskPage = $('#openTaskPage'),
-        $progress     = $('#tasksProgress'),
-        $modal        = $('#taskModal'),
-        $modalBack    = $('#taskModalBack');
-    var totalCount    = $tasks.children('li').length, finishCount = 0;
-
-
-    var appsWindow = window.frames['iframePage'];
-    var checkTaskId = null, modalShowTaskId;
-    var checkFormReadyId = null;
-    var checkStatusId = null;
-    var checkStatusCycle = null;
-    var showToolTipTask = null;
-    var submitBindCount = 0;
-
-    var getApp = function(code)
-    {
-        if(!code) return appsWindow.$.apps.getLastApp();
-        return $.extend({}, appsWindow.$.apps.map[code], appsWindow.$.apps.openedMap[code]);
-    };
-
-    var getAppWindow = function()
-    {
-        var app = appsWindow.$ ? appsWindow.$.apps.getLastApp() : null;
-        return app ? appsWindow.frames['app-' + app.code] : null;
-    };
-
-    var getAppIframe = function()
-    {
-        var app = appsWindow.$.apps.getLastApp();
-        return appsWindow.$('#appIframe-' + app.code).get(0);
-    };
-
-    var showModal = function(showAll)
-    {
-        clearTimeout(modalShowTaskId);
-        $modal.show();
-        $modalBack.show();
-        $modal.toggleClass('show-all', showAll);
-        modalShowTaskId = setTimeout(function()
-        {
-            $modal.addClass('in');
-            $modalBack.addClass('in');
-        }, 10);
-    };
-
-    var hideModal = function()
-    {
-        clearTimeout(modalShowTaskId);
-        $modal.removeClass('in');
-        $modalBack.removeClass('in');
-        modalShowTaskId = setTimeout(function()
-        {
-            $modal.hide();
-            $modalBack.hide();
-        }, 450);
-    };
-
-    var clearTips = function()
-    {
-        if(!appsWindow.$) return false;
-
-        var $menuMainNav = appsWindow.$('#menuNav');
-        $menuMainNav.find('.hl-tutorial').removeClass('hl-tutorial hl-in');
-        $menuMainNav.find('.tooltip-tutorial').tooltip('destroy').removeClass('tooltip-tutorial');
-        var appWindow = getAppWindow();
-        if(appWindow && appWindow.$)
-        {
-            var $appBody = appWindow.$('body');
-            $appBody.find('.hl-tutorial').removeClass('hl-tutorial hl-in');
-            $appBody.find('.tooltip-tutorial').tooltip('destroy').removeClass('tooltip-tutorial');
-            $appBody.find('.popover').remove();
-        }
-    };
-
-    var highlight = function($e, callback)
-    {
-        $e = $e.first();
-        var ele      = $e[0];
-        var bounds   = ele.getBoundingClientRect();
-        var winWidth = $e.closest('body').outerWidth();
-        if(bounds.width < (winWidth / 2) && bounds.right > winWidth)
-        {
-            ele[ele.scrollIntoViewIfNeeded ? 'scrollIntoViewIfNeeded' : 'scrollIntoView']({behavior: 'instant', block: 'center'});
-        }
-
-        $e.closest('body').find('.hl-tutorial').removeClass('hl-tutorial hl-in');
-        $e.addClass('hl-tutorial').parent().css('overflow', 'visible');
-        setTimeout(function() {$e.addClass('hl-in'); callback && callback()}, 50);
-    };
-
-    var finishTask = function()
-    {
-        clearTips();
-
-        var task = tasks[current];
-        if(task)
-        {
-            setting[current] = true;
-            var postData = [];
-            $.each(setting, function(name, value) {if(value) postData.push(name);});
-
-            $.post(ajaxSetTasksUrl, {finish: postData.join(',')}, function(e)
-            {
-                result = JSON.parse(e);
-                if(result.result === 'success')
-                {
-                    taskSuccess = false;
-                    updateUI();
-                    showModal(finishCount >= totalCount);
-                }
-                else
-                {
-                    setting[current] = false;
-                    zui.Modal.alert(serverErrorTip);
-                }
-            }, 'json').fail(function() {zui.Modal.alert(lang.timeout)});
-        }
-    };
-
-    var resetTasks = function()
-    {
-        $.post(ajaxSetTasksUrl, {finish: ''}, function(e)
-        {
-            result = JSON.parse(e);
-            if(result.result === 'success')
-            {
-                taskSuccess = false;
-                setting = {};
-                window.reloadPage();
-            }
-            else
-            {
-                zui.Modal.alert(serverErrorTip);
-            }
-        }, 'json').fail(function() {zui.Modal.alert(lang.timeout)});
-    };
-
-    var showToolTip = function($e, text, options)
-    {
-        if(!$e.length) return;
-        var container = 'body';
-        var ele       = $e[0];
-        var bounds    = ele.getBoundingClientRect();
-        var winWidth  = $e.closest('body').outerWidth();
-        if(bounds.width < (winWidth / 2) && (bounds.right + bounds.width) >= winWidth)
-        {
-            ele[ele.scrollIntoViewIfNeeded ? 'scrollIntoViewIfNeeded' : 'scrollIntoView']({behavior: 'instant', block: 'center'});
-            container = null;
-        }
-
-        if($(ele).hasClass('create-bug-btn') || $(ele).hasClass('create-story-btn')) container = '#mainMenu'; // Fix bug #21092.
-        if(!container && $(ele).hasClass('form-control')) container = '.table-form'; // Fix bug #21093
-
-        $e.closest('body').find('.tooltip-tutorial').tooltip('destroy');
-        var offset   = $e.offset();
-        var winWidth = $(window).width();
-        var placement = 'top';
-        if(offset.left > (winWidth*2/3))
-        {
-            placement = 'left';
-        }
-        else if(offset.left < (winWidth/3) && (offset.left + $e.outerWidth()) < (winWidth*2/3))
-        {
-            placement = 'right';
-        }
-        else if (offset.top < 50)
-        {
-            placement = 'bottom';
-        }
-
-        options = $.extend(
-        {
-            trigger: 'manual',
-            title: {html: text},
-            placement: placement,
-            className: 'warning',
-            mask: false,
-        }, options);
-        $e = $e.first();
-
-        if($e.css('display') !== 'none')
-        {
-            if(!$e.data('zui.tooltip')) $e.addClass('tooltip-tutorial').attr('data-toggle', 'tooltip').tooltip(options);
-            $e.tooltip('show', text);
-            if($e[0].getBoundingClientRect().top > $(window).height() || $e[0].getBoundingClientRect().top < 0) $e[0].scrollIntoView();
-        }
-        else if($e.parent().is('#menuMainNav'))
-        {
-            var $menuMoreItem = appsWindow.$('#menuMoreNav>li').last();
-            highlight($menuMoreItem);
-            showToolTip($menuMoreItem, text, $.extend({}, options, {tipClass: 'warning'}));
-            var appCode = $e.data('app');
-            appsWindow.$('#menuMoreList>li').removeClass('active').attr('data-tip', '');
-            appsWindow.$('#menuMoreList>li[data-app="' + appCode + '"]').addClass('active hl-tutorial hl-in').attr('data-tip', text);
-        }
-        else
-        {
-            $e.parent().addClass('tooltip-tutorial').append("<div id='typeLabel' class='text-danger help-text'>" + options.title + "</div>");
-        }
-    };
-
-    var checkTutorialState = function()
-    {
-        tryCheckStatus();
-        var iWindow = getAppWindow();
-        var title = (iWindow.$ ? iWindow.$('head > title').text() : '') + $('head > title').text();
-        var url = $.createLink('tutorial', 'index', 'referer=' + btoa(iWindow.location.href) + '&task=' + current);
-        try{window.history.replaceState({}, title, url);}catch(e){}
-    };
-
-    var checkTimer = 0;
-    var tryCheckTutorialState = function(delay)
-    {
-        clearTimeout(checkTimer);
-        checkTimer = setTimeout(checkTutorialState, delay || 200);
-    };
-
-    var showTask = function(taskName)
-    {
-        clearTips();
-        hideModal();
-
-        taskName = taskName || current;
-        current = taskName;
-
-        if(!taskName) return;
-        var task = tasks[taskName];
-        if(!task) return;
-
-        var $li = $tasks.children('li').removeClass('active').filter('[data-name="' + taskName + '"]').addClass('active');
-        $task.toggleClass('finish', task.finish);
-        $('.task-name-current').text(task.title);
-        $('.task-id-current').text(task.id);
-        $('.task-desc').html(task.desc).find('.task-nav').addClass('btn-open-target-page');
-        $('.task-page-name').text(task.nav.targetPageName || lang.target);
-
-        var $prev = $li.prev('li'), $next = $li.next('li');
-        $('.btn-prev-task').toggleClass('hidden', !$prev.length).data('name', $prev.data('name'));
-        $('.btn-next-task').toggleClass('hidden', !$next.length).data('name', $next.data('name'));
-    };
-
-    var updateUI = function()
-    {
-        finishCount = 0;
-        totalCount  = 0;
-        $tasks.children('li').each(function(idx)
-        {
-
-            var $li      = $(this);
-            var name     = $li.data('name');
-            var task     = tasks[name];
-            var finish   = !!setting[name];
-            task.finish  = finish;
-            finishCount += finish ? 1 : 0;
-            totalCount++;
-
-            $li.toggleClass('finish', finish);
-            if(!current && !finish) current = name;
-        });
-
-        $('.task-num-finish').text(finishCount);
-        $('.tasks-count').text(totalCount);
-        var isFinishAll = finishCount >= totalCount;
-        if(isFinishAll) current = $tasks.children('li').first().data('name');
-
-        var progress = Math.round(100*finishCount/totalCount);
-        $progress.toggleClass('finish', isFinishAll).find('.progress-bar').css('width', (100*finishCount/totalCount) + '%');
-        $progress.find('.progress-text').text(progress + '%');
-        if(progress == 100) $.getJSON($.createLink('tutorial', 'ajaxFinish'));
-        showTask(current);
-    };
-
-    var task;
-    var taskSuccess = false;
-
-    var tryCheckStatus = function()
-    {
-        if(!checkStatusId) clearTimeout(checkStatusId);
-        var iWindow = getAppWindow();
-        if(!(iWindow && iWindow.config && iWindow.$))
-        {
-            checkStatusId = setTimeout(tryCheckStatus, 1000);
-        }
-        else
-        {
-            checkStatusId = setTimeout(checkStatus, 200);
-        }
+        const $tabToggle = $(`#tutorialTabs .tabs-nav>.nav-item[data-key="${task.guide.type}"]>a`);
+        if($tabToggle.length && !$tabToggle.hasClass('active')) setTimeout(() => $tabToggle[0].click(), 200);
+        $task.scrollIntoView();
     }
 
-    var checkStatus = function()
+    const url = $.createLink('tutorial', 'index', `referer=&guide=${guideName}&task=${taskName}`);
+    const prevState = window.history.state;
+    if(prevState.url !== url) window.history.replaceState({url}, '', url);
+
+    return true;
+}
+
+function getNextTask(task)
+{
+    const guideTaskNames = Object.keys(task.guide.tasks);
+    if(guideTaskNames.length === task.index + 1) return;
+    for(let i = 0; i < guideTaskNames.length; ++i)
     {
-        if(taskSuccess) return;
-        var iWindow = getAppWindow();
-        //if(!iWindow || !iWindow.$) return checkStatus();
-
-        task = tasks[current];
-        if(!task) checkStatus();
-        var appCode = task.nav.app || task.nav.menuModule || task.nav['module'];
-        var app = getApp(appCode);
-        if(!app) return;
-
-        $$ = iWindow.$;
-        if(!checkIsFormPage(task, iWindow, appCode))
-        {
-            taskSuccess = false;
-            setTaskStatus(true, false, false);
-            getNeedHightlightDom(appCode, iWindow, app);
-        }
-        else
-        {
-            setTaskStatus(true, true, false);
-            form = $$(task.nav.form);
-            tryCheckFormStatusReady();
-        }
+        const name = guideTaskNames[i];
+        const thisTask = task.guide.tasks[name];
+        if(thisTask.index === task.index + 1) return thisTask;
     }
+}
 
-    var checkIsFormPage = function(task, iWindow, appCode)
+function getNextGuide(guide)
+{
+    const guideNames = Object.keys(guides);
+    if(guideNames.length === guide.index + 1) return;
+    for(let i = 0; i < guideNames.length; ++i)
     {
-        var pageConfig = iWindow.config;
-        var currentModule  = (iWindow.TUTORIAL ? iWindow.TUTORIAL['module'] : pageConfig ? pageConfig.currentModule : '').toLowerCase();
-        var currentMethod  = (iWindow.TUTORIAL ? iWindow.TUTORIAL['method'] : pageConfig ? pageConfig.currentMethod : '').toLowerCase();
-        return task.nav['module'].toLowerCase() === currentModule && task.nav['method'].toLowerCase() === currentMethod && (!task.nav.app || task.nav.app === appCode);
+        const name = guideNames[i];
+        const thisGuide = guides[name];
+        if(thisGuide.index === guide.index + 1) return thisGuide;
     }
+}
 
-    var getNeedHightlightDom = function(appCode, iWindow, app)
+function activeNextStep(step)
+{
+    step = step || currentStep;
+    if(!step) return;
+    formatStep(step);
+    if(config.debug) showLog('Active next step', step);
+
+    if(step.type === 'saveForm' && step.$form) step.$form.find('.open-url,[data-back],[data-load],.ajax-submit').addClass('pointer-events-none');
+    if(step.endUrl) openApp(step.endUrl, step.app);
+    destroyPopover(() =>
     {
-        $$ = iWindow.$;
-        firstMenu = isInFirstMenu(appCode, iWindow)
-        if(firstMenu)
+        if(step.task.steps.length - 1 === step.index)
         {
-            tip = lang.targetAppTip.replace('%s', app.text || lang.target);
-            forcusOnDom(firstMenu, tip);
+            updateTaskUI(step.task, {status: 'done', active: false});
+            const nextTask = getNextTask(step.task);
+            const nextGuide = nextTask ? null : getNextGuide(step.guide);
+            const nextGuideTask = (nextGuide && nextGuide.taskList.length) ? nextGuide.tasks[nextGuide.taskList[0]] : null;
+            const actions = [];
+            if(nextTask) actions.push({type: 'confirm', btnType: 'primary', text: `${lang.nextTask}${lang.colon}${nextTask.title}`, onClick: () => activeTask(step.guide.name, nextTask.name)}, {key: 'cancel', onClick: () => unactiveTask()});
+            else if(nextGuideTask) actions.push({type: 'confirm', btnType: 'primary', text: `${lang.nextGuide}${lang.colon}${nextGuide.title}`, onClick: () => activeTask(nextGuide.name, nextGuideTask.name)}, {key: 'cancel', onClick: () => unactiveTask()});
+            else actions.push({type: 'confirm', btnType: 'primary', text: lang.finish, onClick: () => unactiveTask()});
+            zui.Modal.alert(
+            {
+                content: lang.congratulateTask.replace('<span class="task-name-current"></span>', step.task.title),
+                actions: actions
+            });
             return;
         }
+        activeTaskStep(step.guide.name, step.task.name, step.index + 1);
+    });
+}
 
-        var menuModule = task.nav.menuModule || task.nav['module'];
-        var $navbar    = $$('#navbar');
-        if(task.nav.app == 'admin') $navbar = $$('#settings');
-        var $navbarItem = $navbar.find('[data-id="' + menuModule + '"]');
-        var targetPageTip = lang.targetPageTip.replace('%s', task.nav.targetPageName || lang.target);
-        if($navbarItem.length && !$navbarItem.hasClass('active'))
+function goToNextStep(step)
+{
+    step = step || currentStep;
+    if(!step) return;
+
+    if(step.checkType === 'click')
+    {
+        const $target = getStepScope(step).$(`[zui-tutorial-step="${step.id}"]`);
+        if($target.length) return $target.trigger('click', 'skipCheckStep');
+    }
+    else if(step.type === 'saveForm' && step.$form)
+    {
+        step.$form[0].submit();
+    } else if(step.type === 'openApp')
+    {
+        step.closedApp = false;
+    }
+
+    setTimeout(() => activeNextStep(step), 200);
+}
+
+function toggleActiveTarget(type, name, toggle)
+{
+    if(!name) return false;
+    const $target = $('#tutorialTabs').find(`.tutorial-${type}[data-name="${name}"]`);
+    if(!$target.length) return;
+
+    $target.toggleClass('active', toggle);
+    $target.closest(`.tutorial-${type}-list`).toggleClass(`has-active-${type}`, toggle);
+    return true;
+}
+
+function unactiveTask()
+{
+    if(currentStep) destroyPopover(null, getStepScope(currentStep));
+    toggleActiveTarget('task', currentTask, false);
+    currentTask = '';
+    currentStep = null;
+    toggleIframeMask(true);
+}
+
+function getHomeScope()
+{
+    return $('#iframePage')[0].contentWindow;
+}
+
+function getStepScope(step)
+{
+    if(step.scope && step.scope.name) return step.scope;
+    step.scope = null;
+    const homeScope = getHomeScope();
+    if(step.type === 'openApp')
+    {
+        step.scope = homeScope;
+    }
+    else if(homeScope.$ && homeScope.$.apps)
+    {
+        const openedApp = step.app ? homeScope.$.apps.openedApps[step.app] : homeScope.$.apps.getLastApp();
+        if(openedApp) step.scope = openedApp.iframe.contentWindow;
+    }
+    return step.scope;
+}
+
+function ensureStepScope(step, callback)
+{
+    const scope = getStepScope(step);
+    const waitStepScope = (reason) =>
+    {
+        if(config.debug) showLog(`Wait step scope: ${reason}`, step, null, {scope});
+        if(step.waitScopeTimer) clearTimeout(step.waitScopeTimer);
+        step.waitScopeTimer = setTimeout(() =>
         {
-            forcusOnDom($navbarItem, targetPageTip);
+            delete step.waitScopeTimer;
+            ensureStepScope(step, callback);
+        }, 500);
+    };
+    if(!scope || !scope.$) return waitStepScope('no scope');
+    if(scope.name !== 'iframePage')
+    {
+        const $body = scope.$('body');
+        if($body.hasClass('loading-page')) return waitStepScope('page is loading');
+        const scopePage = ($body.attr('data-page') || '').toLowerCase();
+        if(!scopePage) return waitStepScope('page is not ready');
+        const scopePageRaw = ($body.attr('data-page-raw') || '').toLowerCase();
+        const stepPage = (step.page || '').toLowerCase();
+        if(stepPage && stepPage !== scopePage && stepPage !== scopePageRaw)
+        {
+            destroyPopover(null, scope);
+            if(config.debug) showLog(`Page scope not match: ${stepPage}, current page is ${scopePage}`, step, null, {scope});
             return;
         }
-        else
-        {
-            var $domList = $$(task.nav.target)
-            if($domList.length === 0) $domList = $$(task.nav.menu)
-            forcusOnDom($domList.last(), targetPageTip);
-        }
-
     }
-
-    var isInFirstMenu = function(appCode)
+    if(step.waitScopeTimer) clearTimeout(step.waitScopeTimer);
+    step.waitScopeTimer = setTimeout(() =>
     {
-        var $appNav = appsWindow.$('#menuMainNav > li[data-app="' + appCode + '"]');
-        var lastApp = appsWindow.$.apps.getLastApp();
-        if(appCode !== lastApp.code)
-        {
-            if($appNav.css('display') === 'none' && appsWindow.$('#menuMoreList').css('display') !== 'none') $appNav = appsWindow.$('#menuMoreList > li[data-app="' + appCode + '"]');
-            return $appNav;
-        }
+        delete step.waitScopeTimer;
+        callback(scope);
+    }, 200);
+}
 
-        return false;
-
+function openApp(url, app)
+{
+    if(url.includes('#app='))
+    {
+        const [urlPart, appPart] = url.split('#app=', 2);
+        url = urlPart;
+        app = appPart;
     }
-
-    var forcusOnDom = function(dom, tip)
+    const homeScope = getHomeScope();
+    if(!homeScope.$ || !homeScope.$.apps)
     {
-        clearTips();
-        if(dom.length > 0) highlight(dom)
-        if(dom.length > 0 && tip) showToolTip(dom, tip)
+        setTimeout(() => openApp(url, app), 200);
+        return;
     }
-
-    var bindFormListenEvent = function(form, fieldSelector)
+    if(Array.isArray(url)) url = $.createLink.apply(null, url);
+    const openedApp = homeScope.$.apps.open(url, app, {forceReload: true});
+    if(openedApp && openedApp.iframe.contentWindow.$)
     {
-        form.off('.tutorial').off('submit');
-        if(fieldSelector.includes('dtable-checkbox'))
-        {
-            form.on('click.tutorial', fieldSelector, fieldChangeEvent)
-        }
-        else if(form.is('form'))
-        {
-            form.on('change.tutorial', fieldSelector, fieldChangeEvent)
-            form.on('blur.tutorial', fieldSelector, fieldChangeEvent)
-        }
-
-        if(form.is('form'))
-        {
-            if(task.nav.submit) form.on('click.tutorial', task.nav.submit, onFormSubmit);
-            else form.submit(onFormSubmit);
-        }
-        else
-        {
-            form.find(task.nav.submit).off();
-            form.find(task.nav.submit).on('click.tutorial', onFormSubmit);
-        }
+        openedApp.iframe.contentWindow.$('body').addClass('loading-page');
     }
+}
 
-    var tryCheckFormStatusReady = function()
+function formatStep(step, guideName, taskName, stepIndex)
+{
+    if(step.id) return step;
+
+    guideName = guideName || step.guideName;
+    taskName  = taskName || step.taskName;
+    stepIndex = typeof stepIndex !== 'number' ? step.index : stepIndex;
+
+    const guide = guides[guideName];
+    const task  = guide.tasks[taskName];
+
+    step.id        = `${guideName}-${taskName}-${stepIndex}`;
+    step.guide     = guide;
+    step.task      = task;
+    step.index     = stepIndex;
+    step.isLast    = stepIndex === task.steps.length - 1;
+    step.checkType = step.type === 'form' ? 'change' : 'click';
+
+    if(step.type === 'openApp' && !task.app) task.app = step.app;
+    if(!step.app && stepIndex) step.app = task.steps[stepIndex - 1].app;
+    if(!step.app) step.app = task.app || guide.app;
+    if(!step.app)
     {
-        if(checkFormReadyId) clearTimeout(checkFormReadyId);
-
-        var iWindow = getAppWindow();
-        if(!(iWindow && iWindow.config && iWindow.$))
+        const taskNames = Object.keys(guide.tasks);
+        for(let i = 0; i < taskNames.length; i++)
         {
-            checkFormReadyId = setTimeout(tryCheckFormStatusReady, 1000);
-        }
-        else
-        {
-            checkFormReadyId = setTimeout(checkFormStatusReady, 200);
-        }
-    }
-
-    var checkFormStatusReady = function()
-    {
-        var iWindow = getAppWindow();
-        form = iWindow.$(task.nav.form);
-        if(!form.is('form') && current !== 'linkStory') form = form.find('form')
-        if(!form) return;
-
-        var fieldSelector = getFieldSelector(task, iWindow);
-        bindFormListenEvent(form, fieldSelector);
-
-        formwrapper = getFormWrapper(form);
-
-        $formTarget = $task.find('[data-target="form"]');
-        forcusOnDom(formWrapper, $formTarget.text())
-    }
-
-    var getFormWrapper = function(form)
-    {
-        if(!form)
-        {
-            var iWindow = getAppWindow();
-            form = iWindow.$(task.nav.form);
-        }
-
-        formWrapper = form.closest('#mainContent');
-        if(!formWrapper.length) formWrapper = form;
-
-        return formWrapper;
-    }
-
-    var fieldChangeEvent = function()
-    {
-        clearInterval(checkStatusId)
-        var iWindow = getAppWindow();
-        var fieldSelector = getFieldSelector(task, iWindow);
-        var fieldCheckResult = checkFieldStatusReady(iWindow, fieldSelector);
-
-        if(!fieldCheckResult.submitOK)
-        {
-            taskSuccess = false
-            if(targetStatus.waitField) requestFieldsWarining(targetStatus.waitField);
-        }
-        else
-        {
-            setTaskStatus(true, true, true);
-            clearInterval(checkStatusId)
-            taskSuccess = true;
-            $submitBtn = $$(task.nav.submit);
-            $submitTarget = $task.find('[data-target="submit"]');
-            forcusOnDom($submitBtn, $submitTarget.text())
-        }
-
-    }
-
-    var requestFieldsWarining = function(dom )
-    {
-        if(dom.hasClass("chosen-controled")) dom = dom.next();
-        var fieldName = dom.siblings('label').text();
-        if(!fieldName) fieldName = dom.find('label').text();
-        if(!fieldName) fieldName = dom.parent().siblings('label').text();
-
-        if(fieldName) forcusOnDom(dom, lang.requiredTip.replace('%s', fieldName))
-
-        setTimeout(checkStatus, 1000);
-    }
-
-    var checkFieldStatusReady = function(iWindow, fieldSelector)
-    {
-        pageConfig = iWindow.config;
-        targetStatus = {submitOK: true};
-        var requiredFields = task.nav.requiredFields || pageConfig.requiredFields;
-        if(task.nav.formType === 'table')
-        {
-            if(current === 'manageTeam') fieldSelector = 'input[name="' + task.nav.requiredFields + '"]';
-            else fieldSelector = '.dtable-checkbox';
-
-            var $formItem = $$(fieldSelector);
-            targetStatus.form = $formItem && ($formItem.eq(1).hasClass('checked') || ($formItem.val() !== undefined && $formItem.val() !== null && $formItem.val() !== '' && $formItem.val() !== '0'));
-            if(!targetStatus.form) {
-                targetStatus.submitOK = false;
-                targetStatus.waitField = $formItem.closest('div');
+            const thisTask = guide.tasks[taskNames[i]];
+            if(thisTask.app && thisTask.index < task.index)
+            {
+                step.app = thisTask.app;
+                break;
             }
         }
-        else if(requiredFields)
-        {
-            requiredFields = requiredFields.split(',');
-            $.each(requiredFields, function(_, requiredId)
-            {
-                if(requiredId === '') return true;
-                var $required = $$('input[name="' + requiredId + '"]');
-                var $authBlock = !$required.is('input') ? $required.find('input').last() : $required;
-                if($authBlock.length)
-                {
-                    var val = $authBlock.val();
-                    if(val === undefined || val === null || val === '' || val === '0')
-                    {
-                        targetStatus.submitOK = false;
-                        if(task.nav.module == 'program' && task.nav.method == 'create' && requiredId === 'end' && $$('[name="longTime"]').val() == 'on') targetStatus.submitOK = true;
-                        if(!targetStatus.submitOK && !targetStatus.waitField) targetStatus.waitField = $required;
-                    }
-                }
-            });
-        }
-
-        return targetStatus;
     }
 
-    var onFormSubmit = function(e)
+    return step;
+}
+
+function presentStep(step)
+{
+    step = step || currentStep;
+    if(!step) return;
+
+    const presenter = stepPresenters[step.type];
+    if(config.debug) showLog('Present step', step, null, {presenter});
+    if(presenter) presenter(step);
+
+    const homeScope = getHomeScope();
+    homeScope.$('body').toggleClass('tutorial-not-open-app', step.type !== 'openApp');
+    if(inited) return;
+    homeScope.$('#appsBar').css('pointer-events', 'none');
+    inited = true;
+}
+
+function activeTaskStep(guideName, taskName, stepIndex)
+{
+    const guide = guides[guideName];
+    const task  = guide.tasks[taskName];
+    const step  = task.steps[stepIndex];
+
+    if(currentStep === step) return;
+    task.guide = guide;
+    if(!updateTaskUI(task, {active: true, status: 'doing', currentStepIndex: stepIndex})) return;
+
+    formatStep(step, guideName, taskName);
+
+    if(step.url)                              openApp(step.url, step.app);
+    else if(stepIndex === 0 && task.startUrl) openApp(step.task.startUrl, step.task.app);
+
+    currentStep = step;
+    if(config.debug) showLog('Active step', step);
+    ensureStepScope(step, () => presentStep(step));
+}
+
+function activeTask(guideName, taskName, stepIndex)
+{
+    if(stepIndex === undefined) stepIndex = 0;
+    if(currentGuide !== guideName) activeGuide(guideName);
+
+    if(currentTask && currentTask !== taskName) unactiveTask();
+
+    if(currentTask !== taskName)
     {
-        var iWindow       = getAppWindow();
-        var fieldSelector = getFieldSelector(task, iWindow);
-        var status        = checkFieldStatusReady(iWindow, fieldSelector);
-        if(status.submitOK)
-        {
-            setTaskStatus(true, true, true, true);
-            taskSuccess = true
-            finishTask();
-        }
-        else
-        {
-            requestFieldsWarining(status.waitField)
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-
-        return false;
+        currentTask = taskName;
+        toggleActiveTarget('task', currentTask, true);
     }
 
-    var getFieldSelector = function(task, iWindow)
+    toggleIframeMask(false);
+    activeTaskStep(guideName, taskName, stepIndex);
+}
+
+function unactiveGuide()
+{
+    if(!toggleActiveTarget('guide', currentGuide, false)) return;
+
+    if(currentTask)
     {
-        pageConfig = iWindow.config;
-        var fieldSelector = '';
-        var requiredFields = task.nav.requiredFields || pageConfig.requiredFields;
-
-        if(task.nav.formType === 'table')
-        {
-            if(current === 'manageTeam') fieldSelector = 'input[name="' + task.nav.requiredFields + '"]';
-            else fieldSelector = '.dtable-checkbox';
-        }
-        else if(requiredFields)
-        {
-            requiredFields = requiredFields.split(',');
-            $.each(requiredFields, function(_, requiredId){ fieldSelector += ',' + '[name="' + requiredId + '"]';});
-            if(fieldSelector.length > 1) fieldSelector = fieldSelector.substring(1);
-        }
-
-        return fieldSelector;
+        const guide = guides[currentGuide];
+        if(guide && guide.tasks[currentTask]) unactiveTask();
     }
+    currentGuide = '';
+}
 
-    var setTaskStatus = function($nav, $form, $submitOk, $submitSuccess)
+function activeGuide(guideName)
+{
+    if(currentGuide && currentGuide !== guideName) unactiveGuide();
+
+    if(currentGuide !== guideName)
     {
-        $navTarget    = $task.find('[data-target="nav"]');
-        $formTarget   = $task.find('[data-target="form"]');
-        $submitTarget = $task.find('[data-target="submit"]');
-
-        if($nav && !$form && !$submitOk) $navTarget.addClass('active');
-        if($nav && $form  && !$submitOk)
-        {
-            $navTarget.removeClass('active');
-            $formTarget.addClass('active');
-        }
-        if($nav && $form  && $submitOk)
-        {
-            $navTarget.removeClass('active');
-            $formTarget.removeClass('active');
-            $submitTarget.addClass('active');
-        }
-
-        $navTarget.toggleClass('finish', !!$form);
-        $formTarget.toggleClass('finish', !!$submitOk);
-        $submitTarget.toggleClass('finish', !!$submitSuccess);
-        $navTarget.toggleClass('wait', !$navTarget.is('.finish,.active'));
-        $formTarget.toggleClass('wait', !$formTarget.is('.finish,.active'));
-        $submitTarget.toggleClass('wait', !$submitTarget.is('.finish,.active'));
-        $openTaskPage.toggleClass('open', $form);
+        currentGuide = guideName;
+        toggleActiveTarget('guide', currentGuide, true);
     }
+}
 
-    /** Init apps iframe page */
-    function initAppsPage()
-    {
-        var appsIframe = $('#iframePage').get(0);
-        appsIframe.onload = appsIframe.onreadystatechange = function()
-        {
-            appsWindow.$(appsWindow.document).on('reloadapp.apps loadapp.apps updateapp.apps openapp.apps showapp.apps closeapp.apps hideapp.apps', function(event)
-            {
-                appsWindow.$('body').find('.popover').remove();
-                tryCheckTutorialState(1000);
-            });
-            appsWindow.$('#menuMoreList').siblings('a').on('click', function(){
-                tryCheckTutorialState(1000);
-            });
+window.activeTask = activeTask;
 
-            /* Open referer page in app tab */
-            if(tutorialReferer) appsWindow.$.apps.openApp(tutorialReferer);
+window.getCurrentStepID = function()
+{
+    return currentStep ? currentStep.id : '';
+};
 
-            updateUI();
-        };
-    }
+window.handleClickGuide = function(event)
+{
+    const guideName = $(event.target).closest('.tutorial-guide').data('name');
+    if(guideName === currentGuide) unactiveGuide();
+    else activeGuide(guideName);
+};
 
-    /* Quit tutorial mode */
-    function quitTutorial()
-    {
-        var url = $.createLink('tutorial', 'quit');
-            if(typeof navigator.sendBeacon === 'function') navigator.sendBeacon(url);
-            else $.ajax({url: url, dataType: 'json', async: false});
-    }
+window.handleClickTask = function(event)
+{
+    const $task     = $(event.target).closest('.tutorial-task');
+    const taskName  = $task.data('name');
+    const guideName = $task.closest('.tutorial-guide').data('name');
+    activeTask(guideName, taskName);
+};
 
-    /** Init current tutorial page */
-    function initTutorial()
-    {
-        if(finishCount >= totalCount) showModal(true);
-
-        $(document).off('click', '.btn-task').on('click', '.btn-task', function()
-        {
-            showTask($(this).data('name'));
-            tryCheckStatus();
-        }).on('click', '.btn-open-target-page', function()
-        {
-            appsWindow.$.apps.openApp(tasks[current].url);
-        }).on('click', '.btn-reset-tasks', function()
-        {
-            hideModal();
-            resetTasks();
-        });
-
-        $modal.on('click', '.close', hideModal);
-
-        $('[data-toggle="tooltip"]').tooltip();
-
-        window.appsWindow = appsWindow;
-        window.getAppIframe = getAppIframe;
-        window.getAppWindow = getAppWindow;
-        window.checkTutorialState = checkTutorialState;
-    }
-
-    initTutorial();
-    initAppsPage();
-});
+toggleIframeMask(true);

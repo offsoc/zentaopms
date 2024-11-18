@@ -26,6 +26,7 @@ jsVar('hourPointNotEmpty',  sprintf($lang->error->notempty, $lang->story->conver
 jsVar('hourPointNotError',  sprintf($lang->story->float, $lang->story->convertRelations));
 
 /* Show feature bar. */
+$queryMenuLink = createLink($app->rawModule, $app->rawMethod, "&executionID=$execution->id&storyType=$storyType&orderBy=$orderBy&type=bySearch&param={queryID}");
 featureBar
 (
     to::leading
@@ -49,8 +50,11 @@ featureBar
             )
         )
     ),
+    set::param($param),
+    set::searchModule('executionStory'),
     set::current($this->session->storyBrowseType),
     set::link(createLink($app->rawModule, $app->rawMethod, "&executionID=$execution->id&storyType=$storyType&orderBy=$orderBy&type={key}")),
+    set::queryMenuLinkCallback(array(fn($key) => str_replace('{queryID}', (string)$key, $queryMenuLink))),
     li(searchToggle(set::module('executionStory'), set::open($type == 'bysearch')))
 );
 
@@ -128,14 +132,17 @@ if(in_array($execution->attribute, array('mix', 'request', 'design')) || !$execu
     if($canOpreate['batchCreateEpic'])        $batchItems[]  = array('text' => $lang->ERCommon, 'url' => $batchCreateEpicLink);
 }
 
-if(count($batchItems) > 1)
+if(!empty($product->id))
 {
-    $createItems[] = array('text' => $lang->story->batchCreate, 'items' => $batchItems);
-}
-else
-{
-    $batchItems[0]['text'] = $lang->story->batchCreate;
-    $createItems = array_merge($createItems, $batchItems);
+    if(count($batchItems) > 1)
+    {
+        $createItems[] = array('text' => $lang->story->batchCreate, 'items' => $batchItems);
+    }
+    else
+    {
+        $batchItems[0]['text'] = $lang->story->batchCreate;
+        $createItems = array_merge($createItems, $batchItems);
+    }
 }
 
 $canLinkStory     = ($execution->hasProduct || $app->tab == 'execution') && $canModifyProduct && $canModifyExecution && hasPriv('execution', 'linkStory');
@@ -164,7 +171,7 @@ if($canOpreate['create'])
             set::url($createLink),
             $lang->story->create
         ),
-        dropdown
+        empty($createItems) ? null : dropdown
         (
             btn(setClass('btn secondary dropdown-toggle'),
             setStyle(array('padding' => '6px', 'border-radius' => '0 2px 2px 0'))),
@@ -244,8 +251,8 @@ sidebar
         'activeKey'   => $type == 'byproduct' ? "p_$param" : $param,
         'settingLink' => !$execution->hasProduct && !$execution->multiple ? createLink('tree', 'browse', "rootID={$product->id}&viewType=story") : null,
         'closeLink'   => $this->createLink('execution', 'story', "executionID={$execution->id}&storyType={$storyType}&orderBy={$orderBy}&type=byModule&param=0"),
-        'app'         => !$execution->hasProduct && !$execution->multiple ? 'project' : '',
-        'settingApp'  => !$execution->hasProduct && !$execution->multiple ? 'project' : ''
+        'app'         => !$execution->multiple ? 'project' : '',
+        'settingApp'  => !$execution->multiple ? 'project' : ''
     )))
 );
 

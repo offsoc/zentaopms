@@ -125,6 +125,7 @@ $lang->story->activateSyncTip  = "Twin stories are activated synchronously";
 $lang->story->relievedTwinsTip = "After {$lang->productCommon} adjustment, the twin relationship of this story will be automatically removed, and the story will no longer be synchronized. Do you want to save?";
 $lang->story->batchEditTip     = "{$lang->SRCommon} %sis twin stories, and this operation has been filtered.";
 $lang->story->planTip          = "{$lang->SRCommon} only supports single selection plan, other requirements can select multiple plans.";
+$lang->story->batchEditError   = "All selected {$lang->SRCommon} can not be edited.";
 
 $lang->story->id               = 'ID';
 $lang->story->parent           = 'Parent';
@@ -220,6 +221,7 @@ $lang->story->completeRate     = 'Completion Rate';
 $lang->story->reviewed         = 'Reviewed';
 $lang->story->toBeReviewed     = 'To Be Reviewed';
 $lang->story->linkMR           = 'Related MRs';
+$lang->story->linkPR           = 'Related PRs';
 $lang->story->linkCommit       = 'Related Commits';
 $lang->story->URS              = 'User requirements';
 $lang->story->estimateUnit     = "(Unit: {$lang->story->hour})";
@@ -421,7 +423,7 @@ $lang->story->action->synctwins             = array('main' => "\$date, the syste
 $lang->story->action->syncgrade             = array('main' => "\$date, the system judges that this story's parent grade changed，this story grade synchronously changed to <strong>\$extra</strong>.");
 $lang->story->action->linked2roadmap        = array('main' => '$date, linked by <strong>$actor</strong> to Roadmap <strong>$extra</strong>');
 $lang->story->action->unlinkedfromroadmap   = array('main' => '$date, unlinked by <strong>$actor</strong> from Roadmap <strong>$extra</strong>.');
-$lang->story->action->changedbycharter      = array('main' => '$date, launched by <strong>$actor</strong> for charter <strong>$extra</strong>, Synchronously adjust the story status to launched.');
+$lang->story->action->changedbycharter      = array('main' => '$date, launched by <strong>$actor</strong> for charter <strong>$extra</strong>, Synchronously adjust the story stage to In Charter.');
 
 /* Statistical statement. */
 $lang->story->report = new stdclass();

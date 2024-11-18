@@ -42,12 +42,12 @@ class programModel extends model
      */
     public function checkAccess(int $programID = 0, array $programs = array()): int
     {
-        if($programID > 0) $this->session->set('program', $programID);
-        if(!$programID && $this->cookie->lastProgram) $this->session->set('program', $this->cookie->lastProgram);
-        if(!$programID && !$this->session->program)   $this->session->set('program', key($programs));
+        if($programID > 0) $this->session->set('program', $programID, $this->app->tab);
+        if(!$programID && $this->cookie->lastProgram) $this->session->set('program', $this->cookie->lastProgram, $this->app->tab);
+        if(!$programID && !$this->session->program)   $this->session->set('program', key($programs), $this->app->tab);
         if(!isset($programs[$this->session->program]))
         {
-            $this->session->set('program', key($programs));
+            $this->session->set('program', key($programs), $this->app->tab);
             if($programID && strpos(",{$this->app->user->view->programs},", ",{$this->session->program},") === false) $this->accessDenied();
         }
 
@@ -65,6 +65,8 @@ class programModel extends model
      */
     public function getPairs($isQueryAll = false, $orderBy = 'id_desc'): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getProgramPairs();
+
         return $this->dao->select('id, name')->from(TABLE_PROGRAM)
             ->where('type')->eq('program')
             ->andWhere('deleted')->eq(0)
@@ -144,6 +146,8 @@ class programModel extends model
      */
     public function getByID(int $programID = 0): object|false
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getProgram();
+
         $program = $this->fetchByID($programID);
         if(!$program) return false;
 
@@ -184,6 +188,8 @@ class programModel extends model
      */
     public function getList(string $status = 'all', string $orderBy = 'id_asc', string $type = '', array $topIdList = array(), object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getPrograms();
+
         $userViewIdList = trim($this->app->user->view->programs, ',') . ',' . trim($this->app->user->view->projects, ',');
         $userViewIdList = array_filter(explode(',', $userViewIdList));
 
@@ -504,7 +510,7 @@ class programModel extends model
         }
 
         $stmt = $this->dao->select('DISTINCT t1.*, CAST(t1.budget AS DECIMAL) AS budget')->from(TABLE_PROJECT)->alias('t1');
-        if($this->cookie->involved) $stmt->leftJoin(TABLE_TEAM)->alias('t2')->on('t1.id=t2.root')->leftJoin(TABLE_STAKEHOLDER)->alias('t3')->on('t1.id=t3.objectID');
+        if($this->cookie->involved) $stmt = $this->loadModel('project')->leftJoinInvolvedTable($stmt);
         $stmt->where('t1.deleted')->eq('0')
             ->andWhere('t1.vision')->eq($this->config->vision)
             ->beginIF($browseType == 'bysearch' && $query)->andWhere($query)->fi()
@@ -518,18 +524,7 @@ class programModel extends model
             ->beginIF($path)->andWhere('t1.path')->like($path . '%')->fi()
             ->beginIF(!$queryAll && !$this->app->user->admin)->andWhere('t1.id')->in($this->app->user->view->projects)->fi();
 
-        if($this->cookie->involved)
-        {
-            $stmt->andWhere('t2.type')->eq('project')
-                ->andWhere('t1.openedBy', true)->eq($this->app->user->account)
-                ->orWhere('t1.PM')->eq($this->app->user->account)
-                ->orWhere('t2.account')->eq($this->app->user->account)
-                ->orWhere('(t3.user')->eq($this->app->user->account)
-                ->andWhere('t3.deleted')->eq(0)
-                ->markRight(1)
-                ->orWhere("CONCAT(',', t1.whitelist, ',')")->like("%,{$this->app->user->account},%")
-                ->markRight(1);
-        }
+        if($this->cookie->involved) $stmt = $this->project->appendInvolvedCondition($stmt);
         $projectList = $stmt->orderBy($orderBy)->page($pager, 't1.id')->fetchAll('id');
 
         /* Determine how to display the name of the program. */
@@ -789,6 +784,8 @@ class programModel extends model
      */
     public function getTopPairs(string $mode = '', bool $isQueryAll = false): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getProgramPairs();
+
         $topPairs = $this->dao->select('id,name')->from(TABLE_PROGRAM)
             ->where('type')->eq('program')
             ->andWhere('grade')->eq(1)
@@ -1406,5 +1403,50 @@ class programModel extends model
     public function getProductPairsByID(int $programID): array
     {
         return $this->dao->select('id, name')->from(TABLE_PRODUCT)->where('program')->eq($programID)->andWhere('deleted')->eq('0')->fetchPairs();
+    }
+
+    /*
+     * Set program menu.
+     *
+     * @param  int    $programID
+     * @access public
+     * @return void
+     */
+    public function setMenu(int $programID)
+    {
+        $this->lang->switcherMenu = $this->getSwitcher($programID);
+        common::setMenuVars('program', $programID);
+    }
+
+    /*
+     * Get program swapper.
+     *
+     * @param  int     $programID
+     * @access private
+     * @return string
+     */
+    public function getSwitcher(int $programID = 0)
+    {
+        $currentProgramName = '';
+        $currentModule      = $this->app->moduleName;
+        $currentMethod      = $this->app->methodName;
+
+        if($programID)
+        {
+            helper::setCookie("lastProgram", $programID, $this->config->cookieLife, $this->config->webRoot, '', false, true);
+            $currentProgram     = $this->getById($programID);
+            $currentProgramName = $currentProgram->name;
+        }
+        else
+        {
+            $currentProgramName = $this->lang->program->all;
+        }
+
+        $dropMenuLink = helper::createLink('program', 'ajaxGetDropMenu', "objectID=$programID&module=$currentModule&method=$currentMethod");
+        $output  = "<div class='btn-group header-btn' id='swapper'><button data-toggle='dropdown' type='button' class='btn' id='currentItem' title='{$currentProgramName}'><span class='text'>{$currentProgramName}</span> <span class='caret' style='margin-bottom: -1px'></span></button><div id='dropMenu' class='dropdown-menu search-list' data-ride='dropmenu' data-url='$dropMenuLink'>";
+        $output .= '<div class="input-control search-box has-icon-left has-icon-right search-example"><input type="search" class="form-control search-input" /><label class="input-control-icon-left search-icon"><i class="icon icon-search"></i></label><a class="input-control-icon-right search-clear-btn"><i class="icon icon-close icon-sm"></i></a></div>';
+        $output .= "</div></div>";
+
+        return $output;
     }
 }

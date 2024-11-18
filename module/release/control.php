@@ -25,8 +25,11 @@ class release extends control
     {
         $this->loadModel('product')->setMenu($productID, $branch);
 
-        $product = $this->product->getById($productID);
+        $product  = $this->product->getById($productID);
+        $products = $this->product->getPairs('all', 0, '', 'all');
         if(empty($product)) $this->locate($this->createLink('product', 'create'));
+
+        $this->product->checkAccess($productID, $products);
 
         $this->view->product  = $product;
         $this->view->branch   = $branch;
@@ -326,13 +329,12 @@ class release extends control
     {
         if(!empty($_POST))
         {
-            $release  = $this->release->getByID($releaseID);
+            $release  = $this->release->getByID($releaseID, true);
             $type     = $this->post->type;
             $fileName = $this->post->fileName;
             if(empty($fileName)) return $this->sendError(sprintf($this->lang->error->notempty, $this->lang->release->fileName));
 
-            $html    = '';
-            $release = $this->release->getByID($releaseID, true);
+            $html = '';
             if($type == 'story' || $type == 'all')   $html .= $this->releaseZen->buildStoryDataForExport($release);
             if($type == 'bug' || $type == 'all')     $html .= $this->releaseZen->buildBugDataForExport($release, 'bug');
             if($type == 'leftbug' || $type == 'all') $html .= $this->releaseZen->buildBugDataForExport($release, 'leftbug');

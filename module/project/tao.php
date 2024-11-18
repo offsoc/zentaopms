@@ -107,6 +107,8 @@ class projectTao extends projectModel
      */
     protected function doUpdate(int $projectID, object $project): bool
     {
+        $project->id = $projectID;
+
         $this->dao->update(TABLE_PROJECT)->data($project)
             ->autoCheck('begin,end')
             ->check('end',  'gt', $project->begin)
@@ -395,6 +397,8 @@ class projectTao extends projectModel
         $product->createdVersion = $this->config->version;
         $product->vision         = zget($project, 'vision', 'rnd');
 
+        if($this->config->edition != 'open') $product->workflowGroup = $this->dao->select('id')->from(TABLE_WORKFLOWGROUP)->where('code')->eq('productproject')->fetch('id');
+
         $this->app->loadLang('product');
         $this->dao->insert(TABLE_PRODUCT)->data($product)
             ->check('name', 'notempty')
@@ -574,12 +578,12 @@ class projectTao extends projectModel
      * 构造批量更新项目的数据。
      * Build bathc update project data.
      *
-     * @param  array     $data
-     * @param  array     $oldProjects
-     * @access protected
+     * @param  array  $data
+     * @param  array  $oldProjects
+     * @access public
      * @return array
      */
-    protected function buildBatchUpdateProjects(array $data, array $oldProjects): array
+    public function buildBatchUpdateProjects(array $data, array $oldProjects): array
     {
         if(empty($data)) return array();
 
@@ -598,6 +602,7 @@ class projectTao extends projectModel
             $projects[$projectID]->begin          = $project->begin;
             $projects[$projectID]->end            = $project->end == $this->lang->project->longTime ? LONG_TIME : $project->end;
             $projects[$projectID]->acl            = $project->acl;
+            $projects[$projectID]->days           = $project->days;
             $projects[$projectID]->lastEditedBy   = $this->app->user->account;
             $projects[$projectID]->lastEditedDate = helper::now();
 
@@ -793,12 +798,14 @@ class projectTao extends projectModel
             ->where('type')->eq('project')
             ->andWhere('vision')->eq($this->config->vision)
             ->andWhere('deleted')->eq(0)
+            ->beginIF($projectID)->andWhere('hasProduct')->eq('1')->fi()
+            ->beginIF($projectID)->andWhere('multiple')->eq('1')->fi()
             ->beginIF($excludedModel)->andWhere('model')->ne($excludedModel)->fi()
             ->beginIF(!$this->app->user->admin)->andWhere('id')->in($this->app->user->view->projects)->fi()
             ->beginIF($status == 'undone')->andWhere('status')->notIN('done,closed')->fi()
             ->beginIF($status == 'unclosed')->andWhere('status')->ne('closed')->fi()
             ->beginIF($status && !in_array($status, array('all', 'undone', 'unclosed')))->andWhere('status')->eq($status)->fi()
-            ->beginIF($projectID)->andWhere('id')->eq($projectID)->fi()
+            ->beginIF($projectID)->orWhere('id')->eq($projectID)->fi()
             ->orderBy($orderBy)
             ->beginIF($limit)->limit($limit)->fi()
             ->fetchAll('id');
@@ -974,7 +981,7 @@ class projectTao extends projectModel
      */
     protected function setMenuByModel(string $projectModel): bool
     {
-        global $lang;
+        global $lang, $config;
         $model = 'scrum';
         if(in_array($projectModel, $this->config->project->waterfallList))
         {
@@ -998,6 +1005,24 @@ class projectTao extends projectModel
 
         if(isset($lang->$model))
         {
+            $key = 'project-' . $model;
+            if(isset($config->customMenu->$key))
+            {
+                $lang->{$model}->menuOrder   = array();
+                $lang->{$model}->dividerMenu = '';
+
+                $items    = json_decode($config->customMenu->$key);
+                $prevItem = '';
+                foreach($items as $item)
+                {
+                    $lang->{$model}->menuOrder[$item->order] = $item->name;
+                    if($prevItem == 'divider') $lang->{$model}->dividerMenu .= $item->name . ',';
+                    $prevItem = $item->name;
+                }
+
+                if($lang->{$model}->dividerMenu) $lang->{$model}->dividerMenu = ',' . trim($lang->{$model}->dividerMenu, ',') . ',';
+            }
+
             $lang->project->menu        = $lang->{$model}->menu;
             $lang->project->menuOrder   = $lang->{$model}->menuOrder;
             $lang->project->dividerMenu = $lang->{$model}->dividerMenu;
@@ -1028,7 +1053,7 @@ class projectTao extends projectModel
         $projectProduct = (int)$this->dao->select('product')->from(TABLE_PROJECTPRODUCT)->where('project')->eq($projectID)->fetch('product');
         if(isset($lang->project->menu->settings['subMenu']->module['link'])) $lang->project->menu->settings['subMenu']->module['link'] = sprintf($lang->project->menu->settings['subMenu']->module['link'], $projectProduct);
 
-        if(!$hasProduct && in_array($model, $this->config->project->scrumList)) $lang->project->menu->projectplan['link'] = sprintf($lang->project->menu->projectplan['link'], $projectProduct);
+        if(!$hasProduct && in_array($model, $this->config->project->scrumList) && isset($lang->project->menu->projectplan)) $lang->project->menu->projectplan['link'] = sprintf($lang->project->menu->projectplan['link'], $projectProduct);
 
         if(!$hasProduct) unset($lang->project->menu->settings['subMenu']->products);
         if(!in_array($model, $this->config->project->scrumList)) unset($lang->project->menu->projectplan);

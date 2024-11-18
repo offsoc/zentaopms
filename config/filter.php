@@ -93,6 +93,7 @@ $filter->bug->export                    = new stdclass();
 $filter->bug->ajaxgetproductcases       = new stdclass();
 $filter->bug->ajaxgetproductbugs        = new stdclass();
 $filter->caselib->create                = new stdclass();
+$filter->caselib->exportcase            = new stdclass();
 $filter->doc->create                    = new stdclass();
 $filter->doc->browse                    = new stdclass();
 $filter->doc->view                      = new stdclass();
@@ -235,6 +236,7 @@ $filter->bug->export->cookie['checkedItem']    = 'reg::checked';
 
 $filter->caselib->create->cookie['lastLibCaseModule'] = 'int';
 $filter->caselib->default->cookie['preBranch']        = 'reg::word';
+$filter->caselib->exportcase->cookie['checkedItem']   = 'reg::checked';
 
 $filter->doc->create->cookie['lastDocModule']               = 'int';
 $filter->doc->browse->cookie['browseType']                  = 'reg::browseType';
@@ -398,6 +400,7 @@ $filter->testcase->browse->cookie['onlyScene']     = 'code';
 $filter->todo->export->cookie['checkedItem'] = 'reg::checked';
 
 $filter->user->login->cookie['keepLogin']    = 'equal::on';
+$filter->user->login->cookie['logout']       = 'equal::1';
 $filter->user->export->cookie['checkedItem'] = 'reg::any';
 
 $filter->block->default->get['hash']    = 'reg::md5';

@@ -36,6 +36,10 @@ class taskModel extends model
         $oldTask = $this->getById($taskID);
         if($oldTask->parent == '-1') $this->config->task->activate->requiredFields = '';
 
+        $this->dao->update(TABLE_TASKTEAM)->set('status')->eq('wait')->where('task')->eq($task->id)->andWhere('consumed')->eq(0)->andWhere('left')->gt('0')->exec();
+        $this->dao->update(TABLE_TASKTEAM)->set('status')->eq('doing')->where('task')->eq($task->id)->andWhere('consumed')->gt(0)->andWhere('left')->gt(0)->exec();
+        $this->dao->update(TABLE_TASKTEAM)->set('status')->eq('done')->where('task')->eq($task->id)->andWhere('consumed')->gt(0)->andWhere('left')->eq('0')->exec();
+
         if(!empty($oldTask->team))
         {
             /* When activate and assigned to a team member, then update his left data in teamData. */
@@ -44,6 +48,7 @@ class taskModel extends model
 
             $this->manageTaskTeam($oldTask->mode, $task, $teamData);
             $task = $this->computeMultipleHours($oldTask, $task);
+            if(!empty($task->assignedTo) && $task->assignedTo == 'closed') $task->assignedTo = '';
         }
 
         $this->dao->update(TABLE_TASK)->data($task)
@@ -54,7 +59,7 @@ class taskModel extends model
             ->exec();
         if(dao::isError()) return false;
 
-        if($task->consumed != $oldTask->consumed || $task->left != $oldTask->left) $this->loadModel('program')->refreshProjectStats($oldTask->project);
+        if($task->left != $oldTask->left) $this->loadModel('program')->refreshProjectStats($oldTask->project);
 
         if($oldTask->parent > 0) $this->updateParentStatus($taskID);
         if($oldTask->parent == '-1')
@@ -174,6 +179,8 @@ class taskModel extends model
                 $feedbacks[$oldTask->feedback] = $oldTask->feedback;
                 $this->feedback->updateStatus('task', $oldTask->feedback, $task->status, $oldTask->status);
             }
+
+            if(!empty($task->story) && !empty($task->parent) && $task->parent == '-1' && $this->post->syncChildren) $this->syncStoryToChildren($task);
         }
 
         return !dao::isError();
@@ -356,7 +363,7 @@ class taskModel extends model
         /* Multi-task change to normal task. */
         if($task->mode == 'single') $this->dao->delete()->from(TABLE_TASKTEAM)->where('task')->eq($task->id)->exec();
 
-        if(isset($task->version) && $task->version > $oldTask->version) $this->taskTao->recordTaskVersion($task);
+        if(isset($task->version) && $task->version > $oldTask->version) $this->recordTaskVersion($task);
 
         /* Compute task's story stage. */
         $this->loadModel('story')->setStage($task->story);
@@ -396,6 +403,8 @@ class taskModel extends model
         if(!empty($task->parent)) $this->updateParent($task, $isParentChanged);
         if($this->config->edition != 'open' && $oldTask->feedback) $this->loadModel('feedback')->updateStatus('task', $oldTask->feedback, $task->status, $oldTask->status);
         if(!empty($oldTask->mode) && empty($task->mode)) $this->dao->delete()->from(TABLE_TASKTEAM)->where('task')->eq($task->id)->exec();
+
+        if(!empty($task->story) && $this->post->syncChildren) $this->syncStoryToChildren($task);
     }
 
     /**
@@ -500,15 +509,16 @@ class taskModel extends model
         {
             /* Get the lane and column of the current task. */
             $laneID   = $task->lane;
-            $columnID = isset($output['columnID']) ? $output['columnID'] : 0;
+            $columnID = $task->column;
             unset($task->lane);
+            unset($task->column);
 
             /* Create a task. */
             $taskID = $this->create($task);
             if(!$taskID) return false;
 
             /* Update Kanban and story stage. */
-            if($task->story) $this->story->setStage($task->story);
+            if(!empty($task->story)) $this->story->setStage($task->story);
             $this->updateKanbanForBatchCreate($taskID, $executionID, $laneID, (int)$columnID);
 
             $taskIdList[$taskID] = $taskID;
@@ -609,11 +619,13 @@ class taskModel extends model
 
             if($task->status == 'done')   $this->score->create('task', 'finish', $taskID);
             if($task->status == 'closed') $this->score->create('task', 'close', $taskID);
-            $actionID = $this->action->create('task', $taskID, 'Edited');
             $changes  = common::createChanges($oldTask, $task);
-            if(!empty($changes)) $this->action->logHistory($actionID, $changes);
-
-            $allChanges[$taskID] = $changes;
+            if(!empty($changes))
+            {
+                $actionID = $this->action->create('task', $taskID, 'Edited');
+                $this->action->logHistory($actionID, $changes);
+                $allChanges[$taskID] = $changes;
+            }
         }
         $this->score->create('ajax', 'batchEdit');
         return $allChanges;
@@ -651,6 +663,7 @@ class taskModel extends model
         parse_str($extra, $output);
 
         $this->updateKanbanCell($oldTask->id, $output, $oldTask->execution);
+        if(!empty($oldTask->mode)) $this->dao->update(TABLE_TASKTEAM)->set('status')->eq($task->status)->where('task')->eq($task->id)->exec();
 
         $changes = common::createChanges($oldTask, $task);
         if($changes || $this->post->comment != '')
@@ -742,6 +755,8 @@ class taskModel extends model
     {
         $this->dao->update(TABLE_TASK)->data($task)->autoCheck()->checkFlow()->where('id')->eq((int)$oldTask->id)->exec();
         if(dao::isError()) return false;
+
+        if(!empty($oldTask->mode)) $this->dao->update(TABLE_TASKTEAM)->set('`status`')->eq($task->status)->where('task')->eq($task->id)->exec();
 
         $changes = common::createChanges($oldTask, $task);
         $this->afterChangeStatus($oldTask, $changes, 'Closed', $output);
@@ -945,7 +960,11 @@ class taskModel extends model
 
         if(dao::isError()) return false;
 
-        if($createAction) $this->loadModel('action')->create('task', $taskID, 'Opened', '');
+        if($createAction)
+        {
+            $this->loadModel('action')->create('task', $taskID, 'Opened', '');
+            if(!empty($task->assignedTo)) $this->action->create('task', $taskID, 'Assigned', '', $task->assignedTo);
+        }
         $this->loadModel('file')->updateObjectID($this->post->uid, $taskID, 'task');
         $this->loadModel('score')->create('task', 'create', $taskID);
         if(dao::isError()) return false;
@@ -1243,6 +1262,8 @@ class taskModel extends model
      */
     public function getByID(int $taskID, bool $setImgSize = false, $vision = ''): false|object
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getTask();
+
         if($vision == '') $vision = $this->config->vision; // TODO: $vision is for compatibling with viewing drill data.
         $task = $this->dao->select('t1.*, t2.id AS storyID, t2.title AS storyTitle, t2.version AS latestStoryVersion, t2.status AS storyStatus')
             ->from(TABLE_TASK)->alias('t1')
@@ -2098,7 +2119,7 @@ class taskModel extends model
      */
     public function getUserTasks(string $account, string $type = 'assignedTo', int $limit = 0, object $pager = null, string $orderBy = 'id_desc', int $projectID = 0): array
     {
-        if(!$this->loadModel('common')->checkField(TABLE_TASK, $type)) return array();
+        if($type != 'myInvolved' && !$this->loadModel('common')->checkField(TABLE_TASK, $type)) return array();
 
         $tasks = $this->taskTao->fetchUserTasksByType($account, $type, $orderBy, $projectID, $limit, $pager);
 
@@ -2167,8 +2188,8 @@ class taskModel extends model
         /* 如果是转任务，直接返回 true。 */
         if($action == 'totask') return true;
 
-        /* 父任务只能编辑和创建子任务。 Parent task only can edit task and create children. */
-        if((!empty($task->isParent) || $task->parent < 0) && !in_array($action, array('edit', 'batchcreate', 'cancel'))) return false;
+        /* 父任务只能编辑、创建子任务和指派。 Parent task only can edit task, create children and assign to somebody. */
+        if((!empty($task->isParent) || $task->parent < 0) && !in_array($action, array('edit', 'batchcreate', 'cancel', 'assignto'))) return false;
 
         /* 子任务和多人任务不能创建子任务。Multi task and child task cannot create children. */
         if($action == 'batchcreate' && (!empty($task->team) || $task->parent > 0)) return false;
@@ -2301,12 +2322,13 @@ class taskModel extends model
         $minStatus = 'done';
         $teamList  = array_filter($teamData->team);
         $teams     = array();
+        $order     = 1;
         foreach($teamList as $index => $account)
         {
             /* Set member information. */
             $member = new stdclass();
             $member->task     = $task->id;
-            $member->order    = $index;
+            $member->order    = $order;
             $member->account  = $account;
             $member->estimate = isset($teamData->teamEstimate) ? (float)zget($teamData->teamEstimate, $index, 0.00) : 0.00;
             $member->consumed = isset($teamData->teamConsumed) ? (float)zget($teamData->teamConsumed, $index, 0.00) : 0.00;
@@ -2314,6 +2336,7 @@ class taskModel extends model
             $member->status   = isset($oldTeamData[$account]->status) ? $oldTeamData[$account]->status : 'wait';
             if($task->status == 'wait' && $member->estimate > 0 && $member->left == 0) $member->left = $member->estimate;
             if($task->status == 'done') $member->left = 0;
+            if($member->status == 'done' && !empty($member->left)) $member->status = 'doing';
 
             /* Compute task status of member. */
             if($member->left == 0 && $member->consumed > 0)
@@ -2335,6 +2358,8 @@ class taskModel extends model
             $this->taskTao->setTeamMember($member, $mode, isset($teams[$account]));
             if(dao::isError()) return false;
             $teams[$account] = $account;
+
+            $order ++;
         }
         return $teams;
     }
@@ -2527,9 +2552,11 @@ class taskModel extends model
         $today = helper::today();
 
         /* Delayed or not?. */
-        if(in_array($task->status, $this->config->task->unfinishedStatus) && !empty($task->deadline) && !helper::isZeroDate($task->deadline))
+        if(!empty($task->deadline) && !helper::isZeroDate($task->deadline))
         {
-            $delay = helper::diffDate($today, $task->deadline);
+            $finishedDate = ($task->status == 'done' || $task->status == 'closed') && $task->finishedDate ? substr($task->finishedDate, 0, 10) : $today;
+            $actualDays   = $this->loadModel('holiday')->getActualWorkingDays($task->deadline, $finishedDate);
+            $delay        = count($actualDays) - 1;
             if($delay > 0) $task->delay = $delay;
         }
 
@@ -3331,11 +3358,65 @@ class taskModel extends model
     {
         return $this->dao->select('t1.revision,t3.id AS id,t3.name AS name')
             ->from(TABLE_REPOHISTORY)->alias('t1')
-            ->leftJoin(TABLE_RELATION)->alias('t2')->on('t2.relation="completedin" AND t2.BType="commit" AND t2.BID=t1.id')
-            ->leftJoin(TABLE_TASK)->alias('t3')->on('t2.AType="task" AND t2.AID=t3.id')
+            ->leftJoin(TABLE_RELATION)->alias('t2')->on("t2.relation='completedin' AND t2.BType='commit' AND t2.BID=t1.id")
+            ->leftJoin(TABLE_TASK)->alias('t3')->on("t2.AType='task' AND t2.AID=t3.id")
             ->where('t1.revision')->in($revisions)
             ->andWhere('t1.repo')->eq($repoID)
             ->andWhere('t3.id')->ne('')
             ->fetchGroup('revision', 'id');
+    }
+
+    /**
+     * 获取执行未关闭的任务
+     * Get unclosed tasks by execution
+     *
+     * @param  string|int   $execution
+     * @access public
+     * @return array|false
+     */
+    public function getUnclosedTasksByExecution(array|int $execution): array|false
+    {
+        if(is_array($execution)) return $this->dao->select('id,execution')->from(TABLE_TASK)->where('execution')->in($execution)->andWhere('status')->ne('closed')->andWhere('deleted')->eq('0')->fetchGroup('execution');
+        return $this->dao->select('id,name')->from(TABLE_TASK)->where('execution')->eq($execution)->andWhere('status')->ne('closed')->andWhere('deleted')->eq('0')->fetchPairs();
+    }
+
+    /**
+     * 同步父任务的需求到子任务
+     * Sync parent story to children
+     *
+     * @param  object $task
+     * @access public
+     * @return bool
+     */
+    public function syncStoryToChildren(object $task): bool
+    {
+        $nonStoryTasks = $this->dao->select('id,story')->from(TABLE_TASK)->where('parent')->eq($task->id)->andWhere('deleted')->eq('0')->andWhere('story')->eq(0)->fetchPairs();
+        $taskStory     = $this->loadModel('story')->fetchByID($task->story);
+        $this->loadModel('action');
+        foreach($nonStoryTasks as $id => $story)
+        {
+            $this->dao->update(TABLE_TASK)->set('story')->eq($task->story)->set('storyVersion')->eq($taskStory->version)->where('id')->eq($id)->exec();
+
+            $changes  = array(array('field' => 'story', 'old' => $story, 'new' => $task->story, 'diff' => ''));
+            $actionID = $this->action->create('task', $id, 'syncStoryByParentTask');
+            $this->action->logHistory($actionID, $changes);
+        }
+
+        return !dao::isError();
+    }
+
+    /**
+     * 获取子任务
+     * Get child tasks
+     *
+     * @param  array $taskIdList
+     * @access public
+     * @return array|false
+     */
+    public function getChildTasksByList(array $taskIdList): array|false
+    {
+        $childTasks         = $this->dao->select('id,parent')->from(TABLE_TASK)->where('parent')->in($taskIdList)->andWhere('deleted')->eq('0')->fetchGroup('parent', 'id');
+        $nonStoryChildTasks = $this->dao->select('id,parent')->from(TABLE_TASK)->where('parent')->in($taskIdList)->andWhere('story')->eq('0')->andWhere('deleted')->eq('0')->fetchGroup('parent', 'id');
+        return array($childTasks, $nonStoryChildTasks);
     }
 }

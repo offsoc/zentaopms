@@ -66,9 +66,8 @@ window.loadProductPlans = function(productID, branch)
     if(typeof(branch) == 'undefined') branch = 0;
     if(!branch) branch = 0;
 
-    let planID     = $('[name=plan]').val();
-    let expired    = config.currentMethod == 'create' ? 'unexpired' : '';
-    let planLink   = $.createLink('product', 'ajaxGetPlans', 'productID=' + productID + '&branch=' + branch + '&planID=' + planID + '&fieldID=&needCreate=true&expired='+ expired +'&param=skipParent,forStory,' + config.currentMethod);
+    let params     = config.currentMethod == 'create' ? 'unexpired,noclosed' : '';
+    let planLink   = $.createLink('product', 'ajaxGetPlans', 'productID=' + productID + '&branch=' + branch + '&params=' + params + '&skipParent=true');
     let $planIdBox = $('#planIdBox');
 
     $.get(planLink, function(data)
@@ -76,10 +75,10 @@ window.loadProductPlans = function(productID, branch)
         let items = JSON.parse(data);
         let $inputGroup = $planIdBox.closest('.input-group');
         $inputGroup.html("<span id='planIdBox'><div class='picker-box' id='plan'></div></span>")
-        new zui.Picker('#planIdBox #plan', {items: items, name: 'plan', defaultValue: planID.toString()});
+        new zui.Picker('#planIdBox #plan', {items: items, name: 'plan', defaultValue: ''});
         if(items.length == 0)
         {
-            $inputGroup.append('<a class="btn btn-default" type="button" data-toggle="modal" href="' + $.createLink('productplan', 'create', 'productID=' + productID + '&branch=' + branch) + '"><i class="icon icon-plus"></i></a>');
+            $inputGroup.append('<a class="btn btn-default" type="button" data-size="lg" data-toggle="modal" href="' + $.createLink('productplan', 'create', 'productID=' + productID + '&branch=' + branch) + '"><i class="icon icon-plus"></i></a>');
             $inputGroup.append('<button class="refresh btn" type="button" onclick="window.loadProductPlans(' + productID + ')"><i class="icon icon-refresh"></i></button>');
         }
     })

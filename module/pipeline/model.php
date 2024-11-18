@@ -80,16 +80,57 @@ class pipelineModel extends model
      * Get pipeline pairs.
      *
      * @param  string $type
+     * @param  bool   $checkOnline
      * @access public
      * @return array
      */
-    public function getPairs(string $type = ''): array
+    public function getPairs(string $type = '', bool $checkOnline = false): array
     {
         $type = strtolower($type);
-        return $this->dao->select('id,name')->from(TABLE_PIPELINE)
-            ->where('deleted')->eq('0')
-            ->beginIF($type)->AndWhere('type')->in($type)->fi()
-            ->orderBy('id')->fetchPairs('id', 'name');
+        if(!$this->config->inQuickon || !$checkOnline)
+        {
+            return $this->dao->select('id,name')->from(TABLE_PIPELINE)
+                ->where('deleted')->eq('0')
+                ->beginIF($type)->andWhere('type')->in($type)->fi()
+                ->orderBy('id_desc')
+                ->fetchPairs('id', 'name');
+        }
+
+        $serverList   = $this->getList($type);
+        $instanceList = $this->loadModel('instance')->getList();
+        $statusList   = $this->loadModel('cne')->batchQueryStatus($instanceList);
+        $runningApps  = array();
+        foreach($instanceList as $instance)
+        {
+            $statusData = zget($statusList, $instance->k8name, '');
+            if($statusData && $statusData->status == 'running') $runningApps[$instance->id] = $instance->domain;
+        }
+
+        $serverPairs = array();
+        foreach($serverList as $server)
+        {
+            if($server->createdBy == 'system')
+            {
+                if($server->instanceID && isset($runningApps[$server->instanceID]))
+                {
+                    $serverPairs[$server->id] = $server->name;
+                    continue;
+                }
+
+                foreach($runningApps as $domain)
+                {
+                    if(strpos($server->url, $domain) !== false)
+                    {
+                        $serverPairs[$server->id] = $server->name;
+                        continue 2;
+                    }
+                }
+                continue;
+            }
+
+            $serverPairs[$server->id] = $server->name;
+        }
+        return $serverPairs;
     }
 
     /**
@@ -111,7 +152,7 @@ class pipelineModel extends model
         $this->dao->insert(TABLE_PIPELINE)->data($server)
             ->batchCheck($this->config->pipeline->create->requiredFields, 'notempty')
             ->batchCheck("url", 'URL')
-            ->check('name', 'unique', "`type` = '$type'")
+            ->check('name', 'unique', "`type` = '$server->type'")
             ->checkIF($server->type == 'jenkins', 'account', 'notempty')
             ->checkIF($server->type == 'jenkins' && !$server->token, 'password', 'notempty')
             ->checkIF($server->type == 'jenkins' && !$server->password, 'token', 'notempty')

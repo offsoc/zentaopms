@@ -389,6 +389,8 @@ class product extends control
         /* Execute hooks. */
         $this->executeHooks($productID);
 
+        if($this->config->edition != 'open') $this->view->workflowGroups = $this->loadModel('workflowgroup')->getPairs('product', 'scrum', 1, 'all');
+
         $this->view->title     = $product->name . $this->lang->hyphen . $this->lang->product->view;
         $this->view->product   = $product;
         $this->view->actions   = $this->loadModel('action')->getList('product', $productID);
@@ -598,8 +600,6 @@ class product extends control
 
         $this->app->loadClass('pager', true);
         $pager = new pager($recTotal, $recPerPage, $pageID);
-
-        $this->product->refreshStats(); // Refresh stats fields of products.
 
         $productStatList = $this->productZen->getExportData($programID, $browseType, $orderBy, $param, $pager);
 
@@ -952,7 +952,7 @@ class product extends control
     {
         $projects = $this->product->getProjectPairsByProduct($productID, $branch);
         if($this->app->getViewType() == 'json') return print(json_encode($projects));
-        if($pageType == 'old') return print(html::select('project', $projects, $projectID, "class='form-control' onchange='loadProductExecutions({$productID}, this.value)'"));;
+        if($pageType == 'old') return print(html::select('project', array(0 => '') + $projects, $projectID, "class='form-control' onchange='loadProductExecutions({$productID}, this.value)'"));
 
         $items = array();
         foreach($projects as $projectID => $projectName) $items[] = array('text' => $projectName, 'value' => $projectID, 'keys' => $projectName);
@@ -1008,7 +1008,7 @@ class product extends control
         if($pageType == 'old')
         {
             $datamultiple = !empty($project) ? "data-multiple={$project->multiple}" : '';
-            return print(html::select('execution', $executions, $executionID, "class='form-control' $datamultiple"));
+            return print(html::select('execution', array(0 => '') + $executions, $executionID, "class='form-control' $datamultiple"));
         }
 
         $executionList = array();
@@ -1051,18 +1051,14 @@ class product extends control
      *
      * @param  int    $productID
      * @param  string $branch
-     * @param  int    $planID
-     * @param  string $fieldID
-     * @param  int    $needCreate
-     * @param  string $expired
-     * @param  string $param
+     * @param  string $params
+     * @param  bool   $skipParent
      * @access public
      * @return void
      */
-    public function ajaxGetPlans(int $productID, string $branch = '', int $planID = 0, string $fieldID = '', int $needCreate = 0, string $expired = '', string $param = '')
+    public function ajaxGetPlans(int $productID, string $branch = '', string $params = '', bool $skipParent = false)
     {
-        $param = strtolower($param);
-        $plans = $this->loadModel('productplan')->getPairs($productID, empty($branch) ? 'all' : $branch, $expired, strpos($param, 'skipparent') !== false);
+        $plans = $this->loadModel('productplan')->getPairs($productID, empty($branch) ? 'all' : $branch, $params, $skipParent);
 
         $items = array();
         foreach($plans as $id => $name)
@@ -1138,7 +1134,40 @@ class product extends control
      * @access public
      * @return void
      */
-    public function ajaxGetDropMenu(int $productID, string $module, string $method, string $extra = '', string $from = '')
+    public function ajaxGetDropMenu(int $productID, string $module, string $method, string $extra = '', string $from = '', int $useLink = 1)
+    {
+        $shadow = '0';
+        if($this->app->tab == 'qa' || $from == 'qa') $shadow = 'all';
+
+        $products        = $this->productZen->getProducts4DropMenu($shadow, $module);
+        $programProducts = array();
+        foreach($products as $product) $programProducts[$product->program][] = $product;
+
+        $this->view->link      = $useLink == 1 ? $this->product->getProductLink($module, $method, $extra) : '#';
+        $this->view->productID = $productID;
+        $this->view->module    = $module;
+        $this->view->method    = $method;
+        $this->view->extra     = $extra;
+        $this->view->products  = $programProducts;
+        $this->view->projectID = $this->app->tab == 'project' ? $this->session->project : 0;
+        $this->view->programs  = $this->loadModel('program')->getPairs(true);
+        $this->view->lines     = $this->product->getLinePairs();
+        $this->display();
+    }
+
+    /**
+     * 获取产品下1.5级下拉数据。
+     * Get 1.5 level drop-down data under product.
+     *
+     * @param  int    $productID
+     * @param  string $module
+     * @param  string $method
+     * @param  string $extra
+     * @param  string $from
+     * @access public
+     * @return void
+     */
+    public function ajaxGetOldDropMenu(int $productID, string $module, string $method, string $extra = '', string $from = '')
     {
         $shadow = '0';
         if($this->app->tab == 'qa' || $from == 'qa') $shadow = 'all';
@@ -1201,5 +1230,25 @@ class product extends control
     {
         $products = $this->product->getList(0, 'all', 1, $lineID);
         return print($products ? json_encode($products) : '');
+    }
+
+    /**
+     * 刷新产品统计数据。
+     * Refresh product stats.
+     *
+     * @access public
+     * @return void
+     */
+    public function refreshStats()
+    {
+        $this->product->refreshStats();
+
+        if(dao::isError())
+        {
+            echo json_encode(dao::getError());
+            return true;
+        }
+
+        echo 'success';
     }
 }

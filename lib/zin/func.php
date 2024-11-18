@@ -106,6 +106,7 @@ function programMenu(): programMenu {return createWg('programMenu', func_get_arg
 function productMenu(): productMenu {return createWg('productMenu', func_get_args());}
 function moduleMenu(): moduleMenu {return createWg('moduleMenu', func_get_args());}
 function docMenu(): docMenu {return createWg('docMenu', func_get_args());}
+function docApp(): docApp {return createWg('docApp', func_get_args());}
 function tree(): Tree {return createWg('tree', func_get_args());}
 function treeEditor(): TreeEditor {return createWg('treeEditor', func_get_args());}
 function fileList(): fileList {return createWg('fileList', func_get_args());}
@@ -113,6 +114,7 @@ function history(): history {return createWg('history', func_get_args());}
 function floatToolbar(): floatToolbar {return createWg('floatToolbar', func_get_args());}
 function formItemDropdown(): formItemDropdown {return createWg('formItemDropdown', func_get_args());}
 function editor(): editor {return createWg('editor', func_get_args());}
+function pageEditor(): pageEditor {return createWg('pageEditor', func_get_args());}
 function commentBtn(): commentBtn {return createWg('commentBtn', func_get_args());}
 function commentDialog(): commentDialog {return createWg('commentDialog', func_get_args());}
 function commentForm(): commentForm {return createWg('commentForm', func_get_args());}
@@ -134,6 +136,7 @@ function detailSide(): detailSide {return createWg('detailSide', func_get_args()
 function detailBody(): detailBody {return createWg('detailBody', func_get_args());}
 function detailForm(): detailForm {return createWg('detailForm', func_get_args());}
 function echarts(): echarts {return createWg('echarts', func_get_args());}
+function graph(): graph {return createWg('graph', func_get_args());}
 function popovers(): popovers {return createWg('popovers', func_get_args());}
 function backBtn(): backBtn {return createWg('backBtn', func_get_args());}
 function collapseBtn(): collapseBtn {return createWg('collapseBtn', func_get_args());}
@@ -218,6 +221,28 @@ function affected(): affected {return createWg('affected', func_get_args());}
 function thinkPffa(): thinkPffa {return createWg('thinkPffa', func_get_args());}
 function thinkPestel(): thinkPestel {return createWg('thinkPestel', func_get_args());}
 function think4p(): think4p {return createWg('think4p', func_get_args());}
+function think3c(): think3c {return createWg('think3c', func_get_args());}
+function thinkAnsoff(): thinkAnsoff {return createWg('thinkAnsoff', func_get_args());}
+function thinkVennLink(): thinkVennLink {return createWg('thinkVennLink', func_get_args());}
+function thinkStepQuote(): thinkStepQuote {return createWg('thinkStepQuote', func_get_args());}
+function sqlBuilderControl(): sqlBuilderControl {return createWg('sqlBuilderControl', func_get_args());}
+function sqlBuilderPicker(): sqlBuilderPicker {return createWg('sqlBuilderPicker', func_get_args());}
+function sqlBuilderInput(): sqlBuilderInput {return createWg('sqlBuilderInput', func_get_args());}
+function joinCondition(): joinCondition {return createWg('joinCondition', func_get_args());}
+function fieldSelectPanel(): fieldSelectPanel {return createWg('fieldSelectPanel', func_get_args());}
+function sqlBuilderEmptyContent(): sqlBuilderEmptyContent {return createWg('sqlBuilderEmptyContent', func_get_args());}
+function sqlBuilderFuncRow(): sqlBuilderFuncRow {return createWg('sqlBuilderFuncRow', func_get_args());}
+function sqlBuilderWhereGroup(): sqlBuilderWhereGroup {return createWg('sqlBuilderWhereGroup', func_get_args());}
+function sqlBuilderWhereItem(): sqlBuilderWhereItem {return createWg('sqlBuilderWhereItem', func_get_args());}
+function sqlBuilderGroupBy(): sqlBuilderGroupBy {return createWg('sqlBuilderGroupBy', func_get_args());}
+function sqlBuilderQueryFilter(): sqlBuilderQueryFilter {return createWg('sqlBuilderQueryFilter', func_get_args());}
+function sqlBuilderHelpIcon(): sqlBuilderHelpIcon {return createWg('sqlBuilderHelpIcon', func_get_args());}
+function sqlBuilder(): sqlBuilder {return createWg('sqlBuilder', func_get_args());}
+function queryBase(): queryBase {return createWg('queryBase', func_get_args());}
+function queryFilterModal(): queryFilterModal {return createWg('queryFilterModal', func_get_args());}
+function pivotTable(): pivotTable {return createWg('pivotTable', func_get_args());}
+function pivotConfig(): pivotConfig {return createWg('pivotConfig', func_get_args());}
+function iconPicker(): iconPicker {return createWg('iconPicker', func_get_args());}
 
 if(is_dir(__DIR__ . DS . 'wg' . DS . 'schedule'))
 {

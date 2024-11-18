@@ -88,6 +88,8 @@ class screen extends control
      */
     public function view(int $screenID, int $year = 0, int $month = 0, int $dept = 0, string $account = '')
     {
+        $this->screen->checkAccess($screenID);
+
         if(empty($year))  $year  = date('Y');
         if(empty($month)) $month = date('m');
 
@@ -107,6 +109,7 @@ class screen extends control
             $this->loadModel('execution');
             $this->view->executions = $this->screen->getBurnData();
             $this->view->date       = date('Y-m-d H:i:s');
+            $this->view->screen     = $screen;
             $this->display('screen', 'burn');
             return;
         }
@@ -158,7 +161,7 @@ class screen extends control
      * @access public
      * @return void
      */
-    public function ajaxGetChart()
+    public function ajaxGetChart(int $year = 0, int $month = 0, int $dept = 0, string $account = '')
     {
         if(!empty($_POST))
         {
@@ -174,6 +177,13 @@ class screen extends control
             $queryType    = isset($_POST['queryType']) ? $this->post->queryType : 'filter';
             $component    = isset($_POST['component']) ? json_decode($this->post->component) : null;
             $filterParams = isset($_POST['filters']) ? json_decode($this->post->filters, true) : array();
+            $selectFilter = isset($_POST['selectFilter']) ? json_decode($this->post->selectFilter, true) : array();
+
+            $this->screen->filter->year    = $year;
+            $this->screen->filter->month   = $month;
+            $this->screen->filter->dept    = $dept;
+            $this->screen->filter->account = $account;
+            $this->screen->setSelectFilter($sourceID, $selectFilter);
 
             $type = $this->screen->getChartType($type);
 
@@ -254,7 +264,7 @@ class screen extends control
                 $fields = json_decode($chart->fields, true);
 
                 $fieldObj = zget($fields, $field);
-                $objectPairs = $this->screen->getSysOptions($fieldObj['type'], $fieldObj['object'], $fieldObj['field'], $chart->sql, $saveAs);
+                $objectPairs = $this->loadModel('pivot')->getSysOptions($fieldObj['type'], $fieldObj['object'], $fieldObj['field'], $chart->sql, $saveAs);
             }
         }
 

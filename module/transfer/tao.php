@@ -33,6 +33,7 @@ class transferTao extends transferModel
         /* 解析dataSource params中配置的参数。 */
         /* Parse params. */
         if(is_string($params)) $params = explode('&', $params);
+
         foreach($params as $param => $value)
         {
             /* 如果参数是$开头的变量，则从SESSION中获取该变量。 */
@@ -211,7 +212,7 @@ class transferTao extends transferModel
         /* Get workflow extend fields. */
         if($this->config->edition != 'open')
         {
-            $appendFields = $this->loadModel('workflowaction')->getFields($module, 'showimport', false);
+            $appendFields = $this->loadModel('flow')->getExtendFields($module, 'showimport');
             foreach($appendFields as $appendField)
             {
                 /* 不是内置字段并且在导入确认页面展示。 */

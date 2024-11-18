@@ -41,11 +41,12 @@ class repo extends control
      * Common actions.
      *
      * @param  int    $repoID
-     * @param  int    $objectID  projectID|executionID
+     * @param  int    $objectID     projectID|executionID
+     * @param  string $createMethod create|createRepo
      * @access public
      * @return void
      */
-    public function commonAction(int $repoID = 0, int $objectID = 0)
+    public function commonAction(int $repoID = 0, int $objectID = 0, string $createMethod = 'create')
     {
         $fromModal = in_array($this->app->rawModule, array('git', 'svn'));
         $tab       = $fromModal ? '' :$this->app->tab;
@@ -78,7 +79,10 @@ class repo extends control
             $this->repo->setMenu($this->repos, $repoID);
         }
 
-        if(empty($this->repos) && !in_array($this->methodName, array('create', 'setrules'))) return $this->locate($this->repo->createLink('create', "objectID=$objectID"));
+        if(empty($this->repos) && !in_array(strtolower($this->methodName), array('create', 'setrules', 'createrepo', 'import')))
+        {
+            return $this->locate(inLink($createMethod, "objectID=$objectID"));
+        }
         $this->view->fromModal = $fromModal;
     }
 
@@ -106,6 +110,8 @@ class repo extends control
         $recTotal = count($repoList);
         $pager    = new pager($recTotal, $recPerPage, $pageID);
         $repoList = array_chunk($repoList, $pager->recPerPage);
+
+        if($repoList && !isset($repoList[$pageID - 1])) $pageID = 1;
         $repoList = empty($repoList) ? array() : $repoList[$pageID - 1];
 
         /* Get success jobs of sonarqube.*/
@@ -1068,18 +1074,21 @@ class repo extends control
     {
         if($this->viewType !== 'json') $this->commonAction();
 
+        $serverList = $this->loadModel('pipeline')->getPairs(implode(',', $this->config->repo->notSyncSCM), true);
+        if(!$serverID) $serverID = key($serverList);
+
         if($_POST)
         {
-            $repos = form::batchData($this->config->repo->form->import)->get();
+            if($this->post->product)
+            {
+                $repos = form::batchData($this->config->repo->form->import)->get();
 
-            if($repos) $this->repo->batchCreate($repos, $serverID, (string)$this->post->serverType);
-            if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
+                if($repos) $this->repo->batchCreate($repos, $serverID, (string)$this->post->serverType);
+                if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
+            }
 
             return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'locate' => $this->repo->createLink('maintain')));
         }
-
-        $serverList = $this->loadModel('pipeline')->getPairs('gitlab');
-        if(!$serverID) $serverID = key($serverList);
 
         $server      = $this->pipeline->getByID($serverID);
         $hiddenRepos = $this->loadModel('setting')->getItem('owner=system&module=repo&section=hiddenRepo&key=' . $serverID);
@@ -1436,7 +1445,7 @@ class repo extends control
      */
     public function ajaxGetHosts(string $scm)
     {
-        $hosts = $this->loadModel('pipeline')->getPairs($scm);
+        $hosts = $this->loadModel('pipeline')->getPairs($scm, true);
 
         $options = array();
         foreach($hosts as $hostID => $host)
@@ -1624,7 +1633,13 @@ class repo extends control
     public function ajaxGetExecutions(int $productID, int $branch = 0)
     {
         $executions = $this->repo->getExecutionPairs($productID, $branch);
-        echo html::select('execution', $executions, '', 'class="form-control chosen"');
+
+        $options = array();
+        foreach($executions as $executionID => $executionName)
+        {
+            $options[] = array('text' => $executionName, 'value' => $executionID);
+        }
+        return print(json_encode($options));
     }
 
     /**

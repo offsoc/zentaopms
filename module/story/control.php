@@ -56,7 +56,7 @@ class story extends control
         /* Set menu. */
         $this->story->replaceURLang($storyType);
         $copyStoryID = $storyID;
-        list($productID, $objectID) = $this->storyZen->setMenuForCreate($productID, $objectID);
+        list($productID, $objectID) = $this->storyZen->setMenuForCreate($productID, $objectID, $extra);
         if($productID == 0 && $objectID == 0) return $this->locate($this->createLink('product', 'create'));
         if($productID == 0 && $objectID != 0) return $this->sendError($this->lang->execution->errorNoLinkedProducts, $this->createLink('execution', 'manageproducts', "executionID=$objectID"));
 
@@ -181,7 +181,7 @@ class story extends control
         $showFields   = $this->storyZen->getShowFields($this->config->{$storyType}->custom->batchCreateFields, $storyType, $product);
 
         $fields = $this->storyZen->getFormFieldsForBatchCreate($productID, $branch, $executionID, $storyType);
-        $fields = $this->storyZen->removeFormFieldsForBatchCreate($fields, $this->view->hiddenPlan, isset($this->view->execution) ? $this->view->execution->type : '');
+        $fields = $this->storyZen->removeFormFieldsForBatchCreate($fields, $this->view->hiddenPlan, isset($this->view->execution) ? $this->view->execution->type : '', $executionID);
 
         if($storyID)
         {
@@ -368,7 +368,7 @@ class story extends control
         }
 
         $stories = $this->storyZen->getStoriesByChecked();
-        if(!$stories) return $this->send(array('result' => 'success', 'load' => $this->session->storyList));
+        if(!$stories) return $this->send(array('result' => 'fail', 'load' => array('alert' => $this->lang->story->batchEditError, 'locate' => $this->session->storyList)));
 
         /* Set Custom*/
         foreach(explode(',', $this->config->story->list->customBatchEditFields) as $field) $customFields[$field] = $this->lang->story->$field;
@@ -556,7 +556,7 @@ class story extends control
             if(!$project->multiple)
             {
                 $executionID = $param ? $param : $this->session->execution;
-                $this->project->setMenu((int)$project->project);
+                $this->project->setMenu((int)$project->id);
                 $this->view->executionID = $executionID;
                 $this->view->execution   = $this->loadModel('execution')->fetchByID($executionID);
             }
@@ -586,7 +586,7 @@ class story extends control
         $this->view->users         = $this->user->getPairs('noletter');
         $this->view->executions    = $this->execution->getPairs(0, 'all', 'nocode');
         $this->view->version       = $version;
-        $this->view->preAndNext    = $this->loadModel('common')->getPreAndNextObject('story', $storyID);
+        $this->view->preAndNext    = $this->loadModel('common')->getPreAndNextObject($story->type, $storyID);
         $this->view->builds        = $this->loadModel('build')->getStoryBuilds($storyID);
         $this->view->releases      = $this->loadModel('release')->getStoryReleases($storyID);
         $this->view->story         = $story;
@@ -931,20 +931,12 @@ class story extends control
         if($story->status == 'draft') unset($reasonList['cancel']);
         unset($reasonList['subdivided']);
 
-        $storyBranch    = $story->branch > 0 ? $story->branch : '0';
-        $branch         = $product->type == 'branch' ? $storyBranch : 'all';
-        $productStories = $this->story->getProductStoryPairs($story->product, $branch, 0, 'all', 'id_desc', 0, '', $storyType);
-        $children       = $this->story->getAllChildId($storyID);
-        $productStories = array_diff_key($productStories, array_flip($children));
-        if(isset($productStories[$storyID])) unset($productStories[$storyID]);
-
-        $this->view->title          = $this->lang->story->close . "STORY" . $this->lang->hyphen . $story->title;
-        $this->view->product        = $product;
-        $this->view->story          = $story;
-        $this->view->productStories = $productStories;
-        $this->view->actions        = $this->action->getList('story', $storyID);
-        $this->view->users          = $this->loadModel('user')->getPairs();
-        $this->view->reasonList     = $reasonList;
+        $this->view->title      = $this->lang->story->close . "STORY" . $this->lang->hyphen . $story->title;
+        $this->view->product    = $product;
+        $this->view->story      = $story;
+        $this->view->actions    = $this->action->getList('story', $storyID);
+        $this->view->users      = $this->loadModel('user')->getPairs();
+        $this->view->reasonList = $reasonList;
         $this->display();
     }
 
@@ -1660,6 +1652,33 @@ class story extends control
     }
 
     /**
+     * 获取关闭需求页面重复需求的下拉列表。
+     * AJAX: get the duplicated stories of a story.
+     *
+     * @param  int    $storyID
+     * @param  int    $productID
+     * @access public
+     * @return void
+     */
+    public function ajaxGetDuplicatedStories(int $storyID, int $productID)
+    {
+        $product     = $this->dao->findById($productID)->from(TABLE_PRODUCT)->fields('name, id, `type`')->fetch();
+        $story       = $this->story->fetchByID($storyID);
+        $storyBranch = $story->branch > 0 ? $story->branch : '0';
+        $branch      = $product->type == 'branch' ? $storyBranch : 'all';
+
+        $productStories = $this->story->getProductStoryPairs($story->product, $branch, 0, 'all', 'id_desc', 0, '', $story->type);
+        $children       = $this->story->getAllChildId($storyID);
+        $productStories = array_diff_key($productStories, array_flip($children));
+        if(isset($productStories[$storyID])) unset($productStories[$storyID]);
+
+        $items = array();
+        foreach($productStories as $storyID => $storyName) $items[] = array('text' => $storyName, 'value' => $storyID);
+
+        return print(json_encode($items));
+    }
+
+    /**
      * 获取需求详情和操作日志。
      * AJAX: get the actions and detail of the story for web app.
      *
@@ -1955,6 +1974,17 @@ class story extends control
             $this->config->story->exportFields = str_replace($filterFields, ',', $this->config->story->exportFields);
         }
 
+        /* Append workflow field. */
+        if($this->config->edition != 'open')
+        {
+            $exportFlowFields = $this->loadModel('workflowfield')->getExportFields($storyType);
+            foreach($exportFlowFields as $field => $name)
+            {
+                $this->config->story->exportFields .= ",{$field}";
+                $this->lang->story->{$field} = $name;
+            }
+        }
+
         $this->view->fileName        = $fileName;
         $this->view->allExportFields = $this->config->story->exportFields;
         $this->view->customExport    = true;
@@ -2068,7 +2098,7 @@ class story extends control
 
         if(empty($story->twins)) return $this->send(array('result' => 'fail'));
 
-        $this->story->relieveTwins($story->product, $twinID);
+        $this->story->relieveTwins($story->product, (int)$twinID);
 
         if(!dao::isError()) $this->loadModel('action')->create('story', (int)$twinID, 'relieved');
         return $this->send(array('result' => 'success', 'twinsCount' => count($twins)-1));

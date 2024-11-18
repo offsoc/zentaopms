@@ -656,7 +656,7 @@ class GitRepo
                 $parsedFile->path     = '/' . trim($path);
                 $parsedFile->oldPath  = isset($file[2]) ? '/' . trim($file[2]) : '';
                 $parsedFile->type     = 'file';
-                $parsedFile->action   = $action;
+                $parsedFile->action   = substr($action, 0, 1);
                 $logs['files'][$hash][] = $parsedFile;
             }
         }
@@ -734,8 +734,11 @@ class GitRepo
                 $pathInfo = array();
                 $pathInfo['action']  = $action;
                 $pathInfo['kind']    = 'file';
-                $pathInfo['oldPath'] = isset($lineList[2]) ? '/' . trim($lineList[2]) : '';
-                $changes[$entry]     = $pathInfo;
+                $pathInfo['oldPath'] = $entry;
+
+                $path = '/' . trim(isset($lineList[2]) ? $lineList[2] : $entry);
+                $path = str_replace('//', '/', $path);
+                $changes[$path] = $pathInfo;
             }
         }
 

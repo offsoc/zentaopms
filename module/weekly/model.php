@@ -543,9 +543,10 @@ class weeklyModel extends model
         if(empty($tipsConfig)) return '';
 
         $tipsConfig = json_decode($tipsConfig);
+        $data       = (float)$data;
         foreach($tipsConfig as $tipConfig)
         {
-            if($tipConfig->min <= $data and $tipConfig->max >= $data) return $tipConfig->tip;
+            if((float)$tipConfig->min <= $data and (float)$tipConfig->max >= $data) return $tipConfig->tip;
         }
 
         return '';
@@ -565,9 +566,9 @@ class weeklyModel extends model
         $data = new stdclass();
 
         $PVEV     = $this->getPVEV($projectID, $date);
-        $data->pv = $PVEV['PV'];
-        $data->ev = $PVEV['EV'];
-        $data->ac = $this->getAC($projectID, $date);
+        $data->pv = (float) helper::formatHours($PVEV['PV']);
+        $data->ev = (float) helper::formatHours($PVEV['EV']);
+        $data->ac = (float) helper::formatHours($this->getAC($projectID, $date));
         $data->sv = $this->getSV($data->ev, $data->pv);
         $data->cv = $this->getCV($data->ev, $data->ac);
 

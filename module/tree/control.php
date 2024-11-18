@@ -159,12 +159,14 @@ class tree extends control
      */
     public function edit(int $moduleID, string $type, string $branch = '0')
     {
+        $this->app->loadLang('task');
+
         if(!empty($_POST))
         {
             $this->tree->update($moduleID, $type);
 
             if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
-            return $this->sendSuccess(array('clodeModal' => true, 'load' => true));
+            return $this->sendSuccess(array('closeModal' => true, 'load' => true, 'docApp' => array('load', null, null, null, array('noLoading' => true, 'picks' => 'module'))));
         }
 
         $module = $this->tree->getById($moduleID);
@@ -180,7 +182,7 @@ class tree extends control
 
         if($type == 'doc')
         {
-            $docLib   = $this->loadModel('doc')->getLibById($module->root);
+            $docLib   = $this->loadModel('doc')->getLibById((int)$module->root);
             $objectID = isset($docLib->{$docLib->type}) ? $docLib->{$docLib->type} : 0;
             $this->view->libs = $this->doc->getLibs($docLib->type, '', '', $objectID, 'book');
         }
@@ -215,7 +217,7 @@ class tree extends control
         if($showProduct)
         {
             $product = $this->loadModel('product')->getById($module->root);
-            if($product->type != 'normal') $this->view->branches = $this->loadModel('branch')->getPairs($module->root, 'withClosed');
+            $this->view->branches = $product->type != 'normal' ? $this->loadModel('branch')->getPairs($module->root, 'withClosed') : array();
             $this->view->product  = $product;
             $this->view->products = $this->product->getPairs('', $product->program);
             if($product->shadow) $showProduct = false;
@@ -287,7 +289,7 @@ class tree extends control
                 return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true, 'callback' => "renderModulePicker($rootID, '$viewType');"));
             }
 
-            if($oldPage == 'yes') return print(js::reload('parent'));
+            if($oldPage == 'yes') return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'locate' => 'reload'));
             return $this->sendSuccess(array('load' => true));
         }
     }
@@ -509,6 +511,6 @@ class tree extends control
         $module = $this->tree->createModule();
         if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => implode('\n', dao::getError())));
 
-        return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'load' => true));
+        return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'load' => true, 'module' => $module));
     }
 }

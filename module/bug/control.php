@@ -67,7 +67,14 @@ class bug extends control
             $objectID = ($tab == 'project' or $tab == 'execution') ? $this->session->{$tab} : 0;
             if($tab == 'project' or $tab == 'execution')
             {
-                $products = $this->product->getProducts($objectID, $mode, '', false);
+                if(common::isTutorialMode())
+                {
+                    $products = $this->loadModel('tutorial')->getProductPairs();
+                }
+                else
+                {
+                    $products = $this->product->getProducts($objectID, $mode, '', false);
+                }
             }
             else
             {
@@ -165,14 +172,14 @@ class bug extends control
         $product   = $this->product->getByID($bug->product);
         $branches  = $product->type == 'normal' ? array() : $this->loadModel('branch')->getPairs($bug->product);
         $projects  = $this->product->getProjectPairsByProduct($bug->product, (string)$bug->branch);
-        $projectID = key($projects);
+        $projectID = isset($projects[$bug->project]) ? $bug->project : key($projects);
         if(in_array($this->app->tab, array('project', 'execution')))
         {
             $objectType = $this->app->tab == 'project' ? 'projectID' : 'executionID';
             $this->view->{$objectType} = $this->session->{$this->app->tab};
         }
 
-        $this->session->set("project", $projectID, 'project');
+        $this->session->set('project', $projectID, 'project');
         $this->session->set('storyList', '', 'product');
         $this->session->set('projectList', $this->app->getURI(true) . "#app={$this->app->tab}", 'project');
 
@@ -189,7 +196,7 @@ class bug extends control
         $this->view->users       = $this->loadModel('user')->getPairs('noletter');
         $this->view->branches    = $branches;
         $this->view->branchName  = $product->type == 'normal' ? '' : zget($branches, $bug->branch, '');
-        $this->view->builds      = $this->loadModel('build')->getBuildPairs(array($bug->product), 'all', 'noterminate,nodone,hasdeleted');
+        $this->view->builds      = $this->loadModel('build')->getBuildPairs(array($bug->product), 'all', 'hasdeleted');
         $this->view->linkCommits = $this->loadModel('repo')->getCommitsByObject($bug->id, 'bug');
         $this->view->actions     = $this->loadModel('action')->getList('bug', $bug->id);
         $this->view->preAndNext  = $this->loadModel('common')->getPreAndNextObject('bug', $bugID);
@@ -458,7 +465,7 @@ class bug extends control
         $this->qa->setMenu($oldBug->product, $oldBug->branch);
 
         $users  = $this->loadModel('user')->getPairs('noclosed');
-        $builds = $this->loadModel('build')->getBuildPairs(array($oldBug->product), $oldBug->branch, 'withbranch,noreleased');
+        $builds = $this->loadModel('build')->getBuildPairs(array($oldBug->product), $oldBug->branch, 'withbranch,noreleased,nofail');
 
         /* 展示相关变量。 */
         /* Show the variables associated. */
@@ -525,7 +532,7 @@ class bug extends control
         $this->view->title   = $this->lang->bug->activate;
         $this->view->bug     = $oldBug;
         $this->view->users   = $this->loadModel('user')->getPairs('noclosed', $oldBug->resolvedBy);
-        $this->view->builds  = $this->loadModel('build')->getBuildPairs(array($productID), $oldBug->branch, 'noempty,noreleased', 0, 'execution', $oldBug->openedBuild);
+        $this->view->builds  = $this->loadModel('build')->getBuildPairs(array($productID), $oldBug->branch, 'noempty,noreleased,nofail', 0, 'execution', $oldBug->openedBuild);
         $this->view->actions = $this->loadModel('action')->getList('bug', $bugID);
         $this->display();
     }
@@ -1025,6 +1032,7 @@ class bug extends control
      */
     public function batchAssignTo(string $assignedTo, int $objectID, string $type = 'execution')
     {
+        $assignedTo = base64_decode($assignedTo);
         if($this->post->bugIdList)
         {
             /* 获取指派给的 bug id 列表。 */
@@ -1089,6 +1097,7 @@ class bug extends control
                 $bug->id         = $bugID;
                 $bug->confirmed  = 1;
                 $bug->assignedTo = $this->app->user->account;
+                unset($bug->deadline);
 
                 $this->bug->confirm($bug);
                 $message = $this->executeHooks($bugID);
@@ -1290,7 +1299,7 @@ class bug extends control
         $this->view->title     = $this->products[$productID] . $this->lang->hyphen . $this->lang->bug->batchActivate;
         $this->view->bugs      = $this->bug->getByIdList($bugIdList);
         $this->view->users     = $this->user->getPairs('noclosed');
-        $this->view->builds    = $this->loadModel('build')->getBuildPairs(array($productID), $branch, 'noempty,noreleased');
+        $this->view->builds    = $this->loadModel('build')->getBuildPairs(array($productID), $branch, 'noempty,noreleased,nofail');
         $this->view->productID = $productID;
         $this->display();
     }

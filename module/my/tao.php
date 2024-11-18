@@ -34,6 +34,7 @@ class myTao extends myModel
             ->andWhere('t2.deleted')->eq(0)
             ->andWhere('t1.id')->in($objectIdList)
             ->beginIF($module == 'story')->andWhere('t1.type')->eq($objectType)->fi()
+            ->beginIF($module == 'story')->andWhere("FIND_IN_SET('{$this->config->vision}', t1.vision)")->fi()
             ->orderBy($orderBy)
             ->page($pager)
             ->fetchAll('id');
@@ -101,14 +102,16 @@ class myTao extends myModel
             ->andWhere('t1.openedBy', 1)->eq($account)
             ->orWhere('t1.closedBy')->eq($account)
             ->orWhere('t1.canceledBy')->eq($account)
-            ->orWhere('t1.finishedby', 1)->eq($account)
-            ->orWhere('t5.status')->eq("done")
+            ->orWhere('t1.finishedby')->eq($account)
+            ->orWhere('t1.assignedTo')->eq($account)
+            ->orWhere('t5.account')->eq($account)
             ->orWhere('t1.id')->in($taskIdList)
             ->markRight(1)
             ->fi()
             ->beginIF($this->config->vision)->andWhere('t1.vision')->eq($this->config->vision)->fi()
             ->beginIF($this->config->vision)->andWhere('t2.vision')->eq($this->config->vision)->fi()
             ->beginIF(!$this->app->user->admin)->andWhere('t1.execution')->in($this->app->user->view->sprints)->fi()
+            ->groupBy('t1.id')
             ->orderBy($orderBy)
             ->beginIF($limit > 0)->limit($limit)->fi()
             ->page($pager, 't1.id')
@@ -313,6 +316,7 @@ class myTao extends myModel
                 $data->type   = $objectType;
                 $data->time   = $object->{$openedDateField};
                 $data->status = 'doing';
+                $data->app    = $flows[$objectType]->app;
                 $approvalList[] = $data;
             }
         }

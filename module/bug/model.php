@@ -38,6 +38,7 @@ class bugModel extends model
 
         $action = $from == 'sonarqube' ? 'fromSonarqube' : 'Opened';
         $this->loadModel('action')->create('bug', $bugID, $action);
+        if(!empty($bug->assignedTo)) $this->action->create('bug', $bugID, 'Assigned', '', $bug->assignedTo);
 
         /* Add score for create. */
         if(!empty($bug->case))
@@ -125,6 +126,8 @@ class bugModel extends model
      */
     public function getPlanBugs(int $planID, string $status = 'all', string $orderBy = 'id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return array();
+
         if(strpos($orderBy, 'pri_') !== false) $orderBy = str_replace('pri_', 'priOrder_', $orderBy);
 
         $bugs = $this->dao->select("*, IF(`pri` = 0, {$this->config->maxPriValue}, `pri`) AS priOrder")->from(TABLE_BUG)
@@ -151,6 +154,8 @@ class bugModel extends model
      */
     public function getByID(int $bugID, bool $setImgSize = false): object|false
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBug();
+
         $bug = $this->bugTao->fetchBugInfo($bugID);
         if(!$bug) return false;
 
@@ -212,6 +217,8 @@ class bugModel extends model
      */
     public function getActiveBugs(array|int $products, int|string $branch, string $executions, array $excludeBugs, object $pager = null, string $orderBy = 'id desc'): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBugs();
+
         return $this->dao->select('*')->from(TABLE_BUG)
             ->where('status')->eq('active')
             ->andWhere('toStory')->eq(0)
@@ -743,7 +750,7 @@ class bugModel extends model
     {
         $productIdList = array();
         foreach($bugs as $bug) $productIdList[$bug->product] = $bug->product;
-        $builds = $this->loadModel('build')->getBuildPairs(array_unique($productIdList), 'all', $params = 'noterminate,nodone,hasdeleted');
+        $builds = $this->loadModel('build')->getBuildPairs(array_unique($productIdList), 'all', $params = 'hasdeleted');
 
         /* Process the openedBuild and resolvedBuild fields. */
         foreach($bugs as $bug)
@@ -935,6 +942,8 @@ class bugModel extends model
      */
     public function getExecutionBugs(int $executionID, int $productID = 0, string|int $branchID = 'all', string|array $builds = '0', string $type = '', int $param = 0, string $orderBy = 'id_desc', string $excludeBugs = '', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBugs();
+
         if(strpos($orderBy, 'pri_') !== false)      $orderBy = str_replace('pri_', 'priOrder_', $orderBy);
         if(strpos($orderBy, 'severity_') !== false) $orderBy = str_replace('severity_', 'severityOrder_', $orderBy);
 
@@ -995,6 +1004,8 @@ class bugModel extends model
      */
     public function getProductLeftBugs(array $buildIdList, int $productID, int|string $branch = '', string $linkedBugs = '', object $pager = null): array|null
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBugs();
+
         /* 获取版本关联的执行。 */
         /* Get executions of builds. */
         $executionIdList = $this->getLinkedExecutionByIdList($buildIdList);
@@ -1107,6 +1118,8 @@ class bugModel extends model
      */
     public function getReleaseBugs(array $buildIdList, int $productID, int|string $branch = 0, string $linkedBugs = '', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBugs();
+
         $executionIdList = $this->getLinkedExecutionByIdList($buildIdList);
         if(empty($executionIdList)) return array();
 
@@ -1253,7 +1266,7 @@ class bugModel extends model
      */
     public function getBugInfoFromResult(int $resultID, int $caseID = 0, string $stepIdList = ''): array
     {
-        $result = $this->dao->findById($resultID)->from(TABLE_TESTRESULT)->fetch();
+        $result = common::isTutorialMode() ? $this->loadModel('tutorial')->getResult() : $this->dao->findById($resultID)->from(TABLE_TESTRESULT)->fetch();
         if(!$result) return array();
 
         if($caseID > 0)
@@ -1714,7 +1727,8 @@ class bugModel extends model
                         ->fetchPairs('id');
                     if(empty($story)) $story = array(0);
 
-                    $bugQuery = preg_replace("/`story`[ ]+(NOT[ ]*)?LIKE[ ]+'%$searchValue%'/Ui", '`story` $1 IN (' . implode(',', $story) .')', $bugQuery);
+                    $searchValue = preg_quote($searchValue, '/');
+                    $bugQuery    = preg_replace("/`story`[ ]+(NOT[ ]*)?LIKE[ ]+'%$searchValue%'/Ui", '`story` $1 IN (' . implode(',', $story) .')', $bugQuery);
                 }
             }
             $bugQuery .= ' AND `story` != 0';
@@ -1837,7 +1851,7 @@ class bugModel extends model
      */
     public static function isClickable(object $object, string $action, string $module = 'bug'): bool
     {
-        global $config;
+        global $config, $app;
 
         $action = strtolower($action);
 
@@ -1861,7 +1875,7 @@ class bugModel extends model
         if($module == 'bug' && $action == 'tostory')  return $object->status == 'active';
         /* 判断反馈转bug操作按钮的权限。 */
         /* check feedback toStory priv. */
-        if($module == 'bug' && $action == 'create')   return ($config->global->flow == 'full' || $config->global->flow == 'onlyTest') && strpos('closed|clarify|noreview', $object->status) === false;
+        if($module == 'bug' && $action == 'create' && $app->rawModule == 'feedback') return ($config->global->flow == 'full' || $config->global->flow == 'onlyTest') && strpos('closed|clarify|noreview', $object->status) === false;
         /* 判断确认撤销操作按钮的权限。 */
         /* Check confirmdemandretract priv. */
         if($module == 'bug' && $action == 'confirmdemandretract') return !empty($object->confirmeActionType) && $object->confirmeActionType == 'confirmedretract';
@@ -2145,11 +2159,29 @@ class bugModel extends model
     {
         return $this->dao->select('t1.revision,t3.id AS id,t3.title AS title')
             ->from(TABLE_REPOHISTORY)->alias('t1')
-            ->leftJoin(TABLE_RELATION)->alias('t2')->on('t2.relation="completedin" AND t2.BType="commit" AND t2.BID=t1.id')
-            ->leftJoin(TABLE_BUG)->alias('t3')->on('t2.AType="bug" AND t2.AID=t3.id')
+            ->leftJoin(TABLE_RELATION)->alias('t2')->on("t2.relation='completedin' AND t2.BType='commit' AND t2.BID=t1.id")
+            ->leftJoin(TABLE_BUG)->alias('t3')->on("t2.AType='bug' AND t2.AID=t3.id")
             ->where('t1.revision')->in($revisions)
             ->andWhere('t1.repo')->eq($repoID)
             ->andWhere('t3.id')->ne('')
             ->fetchGroup('revision', 'id');
+    }
+
+    /**
+     * 通过任务ID获取相关的Bug
+     * @param  int         $taskID
+     *
+     * @access public
+     * @return array|false
+     */
+    public function getLinkedBugsByTaskID(int $taskID): array|false
+    {
+        return $this->dao->select('t1.id,t1.title')
+            ->from(TABLE_BUG)->alias('t1')
+            ->leftJoin(TABLE_TASK)->alias('t2')->on('t1.task=t2.id')
+            ->where('t2.id')->eq($taskID)
+            ->andWhere('t1.deleted')->eq(0)
+            ->andWhere('t2.deleted')->eq(0)
+            ->fetchAll('id');
     }
 }

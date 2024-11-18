@@ -87,7 +87,8 @@ $fnGenerateSubPlanManageFields = function() use ($lang, $planID, $project, $exec
         (
             setClass('flex w-1/2 items-center'),
             div(setClass('font-bold'), $lang->programplan->parallel . ':'),
-            $items
+            $items,
+            html($lang->programplan->parallelTip)
         );
     }
 
@@ -233,7 +234,7 @@ $fnGenerateDefaultData = function() use ($config, $plans, $planID, $stages, $exe
         $points = !empty($enabledPoints->{$plan->attribute}) ? $enabledPoints->{$plan->attribute} : array();
 
         $item               = new stdClass();
-        $item->disabled     = !isset($plan->setMilestone);
+        $item->disabled     = $plan->type != 'stage';
         $item->enabled      = $plan->enabled;
         $item->id           = $plan->id;
         $item->type         = $plan->type;
@@ -254,11 +255,14 @@ $fnGenerateDefaultData = function() use ($config, $plans, $planID, $stages, $exe
         $item->order        = $plan->order;
         $item->parallel     = $plan->parallel;
         $item->point        = implode(',', $points);
+        $plan->disabled     = !isset($plan->setMilestone);
+        $plan->setMilestone = isset($plan->setMilestone) ? $plan->setMilestone : false;
+        $plan->point        = implode(',', $points);
         if(in_array($config->edition, array('max', 'ipd')) && $executionType == 'stage')
         {
-            $item->output = empty($plan->output) ? 0 : explode(',', $plan->output);
+            $plan->output = empty($plan->output) ? 0 : explode(',', $plan->output);
         }
-        $items[] = $item;
+        $items[] = $plan;
     }
 
     return $items;

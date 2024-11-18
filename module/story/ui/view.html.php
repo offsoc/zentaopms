@@ -98,6 +98,7 @@ if($story->children)
         $cols['title']['data-toggle'] = 'modal';
         $cols['title']['data-size']   = 'lg';
     }
+    if(!hasPriv('story', 'view')) unset($cols['title']['link']);
 
     if(($story->type == 'story' && $config->vision == 'or') || ($story->vision == 'or' && $config->vision == 'rnd')) unset($cols['actions']);
 
@@ -185,7 +186,7 @@ if($isInModal) $config->story->actionList['recall']['url'] = str_replace('&from=
 if($story->status == 'changing') $config->story->actionList['recall']['text'] = $lang->story->recallChange;
 $this->loadModel('repo');
 $hasRepo    = $this->repo->getListByProduct($story->product, implode(',', $config->repo->gitServiceTypeList), 1);
-$actions    = $story->deleted ? array() : $this->loadModel('common')->buildOperateMenu($story);
+$actions    = $story->deleted ? array() : $this->loadModel('common')->buildOperateMenu($story, $story->type);
 $hasDivider = !empty($actions['mainActions']) && !empty($actions['suffixActions']);
 if(!empty($actions)) $actions = array_merge($actions['mainActions'], $hasDivider ? array(array('type' => 'divider')) : array(), $actions['suffixActions']);
 

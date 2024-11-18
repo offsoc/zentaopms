@@ -115,30 +115,41 @@ class form extends fixer
         $moduleName = $moduleName ? $moduleName : $app->rawModule;
         $methodName = $methodName ? $moduleName : $app->rawMethod;
 
+        /* 项目发布和项目版本用自己的工作流。 */
+        if($moduleName == 'projectrelease') $moduleName = 'release';
+        if($moduleName == 'projectbuild')   $moduleName = 'build';
+
         $flow = $app->control->loadModel('workflow')->getByModule($moduleName);
         if(!$flow) return $configObject;
 
-        $action = $app->control->loadModel('workflowaction')->getByModuleAndAction($flow->module, $methodName);
+        $groupID = $app->control->loadModel('workflowgroup')->getGroupIDByDataID($flow->module, $objectID);
+        $action  = $app->control->loadModel('workflowaction')->getByModuleAndAction($flow->module, $methodName, $groupID);
         if(!$action || $action->extensionType != 'extend') return $configObject;
 
         $uiID         = $app->control->loadModel('workflowlayout')->getUIByDataID($flow->module, $action->action, $objectID);
-        $fieldList    = $app->control->workflowaction->getFields($flow->module, $action->action, true, null, $uiID);
-        $layouts      = $app->control->workflowlayout->getFields($moduleName, $methodName, $uiID);
+        $fieldList    = $app->control->workflowaction->getPageFields($flow->module, $action->action, true, null, $uiID, $groupID);
+        $layouts      = $app->control->workflowlayout->getFields($moduleName, $methodName, $uiID, $groupID);
         $notEmptyRule = $app->control->loadModel('workflowrule')->getByTypeAndRule('system', 'notempty');
         if($layouts)
         {
             foreach($fieldList as $key => $field)
             {
                 if($field->buildin || !$field->show || !isset($layouts[$field->field])) continue;
+                if($field->control == 'file') continue;
 
                 $required = $field->readonly || ($notEmptyRule && strpos(",$field->rules,", ",{$notEmptyRule->id},") !== false);
                 if($field->control == 'multi-select' || $field->control == 'checkbox')
                 {
                     $configObject[$field->field] = array('required' => $required, 'type' => 'array', 'default' => array(''), 'filter' => 'join');
                 }
+                elseif($field->control == 'date' || $field->control == 'datetime')
+                {
+                    $configObject[$field->field] = array('required' => $required, 'type' => $field->control, 'default' => null);
+                }
                 else
                 {
-                    $configObject[$field->field] = array('required' => $required, 'type' => 'string', 'default' => '');
+                    $type = $field->type == 'int' ? 'int' : 'string';
+                    $configObject[$field->field] = array('required' => $required, 'type' => $type, 'default' => '');
                     if($field->control == 'richtext') $configObject[$field->field]['control'] = 'editor';
                 }
             }
@@ -173,6 +184,7 @@ class form extends fixer
         else
         {
             $this->batchConvertField($config);
+            $this->skipRequiredCheck($config);
         }
 
         if(!empty($this->errors))
@@ -196,11 +208,11 @@ class form extends fixer
     {
         global $app, $config;
 
-        $module = $app->getModuleName() == 'story' ? $app->rawModule : $app->getModuleName();
+        $module = $app->getModuleName();
         $method = $app->getMethodName();
-        if($module == 'feedback' && $app->rawMethod == 'tostory')     $module = 'story';
-        if($module == 'feedback' && $app->rawMethod == 'touserstory') $module = 'requirement';
-        if($module == 'feedback' && $app->rawMethod == 'toepic')      $module = 'epic';
+
+        if($app->rawMethod == 'requirement' && $module == 'story') $module = 'requirement';
+        if($app->rawMethod == 'epic'        && $module == 'story') $module = 'epic';
 
         if($method == 'batchcreate') $method = 'create';
         if($method == 'batchedit')   $method = 'edit';
@@ -287,6 +299,38 @@ class form extends fixer
         }
 
         $this->dataList = $rowDataList;
+    }
+
+    /**
+     * 跳过必填项检查。
+     * Skip the required check.
+     *
+     * @param  array   $fieldConfigs
+     * @access public
+     * @return void
+     */
+    public function skipRequiredCheck(array $fieldConfigs)
+    {
+        foreach($this->dataList as $rowIndex => $rowData)
+        {
+            foreach($fieldConfigs as $field => $config)
+            {
+                if(empty($config['required']) || empty($config['skipRequired']) || !empty($rowData->$field)) continue;
+
+                $skip     = true;
+                $errorKey = isset($config['type']) && $config['type'] == 'array' ? "{$field}[{$rowIndex}][]" : "{$field}[{$rowIndex}]";
+                foreach($config['skipRequired'] as $conditionField => $conditionValue)
+                {
+                    if($rowData->$conditionField != $conditionValue)
+                    {
+                        $skip = false;
+                        break;
+                    }
+                }
+
+                if($skip) unset($this->errors[$errorKey]);
+            }
+        }
     }
 
     /**

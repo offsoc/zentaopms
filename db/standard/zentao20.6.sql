@@ -304,7 +304,7 @@ CREATE TABLE `zt_approvalflow` (
   `version` mediumint(8) NOT NULL DEFAULT 1,
   `createdBy` varchar(30) NOT NULL DEFAULT '',
   `createdDate` datetime DEFAULT NULL,
-  `type` varchar(30) NOT NULL DEFAULT '',
+  `workflow` varchar(30) NOT NULL DEFAULT '',
   `deleted` tinyint(4) NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -531,7 +531,7 @@ CREATE TABLE `zt_basicmeas` (
   `object` char(30) NOT NULL DEFAULT '',
   `name` varchar(90) NOT NULL DEFAULT '',
   `code` char(30) NOT NULL DEFAULT '',
-  `unit` varchar(10) NOT NULL DEFAULT '',
+  `unit` varchar(100) NOT NULL DEFAULT '',
   `configure` text DEFAULT NULL,
   `params` text DEFAULT NULL,
   `definition` text DEFAULT NULL,
@@ -1554,15 +1554,15 @@ CREATE TABLE `zt_im_chat` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `zt_im_chat_message_index` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
-  `gid` char(40) NOT NULL DEFAULT '',
-  `tableName` char(64) NOT NULL DEFAULT '',
-  `start` int(11) unsigned NOT NULL DEFAULT 0,
-  `end` int(11) unsigned NOT NULL DEFAULT 0,
-  `startIndex` int(11) unsigned NOT NULL DEFAULT 0,
-  `endIndex` int(11) unsigned NOT NULL DEFAULT 0,
+  `gid` char(40) NOT NULL,
+  `tableName` char(64) NOT NULL,
+  `start` int(11) unsigned NOT NULL,
+  `end` int(11) unsigned NOT NULL,
+  `startIndex` int(11) unsigned NOT NULL,
+  `endIndex` int(11) unsigned NOT NULL,
   `startDate` datetime DEFAULT NULL,
   `endDate` datetime DEFAULT NULL,
-  `count` mediumint(8) unsigned NOT NULL DEFAULT 0,
+  `count` mediumint(8) unsigned NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `chattable` (`gid`,`tableName`),
   KEY `start` (`start`),
@@ -1627,7 +1627,7 @@ CREATE TABLE `zt_im_conference` (
   `note` text DEFAULT NULL,
   `sentNotify` tinyint(1) NOT NULL DEFAULT 0,
   `reminderTime` int(11) NOT NULL DEFAULT 0,
-  `moderators` text NOT NULL,
+  `moderators` text DEFAULT NULL,
   `isPrivate` enum('0','1') NOT NULL DEFAULT '0',
   `isInner` enum('0','1') NOT NULL DEFAULT '1',
   PRIMARY KEY (`id`),
@@ -1673,17 +1673,14 @@ CREATE TABLE `zt_im_message` (
   `contentType` enum('text','plain','emotion','image','file','object','code') NOT NULL DEFAULT 'text',
   `data` text DEFAULT NULL,
   `deleted` enum('0','1') NOT NULL DEFAULT '0',
-  `legacy` tinyint(1) NOT NULL DEFAULT 0,
-  `uniqueIndex` int(11) GENERATED ALWAYS AS (case when `legacy` = 1 then NULL when `cgid` = 'notification' then NULL else `index` end) STORED,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uniqueIndexInChat` (`cgid`,`uniqueIndex`),
   KEY `mgid` (`gid`),
   KEY `mcgid` (`cgid`),
   KEY `muser` (`user`),
   KEY `mtype` (`type`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `zt_im_message_backup` (
-  `id` int(11) unsigned NOT NULL DEFAULT 0,
+  `id` int(11) unsigned NOT NULL,
   `gid` char(40) NOT NULL DEFAULT '',
   `cgid` char(40) NOT NULL DEFAULT '',
   `user` varchar(30) NOT NULL DEFAULT '',
@@ -1697,9 +1694,9 @@ CREATE TABLE `zt_im_message_backup` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `zt_im_message_index` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
-  `tableName` char(64) NOT NULL DEFAULT '',
-  `start` int(11) unsigned NOT NULL DEFAULT 0,
-  `end` int(11) unsigned NOT NULL DEFAULT 0,
+  `tableName` char(64) NOT NULL,
+  `start` int(11) unsigned NOT NULL,
+  `end` int(11) unsigned NOT NULL,
   `startDate` datetime DEFAULT NULL,
   `endDate` datetime DEFAULT NULL,
   `chats` text DEFAULT NULL,
@@ -1712,18 +1709,18 @@ CREATE TABLE `zt_im_message_index` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `zt_im_messagestatus` (
   `user` mediumint(8) NOT NULL DEFAULT 0,
-  `message` int(11) unsigned NOT NULL DEFAULT 0,
+  `message` int(11) unsigned NOT NULL,
   `status` enum('waiting','sent','readed','deleted') NOT NULL DEFAULT 'waiting',
   UNIQUE KEY `user` (`user`,`message`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `zt_im_queue` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
-  `type` char(30) NOT NULL DEFAULT '',
+  `type` char(30) NOT NULL,
   `content` text DEFAULT NULL,
   `addDate` datetime DEFAULT NULL,
   `processDate` datetime DEFAULT NULL,
   `result` text DEFAULT NULL,
-  `status` char(30) NOT NULL DEFAULT '',
+  `status` char(30) NOT NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `zt_im_userdevice` (
@@ -4269,6 +4266,7 @@ CREATE TABLE `zt_workflowlayout` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
   `module` varchar(30) NOT NULL DEFAULT '',
   `action` varchar(50) NOT NULL DEFAULT '',
+  `ui` mediumint(8) NOT NULL DEFAULT 0,
   `field` varchar(50) NOT NULL DEFAULT '',
   `order` smallint(5) unsigned NOT NULL DEFAULT 0,
   `width` varchar(50) NOT NULL DEFAULT '0',
@@ -4280,7 +4278,7 @@ CREATE TABLE `zt_workflowlayout` (
   `layoutRules` varchar(255) NOT NULL DEFAULT '',
   `vision` varchar(10) NOT NULL DEFAULT 'rnd',
   PRIMARY KEY (`id`),
-  UNIQUE KEY `unique` (`module`,`action`,`field`,`vision`),
+  UNIQUE KEY `unique` (`module`,`action`,`ui`,`field`,`vision`),
   KEY `module` (`module`),
   KEY `action` (`action`),
   KEY `order` (`order`)
@@ -4311,10 +4309,11 @@ CREATE TABLE `zt_workflowrelationlayout` (
   `prev` varchar(30) NOT NULL DEFAULT '',
   `next` varchar(30) NOT NULL DEFAULT '',
   `action` varchar(50) NOT NULL DEFAULT '',
+  `ui` mediumint(8) NOT NULL DEFAULT 0,
   `field` varchar(50) NOT NULL DEFAULT '',
   `order` smallint(5) unsigned NOT NULL DEFAULT 0,
   PRIMARY KEY (`id`),
-  UNIQUE KEY `unique` (`prev`,`next`,`action`,`field`),
+  UNIQUE KEY `unique` (`prev`,`next`,`action`,`ui`,`field`),
   KEY `prev` (`prev`),
   KEY `next` (`next`),
   KEY `action` (`action`),
@@ -4360,6 +4359,16 @@ CREATE TABLE `zt_workflowsql` (
   PRIMARY KEY (`id`),
   KEY `module` (`module`),
   KEY `field` (`field`),
+  KEY `action` (`action`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+CREATE TABLE `zt_workflowui` (
+  `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `module` varchar(30) NOT NULL,
+  `action` varchar(50) NOT NULL,
+  `name` varchar(30) NOT NULL,
+  `conditions` text DEFAULT NULL,
+  PRIMARY KEY (`id`),
+  KEY `module` (`module`),
   KEY `action` (`action`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE TABLE `zt_workflowversion` (

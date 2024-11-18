@@ -41,16 +41,50 @@ $(document).ready(function()
             return;
         }
 
-        var sceneList    = JSON.stringify(data.sceneList);
-        var testcaseList = JSON.stringify(data.testcaseList);
+        var hasExist = false;
+        for(i in data.sceneList)
+        {
+            if(hasExist) break;
 
-        var form = new FormData();
-        form.append("sceneList", sceneList);
-        form.append("testcaseList", testcaseList);
+            var scene = data.sceneList[i];
+            if(typeof(scene.id) != 'undefined') hasExist = true;
+        }
+        for(i in data.testcaseList)
+        {
+            if(hasExist) break;
 
-        $.ajaxSubmit({url: $.createLink('testcase', 'saveXmindImport'), data: form});
+            var testcase = data.testcaseList[i];
+            if(typeof(testcase.id) != 'undefined') hasExist = true;
+        }
+
+        if(hasExist)
+        {
+            var confirmActions = [{btnType: 'primary', class: 'btn-wide', key: 'confirm', text: importAndCoverLang}, {class: 'btn-wide', key: 'cancel', text: importAndInsertLang}];
+            zui.Modal.confirm({message: noticeImport, actions: confirmActions}).then((confirmed) => {submitXmindImport(data, confirmed ? 0 : 1);})
+            return;
+        }
+
+        submitXmindImport(data);
     })
+
 });
+
+function submitXmindImport(data, insert)
+{
+    if(typeof(insert) == 'undefined') insert = 1;
+
+    var sceneList    = JSON.stringify(data.sceneList);
+    var testcaseList = JSON.stringify(data.testcaseList);
+
+    var form = new FormData();
+    form.append("insert", insert);
+    form.append("productID", productID);
+    form.append("branch", branch);
+    form.append("sceneList", sceneList);
+    form.append("testcaseList", testcaseList);
+
+    $.ajaxSubmit({url: $.createLink('testcase', 'saveXmindImport'), data: form});
+}
 
 function setStories(){
     //do nothing
@@ -1203,12 +1237,33 @@ ztmindmap.Wraper.prototype.singleTestCaseToJson = function(data)
                     tmpPId: nextChild.parent
                 };
 
-                //如果后续只有一个子元素，作为期望的结果来处理，超过一个子元素，丢掉后面的子元素
+                obj.stepList.push(subStep);
+
+                //如果后续只有一个子元素，作为期望的结果来处理。
                 var nextNextChild = nextChild.children || [];
                 if(nextNextChild.length == 1)
                     subStep.expect = nextNextChild[0].text;
 
-                obj.stepList.push(subStep);
+                if(nextNextChild.length > 1)
+                {
+                    subStep.type = "group";
+                    for(var thirdLevelNode of nextNextChild)
+                    {
+                        var thirdLevelStep = {
+                            type: "item",
+                            desc: thirdLevelNode.text,
+                            tmpId: thirdLevelNode.id,
+                            tmpPId: thirdLevelNode.parent
+                        };
+
+                        //如果后续只有一个子元素，作为期望的结果来处理，超过一个子元素，丢掉后面的子元素
+                        var forthLevelNode = thirdLevelNode.children || [];
+                        if(forthLevelNode.length == 1)
+                            thirdLevelStep.expect = forthLevelNode[0].text;
+
+                        obj.stepList.push(thirdLevelStep);
+                    }
+                }
             }
         }
     }

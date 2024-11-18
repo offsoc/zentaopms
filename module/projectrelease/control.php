@@ -96,10 +96,11 @@ class projectrelease extends control
      * Create a release.
      *
      * @param  int    $projectID
+     * @param  int    $productID
      * @access public
      * @return void
      */
-    public function create(int $projectID)
+    public function create(int $projectID, int $productID = 0)
     {
         /* Set create config. */
         $this->config->projectrelease->create = $this->config->release->create;
@@ -136,7 +137,7 @@ class projectrelease extends control
 
         /* Set menu. */
         $this->project->setMenu($projectID);
-        $this->projectreleaseZen->commonAction($projectID);
+        $this->projectreleaseZen->commonAction($projectID, $productID);
 
         unset($this->lang->release->statusList['fail']);
         unset($this->lang->release->statusList['terminate']);
@@ -269,23 +270,13 @@ class projectrelease extends control
      * 导出项目发布到 HTML。
      * Export the stories of release to HTML.
      *
+     * @param  int    $releaseID
      * @access public
      * @return void
      */
-    public function export()
+    public function export(int $releaseID)
     {
-        if(!empty($_POST))
-        {
-            $type = $this->post->type;
-
-            $html = '';
-            if($type == 'story' || $type == 'all')   $html .= $this->projectreleaseZen->generateStoryHtml();
-            if($type == 'bug'   || $type == 'all')   $html .= $this->projectreleaseZen->generateBugHtml();
-            if($type == 'leftbug' || $type == 'all') $html .= $this->projectreleaseZen->generateBugHtml('left');
-            $html = "<html><head><meta charset='utf-8'><title>{$this->post->fileName}</title><style>table, th, td{font-size:12px; border:1px solid gray; border-collapse:collapse;}</style></head><body>$html</body></html>";
-
-            return print($this->fetch('file', 'sendDownHeader', array('fileName' => $this->post->fileName, 'html', $html)));
-        }
+        if(!empty($_POST)) return $this->fetch('release', 'export', "releaseID={$releaseID}");
 
         $this->display('release', 'export');
     }

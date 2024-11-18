@@ -64,7 +64,7 @@ class thinkBaseCheckbox extends wg
         {
             return div
             (
-                setClass('item-control has-input w-full py-2 px-3 flex gap-3 items-center justify-between border cursor-pointer ' . $itemClass),
+                setClass('item-control has-input w-full py-2 px-3 flex gap-3 items-center justify-between border cursor-pointer rounded ' . $itemClass),
                 setData('type', $this->prop('type')),
                 !$disabled ? on::click('toggleChecked') : null,
                 div
@@ -75,13 +75,14 @@ class thinkBaseCheckbox extends wg
                     (
                         set(array(
                             'rows'        => 1,
-                            'class'       => isset($item['checked']) && $item['checked'] ? '' : 'hidden',
+                            'class'       => 'run-other' . (isset($item['checked']) && $item['checked'] ? '' : ' hidden'),
                             'name'        => 'other',
                             'value'       => isset($item['other']) ? $item['other'] : '',
-                            'placeholder' => $lang->thinkrun->placeholder->otherOption
+                            'placeholder' => $lang->thinkrun->placeholder->otherOption,
+                            'disabled'    => $disabled
                         )),
                         on::input('inputOther'),
-                        on::click('e.stopPropagation()')
+                        on::click("event.stopPropagation(); if($('.run-other-error')) $('.run-other-error').removeClass('run-other-error');")
                     ),
                 ),
                 new checkbox
@@ -97,7 +98,7 @@ class thinkBaseCheckbox extends wg
         (
             setData('type', $this->prop('type')),
             !$disabled ? on::click('toggleChecked') : null,
-            setClass('item-control w-full py-2 px-3 flex gap-3 items-center justify-between border cursor-pointer ' . $itemClass),
+            setClass('item-control w-full py-2 px-3 flex gap-3 items-center justify-between border cursor-pointer rounded ' . $itemClass),
             div(setClass('text-md flex-1 break-all'), $text),
             new checkbox
             (

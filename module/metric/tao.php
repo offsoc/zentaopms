@@ -49,19 +49,21 @@ class metricTao extends metricModel
      * 根据范围获取度量项。
      * Fetch metric by scope.
      *
-     * @param  string $scope
-     * @param  int    $limit
+     * @param  string|array $scopes
+     * @param  int          $limit
      * @access protected
      * @return array
      */
-    protected function fetchMetricsByScope($scope, $limit = -1)
+    protected function fetchMetricsByScope($scopes, $limit = -1)
     {
+        if(!is_array($scopes)) $scopes = array($scopes);
         $metrics = $this->dao->select('*')->from(TABLE_METRIC)
             ->where('deleted')->eq('0')
-            ->andWhere('scope')->eq($scope)
+            ->andWhere('scope')->in($scopes)
             ->andWhere('object')->in(array_keys($this->lang->metric->objectList))
+            ->groupBy('scope')
             ->beginIF($limit > 0)->limit($limit)->fi()
-            ->fetchAll();
+            ->fetchAll('scope');
 
         return $metrics;
     }
@@ -123,9 +125,9 @@ class metricTao extends metricModel
      * @access protected
      * @return object|false
      */
-    protected function fetchMetricByCode($code)
+    protected function fetchMetricByCode($code, $fieldList = '*')
     {
-        return $this->dao->select('*')->from(TABLE_METRIC)
+        return $this->dao->select($fieldList)->from(TABLE_METRIC)
             ->where('code')->eq($code)
             ->fetch();
     }
@@ -316,7 +318,7 @@ class metricTao extends metricModel
      */
     protected function fetchMetricRecords($code, $fieldList, $query = array(), $pager = null)
     {
-        $metric   = $this->fetchMetricByID($code);
+        $metric   = $this->getByCode($code);
         $scopeKey = $metric->scope;
         $dateType = $metric->dateType;
 
@@ -348,7 +350,7 @@ class metricTao extends metricModel
 
     protected function fetchMetricRecordsWithOption($code, $fieldList, $options = array(), $pager = null)
     {
-        $metric = $this->fetchMetricByID($code);
+        $metric = $this->getByCode($code);
 
         $scopeKey = $metric->scope;
         $dateType = $metric->dateType;
@@ -394,7 +396,7 @@ class metricTao extends metricModel
      */
     protected function fetchLatestMetricRecords($code, $fieldList, $query = array(), $pager = null)
     {
-        $metric       = $this->fetchMetricByID($code);
+        $metric       = $this->getByCode($code);
         $dateType     = $metric->dateType;
         $lastCalcDate = substr($metric->lastCalcTime, 0, 10);
         $objectList   = $this->getObjectsWithPager($metric, $query);
@@ -451,32 +453,30 @@ class metricTao extends metricModel
     }
 
     /**
-     * 创建临时表用于存储最新的非重复度量数据的id。
-     * Create temp table for storing distinct metric record id.
+     * Set deleted.
      *
+     * @param  string    $code
+     * @param  string    $value
      * @access protected
      * @return void
      */
-    protected function createDistinctTempTable()
+    protected function setDeleted($code, $value)
     {
-        $sql  = "CREATE TABLE IF NOT EXISTS `metriclib_distinct` ( ";
-        $sql .= " id INT";
-        $sql .= " )";
-
-        $this->dao->exec($sql);
-        $this->dao->exec("TRUNCATE TABLE `metriclib_distinct`");
+        $this->dao->update(TABLE_METRICLIB)
+            ->set('deleted')->eq($value)
+            ->where('metricCode')->eq($code)
+            ->exec();
     }
 
     /**
-     * 将度量数据不重复的id插入到临时表中。
-     * Insert distinct metric record id to temp table.
+     * Keep latest records.
      *
-     * @param  string $code
-     * @param  array $fields
+     * @param  int    $code
+     * @param  int    $fields
      * @access protected
      * @return void
      */
-    protected function insertDistinctId2TempTable($code, $fields)
+    protected function keepLatestRecords($code, $fields)
     {
         if(empty($fields)) return;
         /**
@@ -487,42 +487,32 @@ class metricTao extends metricModel
         if(empty($intersect)) $fields[] = 'left(date, 10)';
         $table = TABLE_METRICLIB;
 
-        $sql  = "INSERT INTO `metriclib_distinct` (id) ";
-        $sql .= "SELECT MAX(id) AS id ";
-        $sql .= "FROM $table WHERE metricCode = '{$code}' ";
-        $sql .= "GROUP BY " . implode(',', $fields);
+        $sql  = " UPDATE $table AS m";
+        $sql .= " JOIN (";
+        $sql .= "    SELECT MAX(id) AS maxid";
+        $sql .= "    FROM $table";
+        $sql .= "    WHERE metricCode = '$code'";
+        $sql .= "    GROUP BY ". implode(',', $fields);
+        $sql .= " ) AS max_ids ON m.id = max_ids.maxid";
+        $sql .= " SET m.deleted = '0'";
 
         $this->dao->exec($sql);
     }
 
     /**
-     * 删除重复的度量数据。
-     * Delete duplication metric record.
+     * Execute delete.
      *
-     * @param  string $code
+     * @param  string     $code
      * @access protected
      * @return void
      */
-    protected function deleteDuplicationRecord($code)
+    protected function executeDelete($code)
     {
-        $table = TABLE_METRICLIB;
-        $sql  = "DELETE FROM $table ";
-        $sql .= "WHERE id NOT IN (SELECT id FROM metriclib_distinct) ";
-        $sql .= "AND metricCode = '{$code}'";
-
-        $this->dao->exec($sql);
-    }
-
-    /**
-     * 删除记录不重复度量数据id的临时表。
-     * Drop temp table for storing distinct metric record id.
-     *
-     * @access protected
-     * @return void
-     */
-    protected function dropDistinctTempTable()
-    {
-        $this->dao->exec("DROP TABLE IF EXISTS `metriclib_distinct`");
+        $this->dao->delete()->from(TABLE_METRICLIB)
+            ->where('metricCode')->eq($code)
+            ->andWhere('deleted', true)->eq('1')
+            ->orWhere('value')->eq(0)->markRight(1)
+            ->exec();
     }
 
     /**

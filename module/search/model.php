@@ -74,13 +74,14 @@ class searchModel extends model
             $operatorName = "operator$i";
             $valueName    = "value$i";
 
-            $field = $this->post->$fieldName;
-            $value = $this->post->$valueName;
+            $field        = $this->post->$fieldName;
+            $value        = $this->post->$valueName;
+            $fieldControl = isset($fieldParams->$field) && isset($fieldParams->{$field}->control) ? $fieldParams->{$field}->control : '';
             if(empty($field) || $value === '' || $value === false) continue; // false means no exist this post item. '' means no search data. ignore it.
             if(!preg_match('/^[a-zA-Z0-9]+$/', $field)) continue; // Fix sql injection.
 
             /* 如果是输入框，并且输入框的值为'0'，或者 id 的值为'0'，将值设置为zero。*/
-            if(isset($fieldParams->$field) && $fieldParams->$field->control == 'input' && $value === '0') $this->post->set($valueName, 'ZERO');
+            if(isset($fieldParams->$field) && $fieldControl == 'input' && $value === '0') $this->post->set($valueName, 'ZERO');
             if($field == 'id' && $value === '0') $this->post->set($valueName, 'ZERO');
 
             /* set queryForm. */
@@ -88,7 +89,7 @@ class searchModel extends model
             $queryForm[$formIndex] = array('field' => $field, 'andOr' => strtolower($andOr), 'operator' => $operator, 'value' => $value);
 
             /* Set where. */
-            $where = $this->searchTao->setWhere($where, $field, $operator, $value, $andOr);
+            $where = $this->searchTao->setWhere($where, $field, $operator, $value, $andOr, $fieldControl);
 
             $scoreNum += 1;
         }
@@ -167,7 +168,7 @@ class searchModel extends model
                 }
                 else
                 {
-                    $condition = ' LIKE ' . $this->dbh->quote("%$value%");
+                    $condition = $fieldParams->$field->control == 'select' ? " LIKE CONCAT('%,', '{$value}', ',%')" : ' LIKE ' . $this->dbh->quote("%$value%");
                 }
             }
             elseif($operator == "notinclude")
@@ -179,7 +180,7 @@ class searchModel extends model
                 }
                 else
                 {
-                    $condition = ' NOT LIKE ' . $this->dbh->quote("%$value%");
+                    $condition = $fieldParams->$field->control == 'select' ? " NOT LIKE CONCAT('%,', '{$value}', ',%')" : ' NOT LIKE ' . $this->dbh->quote("%$value%");
                 }
             }
             elseif($operator == 'belong')
@@ -233,6 +234,10 @@ class searchModel extends model
             elseif($operator == '>' and preg_match('/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/', $value))
             {
                 $where .= " $andOr " . '`' . $this->post->$fieldName . "` > '$value 23:59:59'";
+            }
+            elseif(in_array($operator, array('include', 'notinclude')) && $control == 'select')
+            {
+                $where .= " $andOr CONCAT(',', `{$this->post->$fieldName}`, ',') {$condition}";
             }
             elseif($condition)
             {
@@ -299,7 +304,6 @@ class searchModel extends model
 
         /* Decode html encode. */
         $query->form = htmlspecialchars_decode($query->form, ENT_QUOTES);
-        $query->sql  = htmlspecialchars_decode($query->sql, ENT_QUOTES);
 
         /* 如果搜索表单中值有变量，把表单值放到post 表单，重新生成 query。*/
         /* If form has variable, regenerate query. */
@@ -671,7 +675,7 @@ class searchModel extends model
     public function buildIndexQuery(string $type, bool $testDeleted = true): object
     {
         $table = $this->config->objectTables[$type];
-        if($type == 'story' || $type == 'requirement')
+        if($type == 'story' || $type == 'requirement' || $type == 'epic')
         {
             $query = $this->dao->select('DISTINCT t1.*, t2.spec, t2.verify')->from($table)->alias('t1')
                 ->leftJoin(TABLE_STORYSPEC)->alias('t2')->on('t1.id=t2.story')

@@ -264,6 +264,7 @@ class programplanTao extends programplanModel
     protected function setTask(array $tasks, array $plans, string $selectCustom, array $datas, array $stageIndex): array
     {
         $this->app->loadLang('task');
+        $this->loadModel('holiday');
         $executions = array();
         $today      = helper::today();
         $taskTeams  = $this->dao->select('task,account')->from(TABLE_TASKTEAM)->where('task')->in(array_keys($tasks))->fetchGroup('task', 'account');
@@ -271,7 +272,8 @@ class programplanTao extends programplanModel
 
         foreach($tasks as $task)
         {
-            $dateLimit    = $this->getTaskDateLimit($task, zget($plans, $task->execution, null));
+            $plan         = zget($plans, $task->execution, null);
+            $dateLimit    = $this->getTaskDateLimit($task, $plan);
             $data         = $this->buildTaskDataForGantt($task, $dateLimit);
             $data->id     = $task->execution . '-' . $task->id;
             $data->parent = $task->parent > 0 ? $task->execution . '-' . $task->parent : $task->execution;
@@ -280,10 +282,16 @@ class programplanTao extends programplanModel
             /* Determines if the object is delay. */
             $data->delay     = $this->lang->programplan->delayList[0];
             $data->delayDays = 0;
-            if($today > $dateLimit['end'] && $executions[$task->execution] != 'closed')
+            if($today > $dateLimit['end'] && (!$plan || $plan->status != 'closed'))
             {
-                $data->delay     = $this->lang->programplan->delayList[1];
-                $data->delayDays = helper::diffDate(($task->status == 'done' || $task->status == 'closed') ? $task->finishedDate : $today, $dateLimit['end']);
+                $finishedDate = ($task->status == 'done' || $task->status == 'closed') && $task->finishedDate ? substr($task->finishedDate, 0, 10) : $today;
+                $actualDays   = $this->holiday->getActualWorkingDays(substr($dateLimit['end'], 0, 10), $finishedDate);
+                $delayDays    = count($actualDays);
+                if($delayDays > 0)
+                {
+                    $data->delayDays = $delayDays;
+                    $data->delay     = $this->lang->programplan->delayList[1];
+                }
             }
 
             /* If multi task then show the teams. */
@@ -629,6 +637,7 @@ class programplanTao extends programplanModel
         $data->name          = $plan->name;
         $data->attribute     = zget($this->lang->stage->typeList, $plan->attribute);
         $data->milestone     = zget($this->lang->programplan->milestoneList, $plan->milestone);
+        $data->milestonecode = $plan->milestone;
         $data->owner_id      = $plan->PM;
         $data->status        = $this->processStatus('execution', $plan);
         $data->begin         = $start;
@@ -648,6 +657,9 @@ class programplanTao extends programplanModel
         /* Set default progress from database. */
         $data->progress      = $plan->progress / 100;
         $data->taskProgress  = $plan->progress . '%';
+
+        if($data->endDate > $data->start_date)                $data->duration = helper::diffDate($data->endDate, $data->start_date) + 1;
+        if(empty($data->start_date) || empty($data->endDate)) $data->duration = 1;
 
         if(!empty($this->config->setPercent)) $data->percent = $plan->percent;
         if($data->start_date) $data->start_date = date('d-m-Y', strtotime($data->start_date));
@@ -768,8 +780,8 @@ class programplanTao extends programplanModel
         $data->owner_id     = $task->assignedTo;
         $data->attribute    = '';
         $data->milestone    = '';
-        $data->begin        = $dateLimit['start'];
-        $data->deadline     = $dateLimit['end'];
+        $data->begin        = substr($dateLimit['start'], 0, 10);
+        $data->deadline     = substr($dateLimit['end'], 0, 10);
         $data->realBegan    = $dateLimit['realBegan'] ? substr($dateLimit['realBegan'], 0, 10) : '';
         $data->realEnd      = $dateLimit['realEnd'] ? substr($dateLimit['realEnd'], 0, 10) : '';
         $data->pri          = $task->pri;
@@ -860,8 +872,8 @@ class programplanTao extends programplanModel
         $realBegan = helper::isZeroDate($task->realStarted) ? '' : $task->realStarted;
         $realEnd   = (in_array($task->status, array('done', 'closed')) and !helper::isZeroDate($task->finishedDate)) ? $task->finishedDate : '';
 
-        $start = $realBegan ? $realBegan : $estStart;
-        $end   = $realEnd   ? $realEnd   : $estEnd;
+        $start = $estStart;
+        $end   = $estEnd;
         if(empty($start) and $execution) $start = $execution->begin;
         if(empty($end)   and $execution) $end   = $execution->end;
         if($start > $end) $end = $start;

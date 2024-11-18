@@ -367,7 +367,7 @@ class testtask extends control
         $testtask = $this->testtask->getByID($taskID);
         if(!$testtask) return $this->send(array('result' => 'fail', 'load' => array('alert' => $this->lang->testtask->checkLinked, 'locate' => array('back' => true))));
         if(!$this->loadModel('common')->checkPrivByObject('project', $testtask->project))     return $this->sendError($this->lang->project->accessDenied, inlink('browse'));
-        if(!$this->loadModel('common')->checkPrivByObject('execution', $testtask->execution)) return $this->sendError($this->lang->execution->accessDenied, inlink('browse'));
+        if($testtask->execution && !$this->loadModel('common')->checkPrivByObject('execution', $testtask->execution)) return $this->sendError($this->lang->execution->accessDenied, inlink('browse'));
 
         /* 检查是否有权限访问测试单所属产品。*/
         /* Check if user have permission to access the product to which the testtask belongs. */
@@ -408,11 +408,12 @@ class testtask extends control
         /* 从数据库中查询一个测试单下关联的测试用例。*/
         /* Query the cases associated with a testtask from the database. */
         $runs = $this->testtask->getTaskCases($productID, $browseType, $queryID, $moduleID, $sort, $pager, $testtask);
-        $runs = $this->testtask->getSceneCases($productID, $runs);
         $this->loadModel('common')->saveQueryCondition($this->dao->get(), 'testcase', false);
 
+        list($runs, $scenes) = $this->testtask->getSceneCases($productID, $runs);
+
         $this->testtaskZen->setSearchParamsForCases($product, $moduleID, $taskID, $queryID);
-        $this->testtaskZen->assignForCases($product, $testtask, $runs, $moduleID, $browseType, $param, $orderBy, $pager);
+        $this->testtaskZen->assignForCases($product, $testtask, $runs, $scenes, $moduleID, $browseType, $param, $orderBy, $pager);
         $this->display();
     }
 
@@ -925,19 +926,33 @@ class testtask extends control
         $cases      = $this->testtaskZen->prepareCasesForBatchRun($productID, $orderBy, $from, $taskID, $confirm, $caseIdList);
         if(empty($cases)) return $this->send(array('result' => 'fail', 'load' => array('alert' => $this->lang->testtask->skipChangedCases, 'locate' => $url)));
 
+        $steps = $this->loadModel('testcase')->getStepGroupByIdList($caseIdList);
+
+        $emptyCases = '';
+        foreach($cases as $caseID => $case)
+        {
+            if(empty($steps[$case->id]))
+            {
+                unset($cases[$caseID]);
+
+                $emptyCases .= empty($emptyCases) ? "{$case->id}" : ",{$case->id}";
+            }
+        }
+
         /* 获取用例所属模块的键值对。*/
         /* Get key-value pairs of case module. */
         $this->loadModel('tree');
         $modules = array('/');
         foreach($cases as $case) $modules += $this->tree->getModulesName((array)$case->module);
 
-        $this->view->title       = $this->lang->testtask->batchRun;
-        $this->view->steps       = $this->loadModel('testcase')->getStepGroupByIdList($caseIdList);
-        $this->view->modules     = $modules;
-        $this->view->cases       = $cases;
-        $this->view->caseIdList  = $caseIdList;
-        $this->view->productID   = $productID;
-        $this->view->from        = $from;
+        $this->view->title      = $this->lang->testtask->batchRun;
+        $this->view->steps      = $this->loadModel('testcase')->getStepGroupByIdList($caseIdList);
+        $this->view->modules    = $modules;
+        $this->view->cases      = $cases;
+        $this->view->caseIdList = $caseIdList;
+        $this->view->productID  = $productID;
+        $this->view->from       = $from;
+        $this->view->emptyCases = $emptyCases;
         $this->display();
     }
 
@@ -969,7 +984,7 @@ class testtask extends control
             $case    = $run->case;
             $results = $this->testtask->getResults($runID, 0, $status, $type);
 
-            $this->view->testtask = $this->testtask->fetchByID($run->task);
+            $this->view->testtask = $this->testtask->getByID($run->task);
         }
         else
         {

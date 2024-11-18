@@ -20,12 +20,7 @@ class ciModel extends model
      */
     public function setMenu(int $repoID = 0)
     {
-        if($repoID)
-        {
-            if(!session_id()) session_start();
-            $this->session->set('repoID', $repoID);
-            session_write_close();
-        }
+        if($repoID) $this->session->set('repoID', $repoID);
 
         $homeMenuModule = array('gitlab', 'gogs', 'gitea', 'jenkins', 'sonarqube');
         if(!in_array("{$this->app->moduleName}", $homeMenuModule)) common::setMenuVars('devops', (int)$this->session->repoID);
@@ -107,7 +102,7 @@ class ciModel extends model
             $jenkinsServer = strpos($compile->pipeline, '/job/') === 0 ? $jenkinsServer . $compile->pipeline : $jenkinsServer . '/job/' . $compile->pipeline;
             $infoUrl       = sprintf("%s/api/xml?tree=builds[id,number,result,queueId]&xpath=//build[queueId=%s]", $jenkinsServer, $compile->queue);
             $response      = common::http($infoUrl, '', array(CURLOPT_USERPWD => $userPWD));
-            if($response)
+            if($response && strpos($response, "<") === 0)
             {
                 $buildInfo = simplexml_load_string($response);
                 if(empty($buildInfo)) return false;
@@ -126,13 +121,34 @@ class ciModel extends model
         }
         else
         {
-            $queueInfo = json_decode($response);
-            if(!empty($queueInfo->executable))
+            $queueInfo = @json_decode($response);
+            $buildInfo = null;
+            if($queueInfo && !empty($queueInfo->executable))
             {
                 $buildUrl  = $queueInfo->executable->url . 'api/json?pretty=true';
                 $response  = common::http($buildUrl, '', array(CURLOPT_USERPWD => $userPWD));
                 $buildInfo = json_decode($response);
+            }
+            elseif(stripos($response, 'not found') !== false)
+            {
+                $job      = strpos($compile->pipeline, '/job/') !== false ? $compile->pipeline : '/job/' . $compile->pipeline;
+                $buildUrl = "{$compile->url}{$job}/api/json?depth=1";
+                $response = json_decode(common::http($buildUrl, '', array(CURLOPT_USERPWD => $userPWD)));
+                if($response)
+                {
+                    foreach($response->builds as $build)
+                    {
+                        if($build->queueId == $compile->queue)
+                        {
+                            $buildInfo = $build;
+                            break;
+                        }
+                    }
+                }
+            }
 
+            if($buildInfo)
+            {
                 if(!empty($buildInfo->building))
                 {
                     $this->updateBuildStatus($compile, 'building');
@@ -165,8 +181,8 @@ class ciModel extends model
      */
     public function syncCompileStatus(object $compile, int $MRID = 0): bool
     {
-        /* Max retry times is: 3. */
-        if($compile->times >= 3)
+        /* Max retry times is: 5. */
+        if($compile->times >= 5)
         {
             $this->updateBuildStatus($compile, 'failure');
 

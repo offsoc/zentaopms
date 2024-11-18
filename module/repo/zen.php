@@ -58,7 +58,12 @@ class repoZen extends repo
             $scm->setEngine($repo);
             $info     = $scm->info('');
             $infoRoot = urldecode($info->root);
-            $repo->prefix = empty($infoRoot) ? '' : trim(str_ireplace($infoRoot, '', str_replace('\\', '/', $repo->path)), '/');
+
+            // remove svn default port 3690 and 80
+            $path   = str_replace(array(':3690',':80'), '', $repo->path);
+            $prefix = str_replace('\\', '/', $path);
+
+            $repo->prefix = empty($infoRoot) ? '' : trim(str_ireplace($infoRoot, '', $prefix), '/');
             if($repo->prefix) $repo->prefix = '/' . $repo->prefix;
         }
 
@@ -381,7 +386,7 @@ class repoZen extends repo
         $this->view->groups       = $this->loadModel('group')->getPairs();
         $this->view->users        = $this->loadModel('user')->getPairs('noletter|noempty|nodeleted|noclosed');
         $this->view->products     = $products;
-        $this->view->serviceHosts = $this->loadModel('gitlab')->getPairs();
+        $this->view->serviceHosts = $this->loadModel('pipeline')->getPairs(implode(',', $this->config->repo->notSyncSCM), true);
         $this->view->objectID     = $objectID;
 
         $this->display();
@@ -411,10 +416,10 @@ class repoZen extends repo
         }
 
         $repoGroups   = array();
-        $serviceHosts = $this->loadModel('gitlab')->getPairs();
+        $serviceHosts = $this->loadModel('pipeline')->getPairs(implode(',', $this->config->repo->notSyncSCM), true);
         if(!empty($serviceHosts))
         {
-            $serverID   = array_keys($serviceHosts)[0];
+            $serverID   = key($serviceHosts);
             $repoGroups = $this->repo->getGroups($serverID);
         }
 
@@ -689,7 +694,7 @@ class repoZen extends repo
                 $project = json_decode($result['project']->body);
                 if(!is_object($project)) $project = new stdclass();
 
-                $this->loadModel('gitlab')->setProject((int)$repo->gitService, (int)$repo->project, $project);
+                $this->loadModel('gitlab')->setProject((int)$repo->gitService, (int)$repo->serviceProject, $project);
             }
             if(!empty($result['branches']->headers) && !is_null($result['branches']->headers->offsetGet('x-total')))
             {
@@ -1309,13 +1314,11 @@ class repoZen extends repo
         $oldRevision = isset($this->post->revision[1]) ? $this->post->revision[1] : '';
         $newRevision = isset($this->post->revision[0]) ? $this->post->revision[0] : '';
 
-        if($this->post->arrange)
-        {
-            $arrange = $this->post->arrange;
-            helper::setcookie('arrange', $arrange);
-        }
         if($this->post->encoding)      $encoding      = $this->post->encoding;
         if($this->post->isBranchOrTag) $isBranchOrTag = (int)$this->post->isBranchOrTag;
+
+        if($this->post->arrange) $arrange = $this->post->arrange;
+        helper::setcookie('arrange', $arrange);
 
         return $this->locate($this->repo->createLink('diff', "repoID={$repoID}&objectID={$objectID}&entry={$file}&oldrevision={$oldRevision}&newRevision={$newRevision}&showBug=0&encoding={$encoding}&isBranchOrTag={$isBranchOrTag}"));
     }
@@ -1362,7 +1365,7 @@ class repoZen extends repo
     protected function syncLocalCommit(object $repo): string
     {
         $logFile = realPath($this->app->getTmpRoot() . $this->config->repo->repoSyncLog->logFilePrefix . strtolower($repo->SCM) . ".{$repo->name}.log");
-        if($logFile)
+        if($logFile && file_exists($logFile))
         {
             $content  = file($logFile);
             foreach($content as $line)

@@ -25,6 +25,8 @@ class productplanModel extends model
      */
     public function getByID(int $planID, bool $setImgSize = false): object|false
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getPlan();
+
         $plan = $this->dao->findByID($planID)->from(TABLE_PRODUCTPLAN)->fetch();
         if(!$plan) return false;
 
@@ -102,6 +104,8 @@ class productplanModel extends model
      */
     public function getList(int $productID = 0, string $branch = '', string $browseType = 'undone', object|null $pager = null, string $orderBy = 'begin_desc', string $param = '', int $queryID = 0): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getPlans();
+
         $this->loadModel('search')->setQuery('productplan', $queryID);
 
         $products = (strpos($param, 'noproduct') !== false && empty($productID)) ? $this->loadModel('product')->getPairs($param) : array($productID => $productID);
@@ -115,15 +119,22 @@ class productplanModel extends model
         $product = $this->loadModel('product')->getById($productID);
         $this->loadModel('story');
         if(!empty($product) && $product->type == 'normal') $storyGroups = $this->story->getStoriesByPlanIdList($planIdList);
-        $storyCountInTable = $this->dao->select('plan,count(story) as count')->from(TABLE_PLANSTORY)->where('plan')->in($planIdList)->groupBy('plan')->fetchPairs('plan', 'count');
+        $storyCountInTable = $this->dao->select('t1.plan, count(t1.story) as count')->from(TABLE_PLANSTORY)->alias('t1')
+            ->leftJoin(TABLE_STORY)->alias('t2')->on('t1.story = t2.id')
+            ->where('t1.plan')->in($planIdList)
+            ->andWhere('t2.deleted')->eq('0')
+            ->groupBy('t1.plan')
+            ->fetchPairs('plan', 'count');
 
         $bugs = $this->dao->select('plan, id')->from(TABLE_BUG)->where("plan")->in($planIdList)->andWhere('deleted')->eq(0)->fetchGroup('plan', 'id');
         foreach($plans as $plan)
         {
-            $storyPairs = array();
+            $storyPairs    = array();
+            $plan->stories = 0;
             if(!empty($product) && $product->type == 'normal')
             {
-                $stories = zget($storyGroups, $plan->id, array());
+                $stories       = zget($storyGroups, $plan->id, array());
+                $plan->stories = count($stories);
                 foreach($stories as $story)
                 {
                     if($story->isParent == '1') continue;
@@ -132,13 +143,13 @@ class productplanModel extends model
             }
             else
             {
-                $storyPairs = $this->story->getPairs(0, $plan->id, 'estimate');
+                $storyPairs    = $this->story->getPairs(0, $plan->id, 'estimate');
+                $plan->stories = count($storyPairs);
             }
 
             $bugCount = isset($bugs[$plan->id]) ? count($bugs[$plan->id]) : 0;
-            $plan->bugs     = zget($plan, 'bugs', 0)    + $bugCount;
-            $plan->hour     = zget($plan, 'hour', 0)    + round(array_sum($storyPairs), 1);
-            $plan->stories  = zget($plan, 'stories', 0) + count($storyPairs);
+            $plan->bugs     = zget($plan, 'bugs', 0) + $bugCount;
+            $plan->hour     = zget($plan, 'hour', 0) + round(array_sum($storyPairs), 1);
             $plan->projects = zget($planProjects, $plan->id, '');
             $plan->expired  = $plan->end < helper::today();
 
@@ -160,18 +171,21 @@ class productplanModel extends model
      *
      * @param  int    $productID
      * @param  string $exclude
+     * @param  int    $append
      * @access public
      * @return array
      */
-    public function getTopPlanPairs(int $productID, string $exclude = ''): array
+    public function getTopPlanPairs(int $productID, string $exclude = '', int $append = 0): array
     {
-        return $this->dao->select("id,title")->from(TABLE_PRODUCTPLAN)
+        $pairs = $this->dao->select("id,title")->from(TABLE_PRODUCTPLAN)
             ->where('product')->eq($productID)
             ->andWhere('parent')->le(0)
             ->andWhere('deleted')->eq(0)
             ->beginIF($exclude)->andWhere('status')->notin($exclude)->fi()
             ->orderBy('id_desc')
             ->fetchPairs();
+        if($append) $pairs += $this->dao->select("id,title")->from(TABLE_PRODUCTPLAN)->where('id')->eq($append)->fetchPairs();
+        return $pairs;
     }
 
     /**
@@ -187,6 +201,8 @@ class productplanModel extends model
      */
     public function getPairs(array|int $productIdList = 0, int|string|array $branch = '', string $param = '', bool $skipParent = false): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getPlanPairs();
+
         $this->app->loadLang('branch');
 
         /* Get the query condition for the branch. */
@@ -197,7 +213,7 @@ class productplanModel extends model
             if(is_string($branch)) $branch = array_unique(explode(',', trim($branch, ',')));
             if(is_array($branch) && !empty($branch))
             {
-                if(count($branch) == 1) $branchQuery = "t1.branch = '" . current($branch) . "'";
+                if(count($branch) == 1) $branchQuery = "FIND_IN_SET('$branch[0]', t1.branch)";
                 if(count($branch) > 1)
                 {
                     foreach($branch as $key => $branchID) $branch[$key] = "FIND_IN_SET('$branchID', t1.branch)";

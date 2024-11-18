@@ -120,7 +120,8 @@ class actionTao extends actionModel
                 if($extra == 'sprint' || $extra == 'stage') $execution = $objectID;
                 break;
             case 'module':
-                $module = $this->dao->select('type,root')->from(TABLE_MODULE)->where('id')->eq($actionType != 'deleted' ? $extra : $objectID)->fetch();
+                $moduleID = $actionType != 'deleted' ? (int)$extra : (int)$objectID;
+                $module   = $this->dao->select('type,root')->from(TABLE_MODULE)->where('id')->eq($moduleID)->fetch();
                 if(!empty($module) && $module->type == 'story') $product = array($module->root);
                 break;
             case 'review':
@@ -368,7 +369,12 @@ class actionTao extends actionModel
 
             $name = $execution->name;
             if($execution->type == 'kanban') $method = 'kanban';
-            if($name) $action->extra = !common::hasPriv('execution', $method) || ($method == 'kanban' && isonlybody()) || $this->config->vision == 'or' ? $name : html::a(helper::createLink('execution', $method, "executionID={$action->execution}"), $name, '', "data-app='execution'");
+            if($name)
+            {
+                $isModalKanban = $method == 'kanban' && isonlybody();
+                $canShowLink   = common::hasPriv('execution', $method) && !$isModalKanban && $this->config->vision != 'or';
+                $action->extra = $canShowLink ? html::a(helper::createLink('execution', $method, "executionID={$action->execution}"), $name, '', "data-app='execution'") : $name;
+            }
         }
         elseif($type == 'project')
         {
@@ -531,6 +537,9 @@ class actionTao extends actionModel
             case 'demand':
                 $paramString = "demandID={$action->extra}";
                 break;
+            case 'epic':
+                $paramString = "storyID={$action->extra}";
+                break;
         }
 
         return $paramString;
@@ -644,43 +653,14 @@ class actionTao extends actionModel
     }
 
     /**
-     * 处理工时相关查询条件。
-     * Process effort related search condition.
-     *
-     * @param  string $condition
-     * @param  string $period
-     * @param  string $begin
-     * @param  string $end
-     * @param  string $beginDate
-     * @access public
-     * @return void
-     */
-    public function processEffortCondition(string &$condition, string $period, string $begin, string $end, string $beginDate): void
-    {
-        $effortSQL = $this->dao->select('id')->from(TABLE_EFFORT)
-            ->where($condition)
-            ->beginIF($period != 'all')
-            ->beginIF($begin)->andWhere('date')->gt($begin)->fi()
-            ->beginIF($end)->andWhere('date')->lt($end)->fi()
-            ->fi()
-            ->beginIF($beginDate)->andWhere('date')->ge($beginDate)->fi()
-            ->get();
-
-        $condition .= " OR (`objectID` IN ({$effortSQL}) AND `objectType` = 'effort')";
-    }
-
-    /**
      * 通过条件获取操作记录列表。
      * Get action list by condition.
      *
      * @param  string     $condition
      * @param  string     $date
-     * @param  string     $period
      * @param  string     $begin
      * @param  string     $end
-     * @param  string     $direction
      * @param  string     $account
-     * @param  string     $beginDate
      * @param  string|int $productID
      * @param  string|int $projectID
      * @param  string|int $executionID
@@ -691,24 +671,23 @@ class actionTao extends actionModel
      * @access public
      * @return array|bool
      */
-    public function getActionListByCondition(string $condition, string $date, string $period, string $begin, string $end, string $direction, string $account, string $beginDate, string|int $productID, string|int $projectID, string|int $executionID, array $executions, string $actionCondition, string $orderBy, int $limit = 50): array|bool
+    public function getActionListByCondition(string $condition, string $date, string $begin, string $end, string $account, string|int $productID, string|int $projectID, string|int $executionID, array|string $executions, string $actionCondition, string $orderBy, int $limit = 50): array|bool
     {
-        $actionTable = in_array($period, $this->config->action->latestDateList) ? TABLE_ACTIONRECENT : TABLE_ACTION;
+        /* 获取最近一个月的动态用actionrecent表。 */
+        $lastMonth   = date('Y-m-d', strtotime('-1 month'));
+        $actionTable = ($begin >= $lastMonth && $end >= $lastMonth) ? TABLE_ACTIONRECENT : TABLE_ACTION;
 
         return $this->dao->select('*')->from($actionTable)
             ->where('objectType')->notIN($this->config->action->ignoreObjectType4Dynamic)
             ->andWhere('action')->notIN($this->config->action->ignoreActions4Dynamic)
             ->andWhere('vision')->eq($this->config->vision)
-            ->beginIF($period != 'all')->andWhere('date')->gt($begin)->andWhere('date')->lt($end)->fi()
-            ->beginIF($date)->andWhere('date' . ($direction == 'next' ? '<' : '>') . "'{$date}'")->fi()
+            ->beginIF($begin != EPOCH_DATE)->andWhere('date')->ge($begin)->fi()
+            ->beginIF($end != FUTURE_DATE)->andWhere('date')->le($end)->fi()
             ->beginIF($account != 'all')->andWhere('actor')->eq($account)->fi()
-            ->beginIF($beginDate)->andWhere('date')->ge($beginDate)->fi()
             ->beginIF(is_numeric($productID) && $productID)->andWhere('product')->like("%,$productID,%")->fi()
-            ->andWhere('1=1', true)
             ->beginIF(is_numeric($projectID) && $projectID)->andWhere('project')->eq($projectID)->fi()
             ->beginIF(!empty($executions))->andWhere('execution')->in(array_keys($executions))->fi()
             ->beginIF(is_numeric($executionID) && $executionID)->andWhere('execution')->eq($executionID)->fi()
-            ->markRight(1)
             /* lite模式下需要排除的一些类型。 */
             /* Types excluded from Lite. */
             ->beginIF($this->config->vision == 'lite')->andWhere('objectType')->notin('product')->fi()
@@ -816,7 +795,7 @@ class actionTao extends actionModel
         {
             $action->objectName = $this->dao->select('name')->from(TABLE_AI_ASSISTANT)->where('id')->eq($action->objectID)->fetch('name');
         }
-        if(empty($action->objectName) && (substr($objectType, 0, 6) == 'gitlab' || substr($objectType, 0, 5) == 'gitea' || substr($objectType, 0, 4) == 'gogs' || substr($objectType, 0, 2) == 'mr')) $action->objectName = $action->extra;
+        if (empty($action->objectName) && preg_match('/^(gitlab|gitea|gogs|mr)/', $objectType)) $action->objectName = $action->extra;
     }
 
     /**
@@ -1009,9 +988,10 @@ class actionTao extends actionModel
      */
     public function getUndeleteParamsByObjectType(string $objectType): array
     {
-        $table   = $this->config->objectTables[$objectType];
-        $orderby = '';
-        $field   = '*';
+        $table    = $this->config->objectTables[$objectType];
+        $orderby  = '';
+        $field    = '*';
+        $queryKey = 'id';
         switch($objectType)
         {
             case 'product':
@@ -1022,11 +1002,12 @@ class actionTao extends actionModel
                 $field = 'id, acl, name, hasProduct';
                 break;
             case 'doc':
-                $table   = TABLE_DOCCONTENT;
-                $orderby = 'version desc';
+                $table    = TABLE_DOCCONTENT;
+                $orderby  = 'version desc';
+                $queryKey = 'doc';
             default:
                 break;
-       }
-        return array($table, $orderby, $field);
+        }
+        return array($table, $orderby, $field, $queryKey);
     }
 }

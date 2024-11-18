@@ -33,8 +33,9 @@ if(empty($repoID))
 }
 else
 {
-    featureBar
+    div
     (
+        setClass('flex'),
         div
         (
             setClass('select-repo-box'),
@@ -95,7 +96,8 @@ else
         set::footToolbar($footToolbar),
         set::checkInfo(jsRaw('function(checkedIDList){return \'\';}')),
         set::rowKey('revision'),
-        set::footPager(usePager())
+        set::height(jsRaw('calcHeight')),
+        set::footPager(usePager('pager', 'noTotalCount'))
     );
 }
 

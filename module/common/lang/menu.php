@@ -59,7 +59,7 @@ $lang->mainNav->devops    = "{$lang->navIcons['devops']} DevOps|repo|maintain|";
 $lang->mainNav->aiapp     = "{$lang->navIcons['aiapp']} {$lang->aiapp->common}|aiapp|square|";
 $lang->mainNav->bi        = "{$lang->navIcons['bi']} {$lang->bi->common}|screen|browse|";
 $lang->mainNav->kanban    = "{$lang->navIcons['kanban']} {$lang->kanban->common}|kanban|space|";
-$lang->mainNav->doc       = "{$lang->navIcons['doc']} {$lang->doc->common}|doc|mySpace|type=mine";
+$lang->mainNav->doc       = "{$lang->navIcons['doc']} {$lang->doc->common}|doc|mySpace|";
 $lang->mainNav->system    = "{$lang->navIcons['system']} {$lang->system->common}|my|team|";
 $lang->mainNav->admin     = "{$lang->navIcons['admin']} {$lang->admin->common}|admin|index|";
 
@@ -273,8 +273,8 @@ $lang->scrum->menu->settings['subMenu']->group       = array('link' => "{$lang->
 $lang->scrum->menu->settings['subMenu']->module      = array('link' => "{$lang->module}|tree|browse|product=%s&view=story");
 
 $lang->scrum->menu->devops['subMenu']         = new stdclass();
-$lang->scrum->menu->devops['subMenu']->repo   = array('link' => "{$lang->repo->common}|repo|browse|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-review,repo-browsetag,repo-browsebranch,repo-log');
-$lang->scrum->menu->devops['subMenu']->commit = array('link' => "{$lang->repo->commit}|repo|log|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-browse,repo-browsebranch,repo-browsetag,repo-review,repo-create,repo-diff,repo-showsynccommit');
+$lang->scrum->menu->devops['subMenu']->repo   = array('link' => "{$lang->repo->common}|repo|browse|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-review,repo-browsetag,repo-browsebranch,repo-log,repo-diff');
+$lang->scrum->menu->devops['subMenu']->commit = array('link' => "{$lang->repo->commit}|repo|log|repoID=0&branchID=&objectID=%s", 'alias' => 'log,diff');
 $lang->scrum->menu->devops['subMenu']->branch = array('link' => "{$lang->repo->branch}|repo|browsebranch|repoID=0&objectID=%s", 'exclude' => 'repo-browse,repo-log');
 $lang->scrum->menu->devops['subMenu']->tag    = array('link' => "{$lang->repo->tag}|repo|browsetag|repoID=0&objectID=%s", 'exclude' => 'repo-browse,repo-log');
 $lang->scrum->menu->devops['subMenu']->mr     = array('link' => "{$lang->devops->mr}|mr|browse|repoID=0&mode=status&param=opened&objectID=%s", 'subModule' => 'mr', 'alias' => 'create');
@@ -313,6 +313,7 @@ $lang->waterfall->menuOrder[60] = 'doc';
 $lang->waterfall->menuOrder[65] = 'build';
 $lang->waterfall->menuOrder[70] = 'release';
 $lang->waterfall->menuOrder[80] = 'dynamic';
+$lang->waterfall->menuOrder[90] = 'settings';
 
 $lang->waterfall->menu->programplan['subMenu'] = new stdclass();
 $lang->waterfall->menu->programplan['subMenu']->lists = array('link' => "{$lang->stage->list}|programplan|browse|projectID=%s&productID=0&type=lists", 'alias' => 'create');
@@ -331,8 +332,8 @@ $lang->waterfall->menu->design['subMenu']->dbds = array('link' => "{$lang->desig
 $lang->waterfall->menu->design['subMenu']->ads  = array('link' => "{$lang->design->ADS}|design|browse|projectID=%s&productID=0&browseType=ADS");
 
 $lang->waterfall->menu->devops['subMenu']         = new stdclass();
-$lang->waterfall->menu->devops['subMenu']->repo   = array('link' => "{$lang->repo->common}|repo|browse|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-review,repo-browsetag,repo-browsebranch,repo-log');
-$lang->waterfall->menu->devops['subMenu']->commit = array('link' => "{$lang->repo->commit}|repo|log|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-browse,repo-browsebranch,repo-browsetag,repo-review,repo-create,repo-diff,repo-showsynccommit');
+$lang->waterfall->menu->devops['subMenu']->repo   = array('link' => "{$lang->repo->common}|repo|browse|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-review,repo-browsetag,repo-browsebranch,repo-log,repo-diff');
+$lang->waterfall->menu->devops['subMenu']->commit = array('link' => "{$lang->repo->commit}|repo|log|repoID=0&branchID=&objectID=%s", 'alias' => 'log,diff');
 $lang->waterfall->menu->devops['subMenu']->branch = array('link' => "{$lang->repo->branch}|repo|browsebranch|repoID=0&objectID=%s", 'exclude' => 'repo-browse,repo-log');
 $lang->waterfall->menu->devops['subMenu']->tag    = array('link' => "{$lang->repo->tag}|repo|browsetag|repoID=0&objectID=%s", 'exclude' => 'repo-browse,repo-log');
 $lang->waterfall->menu->devops['subMenu']->mr     = array('link' => "{$lang->devops->mr}|mr|browse|repoID=0&mode=status&param=opened&objectID=%s", 'subModule' => 'mr', 'alias' => 'create');
@@ -401,10 +402,14 @@ $lang->execution->menuOrder[55] = 'build';
 $lang->execution->menuOrder[60] = 'release';
 $lang->execution->menuOrder[65] = 'action';
 $lang->execution->menuOrder[70] = 'settings';
+$lang->execution->menuOrder[75] = 'more';
 
 $lang->execution->menu->view['subMenu']            = new stdclass();
 $lang->execution->menu->view['subMenu']->groupTask = "$lang->groupView|execution|grouptask|executionID=%s";
 $lang->execution->menu->view['subMenu']->tree      = "$lang->treeView|execution|tree|executionID=%s";
+
+$lang->execution->menu->view['menuOrder'][10] = 'groupTask';
+$lang->execution->menu->view['menuOrder'][15] = 'tree';
 
 $lang->execution->menu->qa['subMenu'] = new stdclass();
 //$lang->execution->menu->qa['subMenu']->qa         = array('link' => "$lang->dashboard|execution|qa|executionID=%s");
@@ -413,14 +418,14 @@ $lang->execution->menu->qa['subMenu']->testcase   = array('link' => "{$lang->tes
 $lang->execution->menu->qa['subMenu']->testtask   = array('link' => "{$lang->testtask->common}|execution|testtask|executionID=%s", 'subModule' => 'testtask');
 $lang->execution->menu->qa['subMenu']->testreport = array('link' => "{$lang->testreport->common}|execution|testreport|exeutionID=%s", 'subModule' => 'testreport');
 
-$lang->execution->menu->qa['menuOrder'][5]  = 'qa';
-$lang->execution->menu->qa['menuOrder'][10] = 'bug';
-$lang->execution->menu->qa['menuOrder'][15] = 'testcase';
-$lang->execution->menu->qa['menuOrder'][20] = 'testtask';
+$lang->execution->menu->qa['menuOrder'][5]  = 'bug';
+$lang->execution->menu->qa['menuOrder'][10] = 'testcase';
+$lang->execution->menu->qa['menuOrder'][15] = 'testtask';
+$lang->execution->menu->qa['menuOrder'][20] = 'testreport';
 
 $lang->execution->menu->devops['subMenu']         = new stdclass();
-$lang->execution->menu->devops['subMenu']->repo   = array('link' => "{$lang->repo->common}|repo|browse|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-review,repo-browsetag,repo-browsebranch,repo-log');
-$lang->execution->menu->devops['subMenu']->commit = array('link' => "{$lang->repo->commit}|repo|log|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-browse,repo-browsebranch,repo-browsetag,repo-review,repo-create,repo-diff,repo-showsynccommit');
+$lang->execution->menu->devops['subMenu']->repo   = array('link' => "{$lang->repo->common}|repo|browse|repoID=0&branchID=&objectID=%s", 'subModule' => 'repo', 'exclude' => 'repo-review,repo-browsetag,repo-browsebranch,repo-log,repo-diff');
+$lang->execution->menu->devops['subMenu']->commit = array('link' => "{$lang->repo->commit}|repo|log|repoID=0&branchID=&objectID=%s", 'alias' => 'log,diff');
 $lang->execution->menu->devops['subMenu']->branch = array('link' => "{$lang->repo->branch}|repo|browsebranch|repoID=0&objectID=%s", 'exclude' => 'repo-browse,repo-log');
 $lang->execution->menu->devops['subMenu']->tag    = array('link' => "{$lang->repo->tag}|repo|browsetag|repoID=0&objectID=%s", 'exclude' => 'repo-browse,repo-log');
 $lang->execution->menu->devops['subMenu']->mr     = array('link' => "{$lang->devops->mr}|mr|browse|repoID=0&mode=status&param=opened&objectID=%s", 'subModule' => 'mr', 'alias' => 'create');
@@ -437,7 +442,7 @@ $lang->execution->menu->settings['subMenu']->products  = array('link' => "$lang-
 $lang->execution->menu->settings['subMenu']->team      = array('link' => "{$lang->team->common}|execution|team|executionID=%s", 'alias' => 'managemembers');
 $lang->execution->menu->settings['subMenu']->whitelist = array('link' => "$lang->whitelist|execution|whitelist|executionID=%s", 'subModule' => 'personnel', 'alias' => 'addwhitelist');
 
-$lang->execution->dividerMenu = ',story,build,';
+$lang->execution->dividerMenu = ',story,build,more,';
 
 $lang->project->noMultiple                          = new stdclass();
 $lang->project->noMultiple->scrum                   = new stdclass();
@@ -517,16 +522,16 @@ $lang->devops->homeMenu = new stdclass();
 $lang->devops->homeMenu->repos        = array('link' => "{$lang->devops->repo}|repo|maintain", 'alias' => 'create,edit,import,createrepo');
 $lang->devops->homeMenu->compile      = array('link' => "{$lang->devops->compile}|job|browse", 'subModule' => 'compile,job');
 if($config->edition != 'open') $lang->devops->homeMenu->deploy = array('link' => "{$lang->devops->deploy}|deploy|browse", 'alias' => 'steps,managestep,create,edit,browse,view,scope,cases', 'subModule' => 'ops,deploy');
-$lang->devops->homeMenu->apps = array('link' => "{$lang->app->common}|space|browse", 'subModule' => 'instance,store,gitlab,gitea,gogs,jenkins,sonarqube', 'alias' => 'createapplication,binduser,edit');
+$lang->devops->homeMenu->apps  = array('link' => "{$lang->app->common}|space|browse", 'subModule' => 'instance,gitlab,gitea,gogs,jenkins,sonarqube', 'alias' => 'createapplication,binduser,edit');
+if($config->inQuickon) $lang->devops->homeMenu->store = array('link' => "{$lang->app->store}|store|browse", 'subModule' => 'store');
 
 $lang->devops->menu = new stdclass();
-$lang->devops->menu->code    = array('link' => "{$lang->repocode->common}|repo|browse|repoID=%s", 'alias' => 'diff,view,revision,blame,showsynccommit');
-$lang->devops->menu->commit  = array('link' => "{$lang->repo->commit}|repo|log|repoID=%s", 'exclude' => 'repo-showsynccommit');
+$lang->devops->menu->code    = array('link' => "{$lang->repocode->common}|repo|browse|repoID=%s", 'subModule' => 'repo', 'exclude' => 'repo-review,repo-browsetag,repo-browsebranch,repo-log,repo-diff,repo-revision');
+$lang->devops->menu->commit  = array('link' => "{$lang->repo->commit}|repo|log|repoID=%s", 'alias' => 'diff');
 $lang->devops->menu->branch  = array('link' => "{$lang->repo->branch}|repo|browsebranch|repoID=%s");
 $lang->devops->menu->tag     = array('link' => "{$lang->repo->tag}|repo|browsetag|repoID=%s");
 $lang->devops->menu->mr      = array('link' => "{$lang->devops->mr}|mr|browse|repoID=%s");
 $lang->devops->menu->compile = array('link' => "{$lang->devops->compile}|job|browse|repoID=%s", 'subModule' => 'compile,job');
-
 
 /* The menu order $lang->devops->menuOrder[30] is a reserved position for 'artifactrepo'. */
 $lang->devops->menuOrder[10] = 'repos';
@@ -536,9 +541,9 @@ $lang->devops->menuOrder[25] = 'branch';
 $lang->devops->menuOrder[35] = 'tag';
 $lang->devops->menuOrder[40] = 'mr';
 $lang->devops->menuOrder[45] = 'compile';
-$lang->devops->menuOrder[50] = 'deploy';
-$lang->devops->menuOrder[55] = 'apps';
-
+$lang->devops->menuOrder[55] = 'deploy';
+$lang->devops->menuOrder[70] = 'apps';
+$lang->devops->menuOrder[75] = 'store';
 
 $lang->devops->dividerMenu = ',apps,';
 
@@ -548,7 +553,8 @@ $lang->kanban->menu = new stdclass();
 /* Doc menu. */
 $lang->doc->menu = new stdclass();
 $lang->doc->menu->dashboard = array('link' => "{$lang->dashboard}|doc|index");
-$lang->doc->menu->my        = array('link' => "{$lang->doc->mySpace}|doc|mySpace|type=mine", 'alias' => 'myspace');
+$lang->doc->menu->quick     = array('link' => "{$lang->doc->quick}|doc|quick");
+$lang->doc->menu->my        = array('link' => "{$lang->doc->mySpace}|doc|mySpace|", 'alias' => 'myspace');
 $lang->doc->menu->product   = array('link' => "{$lang->doc->productSpace}|doc|productSpace|", 'alias' => 'productspace');
 $lang->doc->menu->project   = array('link' => "{$lang->doc->projectSpace}|doc|projectSpace|", 'alias' => 'projectspace');
 $lang->doc->menu->api       = array('link' => "{$lang->doc->apiSpace}|api|index", 'alias' => '', 'exclude' => 'index');
@@ -558,6 +564,7 @@ $lang->doc->dividerMenu = ',product,';
 
 /* Doc menu order. */
 $lang->doc->menuOrder[5]  = 'dashboard';
+$lang->doc->menuOrder[7]  = 'quick';
 $lang->doc->menuOrder[10] = 'my';
 $lang->doc->menuOrder[15] = 'team';
 $lang->doc->menuOrder[20] = 'product';
@@ -577,7 +584,7 @@ $lang->bi->dividerMenu = ',metric,';
 $lang->bi->menuOrder[5]  = 'screen';
 $lang->bi->menuOrder[10] = 'pivot';
 $lang->bi->menuOrder[15] = 'chart';
-$lang->bi->menuOrder[50] = 'metric';
+$lang->bi->menuOrder[20] = 'metric';
 
 /* Company menu.*/
 $lang->company->menu              = new stdclass();
@@ -680,9 +687,10 @@ $lang->navGroup->kanbanlane   = 'kanban';
 $lang->navGroup->kanbancolumn = 'kanban';
 $lang->navGroup->kanbancard   = 'kanban';
 
-$lang->navGroup->doc    = 'doc';
-$lang->navGroup->doclib = 'doc';
-$lang->navGroup->api    = 'doc';
+$lang->navGroup->doc         = 'doc';
+$lang->navGroup->doclib      = 'doc';
+$lang->navGroup->api         = 'doc';
+//$lang->navGroup->doctemplate = 'doc';
 
 $lang->navGroup->screen   = 'bi';
 $lang->navGroup->pivot    = 'bi';
@@ -783,10 +791,10 @@ $lang->navGroup->index   = 'index';
 $lang->navGroup->misc    = 'misc';
 $lang->navGroup->upgrade = 'upgrade';
 
-if(!$config->enableER) unset($lang->product->menu->epic, $lang->product->menuOrder[10]);
-if(!$config->URAndSR)  unset($lang->product->menu->requirement, $lang->product->menuOrder[15]);
+if((empty($_SESSION['tutorialMode']) || $config->systemMode == 'light') && !$config->enableER) unset($lang->product->menu->epic, $lang->product->menuOrder[10]);
+if((empty($_SESSION['tutorialMode']) || $config->systemMode == 'light') && !$config->URAndSR)  unset($lang->product->menu->requirement, $lang->product->menuOrder[15]);
 if(!helper::hasFeature('product_roadmap')) unset($lang->product->menu->roadmap, $lang->product->menuOrder[45]);
-if(!helper::hasFeature('product_track'))
+if(empty($_SESSION['tutorialMode']) && !helper::hasFeature('product_track'))
 {
     unset($lang->product->menu->track, $lang->product->menuOrder[30]);
     $lang->product->dividerMenu = str_replace(',track,', ',doc,', $lang->product->dividerMenu);

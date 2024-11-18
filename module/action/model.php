@@ -62,10 +62,14 @@ class actionModel extends model
         if(empty($comment)) $comment = '';
         $action->comment = fixer::stripDataTags($comment);
 
-        if($this->post->uid)
+        $uid = $this->post->uid;
+        if(is_string($uid)) $uid = array($uid);
+        if(!is_array($uid)) $uid = array();
+        $this->loadModel('file');
+        foreach($uid as $value)
         {
-            $action = $this->loadModel('file')->processImgURL($action, 'comment', $this->post->uid);
-            if($autoDelete) $this->file->autoDelete($this->post->uid);
+            $action = $this->file->processImgURL($action, 'comment', $value);
+            if($autoDelete) $this->file->autoDelete($value);
         }
 
         /* 获取对象的产品项目以及执行。 */
@@ -89,7 +93,7 @@ class actionModel extends model
         }
         if($hasRecentTable) $this->dao->insert(TABLE_ACTIONRECENT)->data($action)->autoCheck()->exec();
 
-        if($this->post->uid) $this->file->updateObjectID($this->post->uid, $objectID, $objectType);
+        $this->file->updateObjectID($uid, $objectID, $objectType);
 
         $this->loadModel('message')->send(strtolower($objectType), $objectID, $actionType, $actionID, $actor, $extra);
 
@@ -175,6 +179,7 @@ class actionModel extends model
         $histories = $this->getHistory(array_keys($actions));
         if($objectType == 'project') $actions = $this->processProjectActions($actions);
 
+        $this->loadModel('file');
         foreach($actions as $actionID => $action)
         {
             $actionName = strtolower($action->action);
@@ -191,12 +196,14 @@ class actionModel extends model
             if($actionName == 'createchildren') $this->actionTao->processCreateChildrenActionExtra($action);
             if($actionName == 'createrequirements') $this->actionTao->processCreateRequirementsActionExtra($action);
             if($actionName == 'deletechildrendemand') $this->actionTao->processActionExtra(TABLE_DEMAND, $action, 'title', 'demand', 'view');
+            if($actionName == 'createchildrendemand') $this->actionTao->processLinkStoryAndBugActionExtra($action, 'demand', 'view');
             if($actionName == 'buildopened') $this->actionTao->processActionExtra(TABLE_BUILD, $action, 'name', 'build', 'view');
             if($actionName == 'fromlib' && $action->objectType == 'case') $this->actionTao->processActionExtra(TABLE_TESTSUITE, $action, 'name', 'caselib', 'browse');
             if($actionName == 'changedbycharter' && $action->objectType == 'story') $this->actionTao->processActionExtra(TABLE_CHARTER, $action, 'name', 'charter', 'view');
             if(($actionName == 'finished' && $objectType == 'todo') || ($actionName == 'closed' && in_array($action->objectType, array('story', 'demand'))) || ($actionName == 'resolved' && $action->objectType == 'bug')) $this->actionTao->processAppendLinkByExtra($action);
             if($actionName == 'distributed' && $objectType == 'story') $this->actionTao->processActionExtra(TABLE_DEMAND, $action, 'title', 'demand', 'view', false, $this->config->vision != 'or' ? false : true);
 
+            if(in_array($actionName, array('retracted', 'restored')) && $action->objectType == 'demand') $this->actionTao->processActionExtra(TABLE_STORY, $action, 'title', 'epic', 'view');
             if(in_array($actionName, array('retracted', 'restored')) && $action->objectType != 'demand') $this->actionTao->processActionExtra(TABLE_STORY, $action, 'title', 'story', 'storyView');
             if(in_array($actionName, array('totask', 'linkchildtask', 'unlinkchildrentask', 'linkparenttask', 'unlinkparenttask', 'deletechildrentask', 'converttotask')) && $action->objectType != 'feedback') $this->actionTao->processActionExtra(TABLE_TASK, $action, 'name', 'task', 'view');;
             if(in_array($actionName, array('linkchildstory', 'unlinkchildrenstory', 'linkparentstory', 'unlinkparentstory', 'deletechildrenstory', 'createchildrenstory'))) $this->actionTao->processActionExtra(TABLE_STORY, $action, 'title', 'story', 'storyView');
@@ -216,12 +223,96 @@ class actionModel extends model
                 {
                     $history->diff = str_replace(array("class='iframe'", '+'), array("data-size='{\"width\": 800, \"height\": 500}' data-toggle='modal'", '%2B'), $history->diff);
                 }
+                $history->new = !empty($history->newValue) ? $history->newValue : $history->new;
+                $history->old = !empty($history->oldValue) ? $history->oldValue : $history->old;
+                $history = $this->file->replaceImgURL($history, 'old,new');
             }
 
-            $action->comment = $this->loadModel('file')->setImgSize($action->comment, $this->config->action->commonImgSize);
+            $action->comment = $this->file->setImgSize($action->comment, $this->config->action->commonImgSize);
             $actions[$actionID] = $action;
         }
         return $actions;
+    }
+
+    /**
+     * 将类型、状态等键值转换为具体的值。
+     * Process object type, status and etc.
+     *
+     * @param  object  $history
+     * @access public
+     * @return object
+     */
+    public function processHistory(object $history = null): object
+    {
+        if(empty($history)) return $history;
+        $users          = $this->loadModel('user')->getPairs('noletter');
+        $action         = $this->dao->select('objectType,objectID')->from(TABLE_ACTION)->where('id')->eq($history->action)->fetch();
+        $objectType     = $action->objectType == 'story' ? $this->dao->select('type')->from(TABLE_STORY)->where('id')->eq($action->objectID)->fetch('type') : $action->objectType;
+        $objectTypeList = array();
+
+        if(!isset($objectTypeList[$objectType])) $this->app->loadLang($objectType);
+        $objectTypeList[$objectType] = $objectType;
+
+        if(isset($this->config->action->approvalFields[$history->field]))
+        {
+            $fieldListVar = $this->config->action->approvalFields[$history->field];
+            $fieldList    = isset($this->lang->action->{$fieldListVar}) ? $this->lang->action->{$fieldListVar} : array();
+
+            if(isset($fieldList[$history->old])) $history->oldValue = $fieldList[$history->old];
+            if(isset($fieldList[$history->new])) $history->newValue = $fieldList[$history->new];
+        }
+        elseif(isset($this->config->action->multipleObjectFields[$objectType][$history->field]))
+        {
+            $fieldListVar = $this->config->action->multipleObjectFields[$objectType][$history->field];
+            $fieldList    = isset($this->lang->{$objectType}->{$fieldListVar}) ? $this->lang->{$objectType}->{$fieldListVar} : array();
+            if(!empty($history->old))
+            {
+                $history->oldValue = '';
+                $oldValues = explode(',', $history->old);
+                foreach($oldValues as $value) $history->oldValue .= zget($fieldList, $value) . ',';
+                $history->oldValue = trim($history->oldValue, ',');
+            }
+
+            if(!empty($history->new))
+            {
+                $history->newValue = '';
+                $newValues = explode(',', $history->new);
+                foreach($newValues as $value) $history->newValue .= zget($fieldList, $value) . ',';
+                $history->newValue = trim($history->newValue, ',');
+            }
+        }
+        elseif(strpos(",{$this->config->action->userFields},", ",{$history->field},") !== false)
+        {
+            if(isset($users[$history->old])) $history->oldValue = $users[$history->old];
+            if(isset($users[$history->new])) $history->newValue = $users[$history->new];
+        }
+        elseif(strpos(",{$this->config->action->multipleUserFields},", ",{$history->field},") !== false)
+        {
+            if(!empty($history->old))
+            {
+                $history->oldValue = '';
+                $oldValues = explode(',', $history->old);
+                foreach($oldValues as $value) $history->oldValue .= zget($users, $value) . ',';
+                $history->oldValue = trim($history->oldValue, ',');
+            }
+
+            if(!empty($history->new))
+            {
+                $history->newValue = '';
+                $newValues = explode(',', $history->new);
+                foreach($newValues as $value) $history->newValue .= zget($users, $value) . ',';
+                $history->newValue = trim($history->newValue, ',');
+            }
+        }
+        else
+        {
+            $fieldListVar = isset($this->config->action->objectFields[$objectType][$history->field]) ? $this->config->action->objectFields[$objectType][$history->field] : $history->field . 'List';
+            $fieldList    = isset($this->lang->{$objectType}->{$fieldListVar}) ? $this->lang->{$objectType}->{$fieldListVar} : array();
+
+            if(isset($fieldList[$history->old])) $history->oldValue = $fieldList[$history->old];
+            if(isset($fieldList[$history->new])) $history->newValue = $fieldList[$history->new];
+        }
+        return $history;
     }
 
     /**
@@ -307,11 +398,17 @@ class actionModel extends model
 
         /* 按对象类型对已删除的对象进行分组，并获取名称字段。 */
         /* Group trashes by objectType, and get there name field. */
+        $auditplanIdList = array();
         foreach($trashes as $object)
         {
             $object->objectType = str_replace('`', '', $object->objectType);
+            if($object->objectType == 'auditplan') $auditplanIdList[$object->objectID] = $object->objectID;
             $typeTrashes[$object->objectType][] = $object->objectID;
         }
+
+        $auditplanList = $this->dao->select('id,objectID,objectType')->from(TABLE_AUDITPLAN)->where('id')->in($auditplanIdList)->fetchAll('id');
+        foreach($auditplanList as $auditplan) $typeTrashes[$auditplan->objectType][] = $auditplan->objectID;
+
         foreach($typeTrashes as $objectType => $objectIdList)
         {
             if(!isset($this->config->objectTables[$objectType])) continue;
@@ -338,7 +435,16 @@ class actionModel extends model
             if($trash->objectType == 'pipeline' && isset($objectNames['gitlab'][$trash->objectID]))  $trash->objectType = 'gitlab';
             if($trash->objectType == 'pipeline' && isset($objectNames['jenkins'][$trash->objectID])) $trash->objectType = 'jenkins';
 
-            $trash->objectName = isset($objectNames[$trash->objectType][$trash->objectID]) ? $objectNames[$trash->objectType][$trash->objectID] : '';
+            if($trash->objectType == 'auditplan')
+            {
+                $realObjectID      = isset($auditplanList[$trash->objectID]) ? $auditplanList[$trash->objectID]->objectID   : 0;
+                $realObjectType    = isset($auditplanList[$trash->objectID]) ? $auditplanList[$trash->objectID]->objectType : '';
+                $trash->objectName = isset($objectNames[$realObjectType][$realObjectID]) ? $objectNames[$realObjectType][$realObjectID] : '';
+            }
+            else
+            {
+                $trash->objectName = isset($objectNames[$trash->objectType][$trash->objectID]) ? $objectNames[$trash->objectType][$trash->objectID] : '';
+            }
         }
         return $trashes;
     }
@@ -454,14 +560,10 @@ class actionModel extends model
         if(empty($actionID)) return false;
         foreach($changes as $change)
         {
-            if(is_object($change))
-            {
-                $change->action = $actionID;
-            }
-            else
-            {
-                $change['action'] = $actionID;
-            }
+            $change = is_array($change) ? json_decode(json_encode($change)) : $change;
+            $change->action = $actionID;
+
+            $change = $this->processHistory($change);
             $this->dao->insert(TABLE_HISTORY)->data($change)->exec();
             if(dao::isError()) return false;
         }
@@ -669,13 +771,11 @@ class actionModel extends model
             }
         }
 
-        if($action->objectType == 'story' && $action->action == 'closed')
+        $isCloseStory = $action->objectType == 'story' && $action->action == 'closed';
+        if($isCloseStory && !empty($extra) && strpos($extra, '|') !== false)
         {
-            if(!empty($extra) && strpos($extra, '|') !== false)
-            {
-                list($extra, $status) = explode('|', $extra);
-                if(!empty($desc['extra'][$extra])) $actionDesc = str_replace('$extra', $desc['extra'][$extra], $desc['main']);
-            }
+            list($extra) = explode('|', $extra);
+            if(!empty($desc['extra'][$extra])) $actionDesc = str_replace('$extra', $desc['extra'][$extra], $desc['main']);
         }
 
         if($action->objectType == 'module' && strpos(',created,moved,', $action->action) !== false)
@@ -817,8 +917,7 @@ class actionModel extends model
     {
         /* 计算时间段的开始和结束时间。 */
         /* Computer the begin and end date of a period. */
-        $beginAndEnd = $this->computeBeginAndEnd($period);
-        extract($beginAndEnd);
+        $beginAndEnd = $this->computeBeginAndEnd($period, $date, $direction);
 
         /* 构建权限搜索条件。 */
         /* Build has priv search condition. */
@@ -833,35 +932,12 @@ class actionModel extends model
         $programCondition = empty($this->app->user->view->programs) ? '0' : $this->app->user->view->programs;
         $condition .= " OR (`objectID` in ($programCondition) AND `objectType` = 'program')";
 
-        /* 用户不传入时间的情况下，限定只能查询今年的数据。 */
-        /* If the user does not enter the time, only this year's data can be queried. */
-        $beginDate = '';
-        if($period == 'all')
-        {
-            $year = date('Y');
-
-            /* 查询所有动态时最多查询最后两年的数据。 */
-            /* When query all dynamic then query the data of the last two years at most. */
-            if($this->app->getMethodName() == 'dynamic') $year = $year - 1;
-            $beginDate = $year . '-01-01';
-        }
-
-        /* 查询项目动态时，只查项目创建日期之后的动态。 */
-        /* When you query project actions, only the actions after the date the project was created. */
-        if(is_numeric($projectID))
-        {
-            $openedDate = $this->dao->select('openedDate')->from(TABLE_PROJECT)->where('id')->eq($projectID)->fetch('openedDate');
-            $beginDate  = $openedDate > $beginDate ? $openedDate : $beginDate;
-        }
-
-        $this->actionTao->processEffortCondition($condition, $period, $begin, $end, $beginDate);
-
         $noMultipleExecutions = $this->dao->select('id')->from(TABLE_PROJECT)->where('multiple')->eq(0)->andWhere('type')->in('sprint,kanban')->fetchPairs();
         if($noMultipleExecutions) $condition = count($noMultipleExecutions) > 1 ? "({$condition}) AND (`objectType` != 'execution' || (`objectID` NOT " . helper::dbIN($noMultipleExecutions) . " AND `objectType` = 'execution'))" : "({$condition}) AND (`objectType` != 'execution' || (`objectID` !" . helper::dbIN($noMultipleExecutions) . " AND `objectType` = 'execution'))";
 
         $condition = "({$condition})";
 
-        $actions = $this->actionTao->getActionListByCondition($condition, $date, $period, $begin, $end, $direction, $account, $beginDate, $productID, $projectID, $executionID, $executions, $actionCondition, $orderBy, $limit);
+        $actions = $this->actionTao->getActionListByCondition($condition, $date, $beginAndEnd['begin'], $beginAndEnd['end'], $account, $productID, $projectID, $executionID, $executions, $actionCondition, $orderBy, $limit);
         if(!$actions) return array();
 
         $this->loadModel('common')->saveQueryCondition($this->dao->get(), 'action');
@@ -1173,7 +1249,20 @@ class actionModel extends model
                 elseif($action->objectType == 'story')
                 {
                     $story = $this->loadModel('story')->getByID($action->objectID);
-                    if(!empty($story) && isset($shadowProducts[$story->product])) $moduleName = 'projectstory';
+                    if(!empty($story) && isset($shadowProducts[$story->product]))
+                    {
+                        $moduleName = 'projectstory';
+                        $methodName = 'view';
+                    }
+                    if(!empty($action->project) && !$project)
+                    {
+                        $project = $this->loadModel('project')->getById($action->project);
+                        if(empty($project->multiple))
+                        {
+                            $moduleName = 'execution';
+                            $methodName = 'storyView';
+                        }
+                    }
                 }
                 $action->objectLink = helper::createLink($moduleName, $methodName, $params);
             }
@@ -1198,13 +1287,37 @@ class actionModel extends model
      * Compute the begin date and end date of a period.
      *
      * @param  string $period   all|today|yesterday|twodaysago|latest2days|thisweek|lastweek|thismonth|lastmonth
+     * @param  string $date
+     * @param  string $direction pre|next
      * @access public
      * @return array
      */
-    public function computeBeginAndEnd(string $period): array
+    public function computeBeginAndEnd(string $period, string $date, string $direction): array
     {
         $period = strtolower($period);
-        if($period == 'all') return array('begin' => EPOCH_DATE,  'end' => FUTURE_DATE);
+
+        /* 1. 确切的日期。 */
+        /* 1. The exact date. */
+        if($date)
+        {
+            if($direction == 'pre')   return array('begin' => $date,  'end' => FUTURE_DATE);
+            if($direction == 'next')  return array('begin' => EPOCH_DATE,  'end' => $date);
+            return array('begin' => $date, 'end' => $date);
+        }
+
+        /* 2. 所有时间。 */
+        /* 2. All time. */
+        if($period == 'all')
+        {
+            $beginDate = '';
+            $year = date('Y');
+
+            /* 查询所有动态时最多查询最后两年的数据。 */
+            /* When query all dynamic then query the data of the last two years at most. */
+            if($this->app->getMethodName() == 'dynamic') $year = $year - 1;
+            $beginDate = $year . '-01-01';
+            return array('begin' => $beginDate, 'end' => FUTURE_DATE);
+        }
 
         $this->app->loadClass('date');
 
@@ -1333,8 +1446,9 @@ class actionModel extends model
         $action = $this->getById($actionID);
         if(!$action || $action->action != 'deleted') return false;
 
-        list($table, $orderby, $field) = $this->actionTao->getUndeleteParamsByObjectType($action->objectType);
-        $object = $this->actionTao->getObjectBaseInfo($table, array('id' => $action->objectID), $field, $orderby);
+        list($table, $orderby, $field, $queryKey) = $this->actionTao->getUndeleteParamsByObjectType($action->objectType);
+        if(empty($queryKey)) $queryKey = 'id';
+        $object = $this->actionTao->getObjectBaseInfo($table, array($queryKey => $action->objectID), $field, $orderby);
         if(empty($object)) return false;
 
         $result = $this->checkActionCanUndelete($action, $object);
@@ -1359,7 +1473,11 @@ class actionModel extends model
 
         /* 还原已删除的需求时重算OR需求和业用研需的阶段。 */
         /* The stage of recalculating OR requirements and industrial research needs when restoring deleted requirements. */
-        if(in_array($action->objectType, array('story', 'epic', 'requirement'))) $this->loadModel('story')->setStage($action->objectID);
+        if(in_array($action->objectType, array('story', 'epic', 'requirement')))
+        {
+            $this->loadModel('story')->setStage($action->objectID);
+            $this->story->updateParentStatus($action->objectID);
+        }
         if($action->objectType == 'demand' && !empty($object->parent)) $this->loadModel('demand')->updateParentDemandStage($object->parent);
 
         /* 在action表中更新action记录。 */
@@ -1513,7 +1631,7 @@ class actionModel extends model
 
         /* 移除搜索中的时间筛选条件。 */
         /* Remove time filter from search. */
-        $condition = preg_replace("/AND +date[\<\>]'\d{4}\-\d{2}\-\d{2}'/", '', $condition);
+        $condition = preg_replace("/AND +`?date`? +(<|>|<=|>=) +'\d{4}\-\d{2}\-\d{2}'/", '', $condition);
         $count     = $this->dao->select('COUNT(1) AS count')
             ->from(TABLE_ACTION)
             ->where($condition)
@@ -1536,9 +1654,14 @@ class actionModel extends model
     public function saveIndex(string $objectType, int $objectID, string $actionType): bool
     {
         $this->loadModel('search');
+        if($this->config->edition != 'open' && $this->app->isServing()) $this->loadModel('workflow')->appendSearchConfig();
+
         $actionType = strtolower($actionType);
         if(!isset($this->config->search->fields->{$objectType})) return false;
-        if(strpos($this->config->search->buildAction, ",{$actionType},") === false && empty($_POST['comment'])) return false;
+
+        $isCommentedAction = $actionType == 'commented';
+        if(strpos($this->config->search->buildAction, ",{$actionType},") === false && !$isCommentedAction && empty($_POST['comment'])) return false;
+        if($isCommentedAction && empty($_POST['actioncomment'])) return false;
         if($actionType == 'deleted' || $actionType == 'erased') return $this->search->deleteIndex($objectType, $objectID);
 
         $field = $this->config->search->fields->{$objectType};

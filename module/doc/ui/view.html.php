@@ -163,7 +163,7 @@ $docHeader = div
             (
                 setClass('btn ghost square'),
                 icon('fullscreen'),
-                set::url('javascript:$("#docPanel").fullscreen()'),
+                set::url('javascript:$("#docPanel").fullscreen()')
             ),
             $canCollect ? html($starBtn) : null,
             ($config->vision == 'rnd' and ($config->edition == 'max' or $config->edition == 'ipd') and $app->tab == 'project') ? $importLibBtn : null,
@@ -173,6 +173,7 @@ $docHeader = div
                 set::url(createLink('doc', 'edit', "docID=$doc->id")),
                 $doc->type != 'text' ? setData('toggle', 'modal') : null,
                 setData('app', $app->tab),
+                setClass('doc-edit-btn'),
                 set::icon('edit')
             ) : null,
             dropdown
@@ -221,13 +222,18 @@ $contentDom = div
     $keywordsLabel ? div
     (
         setClass('row items-center gap-2 mt-1 pl-px'),
-        $keywordsLabel,
+        $keywordsLabel
     ) : null,
     div
     (
         setID('docEditor'),
         setClass('detail-content article'),
-        editor
+        $doc->contentType === 'doc' ? pageEditor
+        (
+            set::size('auto'),
+            set::readonly(true),
+            set::value($doc->content)
+        ) : editor
         (
             set::resizable(false),
             set::markdown($doc->contentType == 'markdown'),
@@ -307,7 +313,7 @@ panel
             setClass('flex-none border-l'),
             setStyle('width', 'var(--doc-sidebar-width)'),
             $treeDom,
-            $historyDom,
+            $historyDom
         ),
         $toggleTreeBtn
     )

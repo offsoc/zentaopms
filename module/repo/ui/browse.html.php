@@ -205,6 +205,7 @@ $downloadWg = div
         setStyle(array('margin-top' => '20px')),
         btn
         (
+            on::click()->call('downloadZip'),
             set::icon('down-circle'),
             set::className('downloadZip-btn'),
             set::text($lang->repo->downloadZip)
@@ -253,7 +254,7 @@ dtable
     set::afterRender(jsRaw('window.afterRender')),
     set::onRenderCell(jsRaw('window.renderCell')),
     set::canRowCheckable(jsRaw('function(rowID){return false;}')),
-    set::footPager()
+    set::footPager(false)
 );
 
 /* zin: Define the sidebar in main content. */

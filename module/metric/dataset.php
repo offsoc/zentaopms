@@ -10,6 +10,22 @@ class dataset
     public $dao;
 
     /**
+     * Config.
+     *
+     * @var object
+     * @access public
+     */
+    public $config;
+
+    /**
+     * User vision.
+     *
+     * @var string
+     * @access public
+     */
+    public $vision;
+
+    /**
      * __construct.
      *
      * @param  DAO    $dao
@@ -438,8 +454,7 @@ class dataset
      */
     public function getAllStoriesWithExecution($fieldList)
     {
-        $stmt = $this->dao->select($fieldList)
-            ->from(TABLE_STORY)->alias('t1')
+        $stmt = $this->dao->select($fieldList)->from(TABLE_STORY)->alias('t1')
             ->leftJoin(TABLE_PRODUCT)->alias('t2')->on('t1.product=t2.id')
             ->leftJoin(TABLE_PROJECTSTORY)->alias('t3')->on('t1.id=t3.story')
             ->leftJoin(TABLE_PROJECT)->alias('t4')->on('t3.project=t4.id')
@@ -532,7 +547,7 @@ class dataset
      */
     public function getDevStories($fieldList)
     {
-        if(strpos($fieldList, 't3.') === false)
+        if(strpos($fieldList, '`t3`.') === false)
         {
             $stmt = $this->dao->select($fieldList)
                 ->from(TABLE_STORY)->alias('t1')
@@ -612,7 +627,7 @@ class dataset
      * @access public
      * @return PDOStatement
      */
-    public function getDevRequirementsWithProject($fieldList)
+    public function getRequirementsWithProject($fieldList)
     {
         $stmt = $this->dao->select($fieldList)->from(TABLE_STORY)->alias('t1')
             ->leftJoin(TABLE_PRODUCT)->alias('t2')->on('t1.product=t2.id')
@@ -701,7 +716,6 @@ class dataset
         $stmt = $this->dao->select($fieldList)->from(TABLE_CASESTEP)->alias('t1')
             ->leftJoin(TABLE_PROJECTCASE)->alias('t2')->on('t1.case = t2.case')
             ->leftJoin(TABLE_CASE)->alias('t3')->on('t2.case = t3.id and t1.version = t3.version')
-            ->leftJoin(TABLE_PRODUCT)->alias('t4')->on('t3.product = t4.id')
             ->leftJoin(TABLE_PROJECT)->alias('t5')->on('t5.id = t2.project')
             ->leftJoin(TABLE_PROJECT)->alias('t6')->on('t6.id = t5.project')
             ->where('t3.deleted')->eq('0')
@@ -724,7 +738,6 @@ class dataset
     {
         $stmt = $this->dao->select($fieldList)->from(TABLE_PROJECTCASE)->alias('t1')
             ->leftJoin(TABLE_CASE)->alias('t2')->on('t1.case = t2.id')
-            ->leftJoin(TABLE_PRODUCT)->alias('t3')->on('t2.product = t3.id')
             ->leftJoin(TABLE_PROJECT)->alias('t4')->on('t4.id = t1.project')
             ->leftJoin(TABLE_PROJECT)->alias('t5')->on('t5.id = t4.project')
             ->where('t4.deleted')->eq('0')
@@ -805,7 +818,7 @@ class dataset
         $stmt = $this->dao->select($fieldList)->from(TABLE_TASK)->alias('t1')
             ->leftJoin(TABLE_PROJECT)->alias('t2')->on('t1.execution=t2.id')
             ->leftJoin(TABLE_PROJECT)->alias('t3')->on('t2.project=t3.id')
-            ->beginIF(strpos($fieldList, 't4') !== false)->leftJoin(TABLE_TASKTEAM)->alias('t4')->on("t1.id=t4.task and t1.mode='multi'")->fi()
+            ->leftJoin(TABLE_TASKTEAM)->alias('t4')->on("t1.id=t4.task and t1.mode='multi'")
             ->where('t2.type')->in('sprint,kanban,stage')
             ->andWhere('t1.deleted')->eq('0')
             ->andWhere('t2.deleted')->eq('0')
@@ -827,12 +840,27 @@ class dataset
         $stmt = $this->dao->select($fieldList)->from(TABLE_TASK)->alias('t1')
             ->leftJoin(TABLE_PROJECT)->alias('t2')->on('t1.execution=t2.id')
             ->leftJoin(TABLE_PROJECT)->alias('t3')->on('t2.project=t3.id')
-            ->leftJoin(TABLE_USER)->alias('t4')->on('t1.openedBy=t4.account')
-            ->leftJoin(TABLE_TASK)->alias('t5')->on('t1.parent=t5.id')
             ->where('t2.type')->in('sprint,kanban,stage')
             ->andWhere('t1.deleted')->eq('0')
             ->andWhere('t2.deleted')->eq('0')
             ->andWhere('t3.deleted')->eq('0');
+
+        return $this->defaultWhere($stmt, 't1');
+    }
+
+    public function getTasksWithBuildInfo($fieldList)
+    {
+        $stmt = $this->dao->select($fieldList)->from(TABLE_TASK)->alias('t1')
+            ->leftJoin(TABLE_BUG)->alias('t2')->on('t1.fromBug = t2.id')
+            ->leftJoin(TABLE_PROJECT)->alias('t3')->on('t1.execution=t3.id')
+            ->leftJoin(TABLE_PROJECT)->alias('t4')->on('t3.project=t4.id')
+            ->leftJoin(TABLE_BUILD)->alias('t5')->on('t5.execution=t3.id')
+            ->where('t3.type')->in('sprint,stage,kanban')
+            ->andWhere('t1.deleted')->eq('0')
+            ->andWhere('t3.deleted')->eq('0')
+            ->andWhere('t4.deleted')->eq('0')
+            ->andWhere('t1.fromBug')->ne(0)
+            ->andWhere('t1.parent')->ne('-1');
 
         return $this->defaultWhere($stmt, 't1');
     }
@@ -1183,16 +1211,31 @@ class dataset
             ->fetch('value');
         if(empty($defaultHours)) $defaultHours = 7;
 
-        $task = $this->dao->select('SUM(t1.consumed) as consumed, t1.project')
+        if(strpos($fieldList, '`t2`.') === false)
+        {
+            $stmt = $this->dao->select("$fieldList, $defaultHours AS defaultHours")
+                ->from(TABLE_PROJECT)->alias('t1')
+                ->where('t1.type')->eq('project')
+                ->andWhere('t1.deleted')->eq('0');
+
+            return $this->defaultWhere($stmt, 't1');
+        }
+
+        $task = $this->dao->select('SUM(t1.consumed) AS consumed, t1.project')
             ->from(TABLE_TASK)->alias('t1')
             ->where('t1.deleted')->eq('0')
             ->andWhere('t1.parent')->ne('-1');
 
-        $task = $this->defaultWhere($task, 't1')->groupBy('t1.project')->get();
+        $query = $this->defaultWhere($task, 't1')->groupBy('t1.project')->get();
 
-        $stmt =  $this->dao->select("$fieldList, $defaultHours as defaultHours")
+        $table = 'tmp_task_getProjectTasks';
+        $this->dao->exec("DROP TABLE IF EXISTS `{$table}`");
+        $this->dao->exec("CREATE TABLE `{$table}` AS {$query}");
+        $this->dao->exec("CREATE INDEX `project` ON `{$table}` (`project`)");
+
+        $stmt = $this->dao->select("$fieldList, $defaultHours AS defaultHours")
             ->from(TABLE_PROJECT)->alias('t1')
-            ->leftJoin("($task)")->alias('t2')->on('t1.id = t2.project')
+            ->leftJoin($table)->alias('t2')->on('t1.id = t2.project')
             ->where('t1.type')->eq('project')
             ->andWhere('t1.deleted')->eq('0');
 

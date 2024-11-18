@@ -49,6 +49,7 @@ class build extends control
     {
         $this->loadModel('execution');
         $this->loadModel('project');
+        $this->loadModel('file');
 
         /* Set menu. */
         if($this->app->tab == 'project')
@@ -65,7 +66,7 @@ class build extends control
 
         if(!empty($_POST))
         {
-            $build = form::data()->setDefault('createdBy', $this->app->user->account)->get();
+            $build = $this->buildZen->buildBuildForCreate();
             if(!empty($_FILES['buildFiles'])) $_FILES['files'] = $_FILES['buildFiles'];
             unset($_FILES['buildFiles']);
             if(dao::isError()) return $this->sendError(dao::getError());
@@ -98,7 +99,7 @@ class build extends control
     {
         if(!empty($_POST))
         {
-            $build = form::data($this->config->build->form->edit, $buildID)->get();
+            $build = $this->buildZen->buildBuildForEdit($buildID);
             $changes = $this->build->update($buildID, $build);
             if(dao::isError()) return $this->sendError(dao::getError());
 

@@ -101,6 +101,10 @@ $config->upgrade->execFlow['20_1_0']      = array('functions' => 'completeClassi
 $config->upgrade->execFlow['20_1_1']      = array('functions' => 'syncActivityAndOutput,changeCustomStoryStage,processStoryRelation,processLinkStories,addERName,addTR4APoint');
 $config->upgrade->execFlow['20_3_0']      = array('functions' => 'importBuildinWorkflow,addFlowFields,processProjectRoadmapsByCharter', 'params' => array('importBuildinWorkflow' => array('or'), 'addFlowFields' => array('biz10.2')));
 $config->upgrade->execFlow['20_4']        = array('functions' => 'createDefaultDoclibSpace,updateStoryVerifiedDate,xuanNotifyJitsiConference', 'xxsqls' => "$appRoot/db/upgradexuanxuan7.3.sql,$appRoot/db/upgradexuanxuan9.0.sql");
+$config->upgrade->execFlow['20_5']        = array('functions' => 'fixWorkflowFieldOptions');
+$config->upgrade->execFlow['20_6']        = array('functions' => 'processDemandFiles,processSqlbuilderTables');
+$config->upgrade->execFlow['20_7']        = array('functions' => 'upgradeMyDocSpace');
+$config->upgrade->execFlow['20_8']        = array('functions' => 'processWorkflowGroups');
 
 if(!empty($config->isINT))
 {
@@ -167,6 +171,7 @@ $config->upgrade->execFlow['biz5_3_1']     = array('functions' => 'processFeedba
 $config->upgrade->execFlow['biz6_4']       = array('functions' => 'importLiteModules');
 $config->upgrade->execFlow['biz8_12']      = array('functions' => 'AddFeedbackDatasource');
 $config->upgrade->execFlow['biz10_0_0']    = array('functions' => 'importERURModules');
+$config->upgrade->execFlow['biz10_5']      = array('functions' => 'processBuildinBrowseFields,importCaseLibModule,appendFlowFieldsForBelong');
 
 if(!empty($config->isINT))
 {

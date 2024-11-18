@@ -15,7 +15,7 @@ function removeTips()
     const $formGroup = $(this).closest('.form-group');
     $formGroup.removeClass('has-warning');
     $formGroup.find('.has-warning').removeClass('has-warning');
-    $formGroup.find('.form-tip').remove();
+    $formGroup.find('.form-tip').addClass('hidden');
 }
 
 /**
@@ -25,7 +25,7 @@ function removeTips()
  * @access public
  * @return void
  */
-function removeAllTips()
+window.removeAllTips = function()
 {
     $('.has-warning').removeClass('has-warning');
     $('.text-warning').remove();

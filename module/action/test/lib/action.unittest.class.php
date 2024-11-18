@@ -794,4 +794,18 @@ class actionTest
     {
         return call_user_func_array(array($this->objectModel, $method), $args);
     }
+
+    /**
+     * 将类型、状态等键值转换为具体的值。
+     * Process object type, status and etc.
+     *
+     * @param  int    $historyID
+     * @access public
+     * @return object
+     */
+    public function processHistoryTest(int $historyID): object
+    {
+        $history = $this->objectModel->dao->select('*')->from(TABLE_HISTORY)->where('id')->eq($historyID)->fetch();
+        return $this->objectModel->processHistory($history);
+    }
 }

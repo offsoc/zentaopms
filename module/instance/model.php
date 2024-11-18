@@ -384,16 +384,24 @@ class instanceModel extends model
      * @param  int          $id
      * @param  object|array $newInstance
      * @access public
-     * @return int
+     * @return bool
      */
-    public function updateByID(int $id, object|array $newInstance)
+    public function updateByID(int $id, object|array $newInstance): bool
     {
-        return $this->dao->update(TABLE_INSTANCE)->data($newInstance, 'memory_kb,cpu,disk_gb')
+        $this->dao->update(TABLE_INSTANCE)->data($newInstance, 'memory_kb,cpu,disk_gb')
             ->autoCheck()
             ->checkIF(isset($newInstance->name), 'name', 'notempty')
             ->checkIF(isset($newInstance->status), 'status', 'in', array_keys($this->lang->instance->statusList))
             ->where('id')->eq($id)
             ->exec();
+
+        if(!empty($newInstance->name))
+        {
+            $instance = $this->fetchByID($id);
+            $server   = $this->loadModel('space')->getExternalAppByApp($instance);
+            if($server) $this->dao->update(TABLE_PIPELINE)->set('name')->eq($newInstance->name)->where('id')->eq($server->id)->exec();
+        }
+        return dao::isError();
     }
 
     /**
@@ -526,6 +534,16 @@ class instanceModel extends model
         {
             $settingsMap->ci = new stdclass();
             $settingsMap->ci->enabled = true;
+        }
+
+        if($instance->source == 'system')
+        {
+            $user = $this->dao->select('account')->from(TABLE_USER)->where('deleted')->eq(0)->fetch('account');
+            if($user)
+            {
+                $settingsMap->auth = new stdclass();
+                $settingsMap->auth->username = $user;
+            }
         }
 
         if(empty($customData->dbType) || $customData->dbType == 'unsharedDB' || empty($customData->dbService)) return $settingsMap;
@@ -685,7 +703,7 @@ class instanceModel extends model
         $instanceData->logo            = $app->logo;
         $instanceData->desc            = $app->desc;
         $instanceData->introduction    = isset($app->introduction) ? $app->introduction : $app->desc;
-        $instanceData->source          = 'cloud';
+        $instanceData->source          = $this->app->rawModule == 'instance' ? 'cloud' : 'system';
         $instanceData->channel         = $channel;
         $instanceData->chart           = $app->chart;
         $instanceData->appVersion      = $app->app_version;
@@ -733,7 +751,7 @@ class instanceModel extends model
         if(strtolower($this->config->CNE->app->domain) == 'demo.haogs.cn') $apiParams->settings_snippets = array('quickon_saas'); // Only for demo environment.
 
         $result = $this->cne->installApp($apiParams);
-        if($result->code != 200)
+        if($result->code != 200 && $instance->source != 'system')
         {
             $this->dao->delete()->from(TABLE_INSTANCE)->where('id')->eq($instance->id)->exec();
             dao::$errors['server'][] = $result->message;
@@ -985,7 +1003,7 @@ class instanceModel extends model
     }
 
     /**
-     * 打印内存使用信息。
+     * 打印存储使用信息。
      * Print memory usage.
      *
      * @param  object $instance
@@ -994,32 +1012,7 @@ class instanceModel extends model
      * @access public
      * @return array
      */
-    public static function printMemUsage(object $instance, object $metrics): array
-    {
-        if($instance->source === 'user') return array('color' => '', 'tip' => '', 'rate' => '', 'usage' => '', 'limit' => '');
-        $rate = $instance->status == 'stopped' ? 0 : $metrics->rate;
-        $tip  = "{$rate}% = " . helper::formatKB($metrics->usage) . ' / ' . helper::formatKB($metrics->limit);
-
-        if(empty($color) && $rate == 0)               $color = 'gray';
-        if(empty($color) && $rate > 0 && $rate < 50)  $color = 'secondary';
-        if(empty($color) && $rate >= 0 && $rate < 70) $color = 'warning';
-        if(empty($color) && $rate >= 0 && $rate < 90) $color = 'important';
-        if(empty($color) && $rate >= 80)              $color = 'danger';
-
-        return array('color' => $color, 'tip' => $tip, 'rate' => $rate . '%', 'usage' => helper::formatKB($metrics->usage), 'limit' => helper::formatKB($metrics->limit));
-    }
-
-    /**
-     * 打印存储使用信息。
-     * Print the volume usage.
-     *
-     * @param  object $instance
-     * @param  object $metrics
-     * @static
-     * @access public
-     * @return array
-     */
-    public static function printVolUsage(object $instance, object $metrics): array
+    public static function printStorageUsage(object $instance, object $metrics): array
     {
         if($instance->source === 'user') return array('color' => '', 'tip' => '', 'rate' => '', 'usage' => '', 'limit' => '');
         $rate = $instance->status == 'stopped' ? 0 : $metrics->rate;
@@ -1127,6 +1120,7 @@ class instanceModel extends model
         $pipeline->createdBy   = 'system';
         $pipeline->createdDate = helper::now();
         $pipeline->url         = $url;
+        $pipeline->instanceID  = $instance->id;
         $pipeline->name        = $this->generatePipelineName($instance);
         $pipeline->token       = zget($tempMappings, 'api_token', '');
         $pipeline->account     = zget($tempMappings, 'z_username', '');

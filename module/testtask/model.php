@@ -57,6 +57,8 @@ class testtaskModel extends model
      */
     public function getProductTasks(int $productID, string $branch = 'all', string $type = '', string $begin = '', string $end = '', string $orderBy = 'id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getTesttasks();
+
         $scopeAndStatus = explode(',', $type);
         $scope          = !empty($scopeAndStatus[0]) ? $scopeAndStatus[0] : '';
         $status         = !empty($scopeAndStatus[1]) ? $scopeAndStatus[1] : '';
@@ -105,7 +107,7 @@ class testtaskModel extends model
     {
         $begin = '';
         $end   = '';
-        $beginAndEnd = $this->loadModel('action')->computeBeginAndEnd($browseType);
+        $beginAndEnd = $this->loadModel('action')->computeBeginAndEnd($browseType, '', 'next');
         if($browseType != 'all' and $browseType != 'newest' and !empty($beginAndEnd))
         {
             $begin = $beginAndEnd['begin'];
@@ -181,6 +183,8 @@ class testtaskModel extends model
      */
     public function getExecutionTasks(int $executionID, string $objectType = 'execution', string $orderBy = 'id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getTesttasks();
+
         return $this->dao->select('t1.*, t2.name AS buildName, t3.name AS productName')
             ->from(TABLE_TESTTASK)->alias('t1')
             ->leftJoin(TABLE_BUILD)->alias('t2')->on('t1.build = t2.id')
@@ -243,6 +247,8 @@ class testtaskModel extends model
      */
     public function getPairsByList(array $taskIdList): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getTesttaskPairs();
+
         return $this->dao->select('id,name')->from(TABLE_TESTTASK)->where('id')->in($taskIdList)->fetchPairs();
     }
 
@@ -257,6 +263,8 @@ class testtaskModel extends model
      */
     public function getByID(int $testtaskID, bool $setImgSize = false): object|false
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getTesttask();
+
         $testtask = $this->dao->select('*')->from(TABLE_TESTTASK)->where('id')->eq($testtaskID)->fetch();
         if(!$testtask) return false;
 
@@ -380,6 +388,8 @@ class testtaskModel extends model
      */
     public function getAllLinkableCases(object $task, string $query = '', array $linkedCases = array(), object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getCases();
+
         return $this->dao->select('*')->from(TABLE_CASE)
             ->where('deleted')->eq('0')
             ->andWhere('status')->ne('wait')
@@ -979,7 +989,7 @@ class testtaskModel extends model
         $orderBy = $this->addPrefixToOrderBy($orderBy);
         $cases   = $this->loadModel('testsuite')->getLinkedCasePairs($suiteID);
 
-        return $this->dao->select('t2.*,t1.*,t3.title as storyTitle,t2.status as caseStatus')->from(TABLE_TESTRUN)->alias('t1')
+        return $this->dao->select('t2.*,t1.*,t3.title as storyTitle,t2.status as caseStatus,t2.version as caseVersion')->from(TABLE_TESTRUN)->alias('t1')
             ->leftJoin(TABLE_CASE)->alias('t2')->on('t1.case = t2.id')
             ->leftJoin(TABLE_STORY)->alias('t3')->on('t2.story = t3.id')
             ->where('t1.task')->eq($taskID)
@@ -1028,7 +1038,7 @@ class testtaskModel extends model
     {
         $orderBy = $this->addPrefixToOrderBy($orderBy);
 
-        return $this->dao->select('t2.*, t1.*, t3.title AS storyTitle, t2.status AS caseStatus')->from(TABLE_TESTRUN)->alias('t1')
+        return $this->dao->select('t2.*, t1.*, t3.title AS storyTitle, t2.status AS caseStatus,t2.version AS caseVersion')->from(TABLE_TESTRUN)->alias('t1')
             ->leftJoin(TABLE_CASE)->alias('t2')->on('t1.case = t2.id')
             ->leftJoin(TABLE_STORY)->alias('t3')->on('t2.story = t3.id')
             ->where('t1.task')->eq($taskID)
@@ -1057,19 +1067,35 @@ class testtaskModel extends model
             ->orderBy('grade_desc, sort_asc')
             ->fetchAll('id');
 
+        $displayScenes = array();
         foreach($runs as $run)
         {
+            if(!empty($run->scene)) $displayScenes[] = $run->scene;
             $run->parent  = !empty($run->scene) ? 'scene-' . $scenes[$run->scene]->id : 0;
             $run->isScene = false;
         }
+
         foreach($scenes as $scene)
         {
+            foreach($displayScenes as $displayScene)
+            {
+                if(str_contains($scene->path, $displayScene . ','))
+                {
+                    $displayScenes += explode(',', trim($scene->path, ','));
+                }
+            }
+        }
+
+        $displayScenes = array_unique($displayScenes);
+        foreach($scenes as $id => $scene)
+        {
+            if(!in_array($id, $displayScenes)) unset($scenes[$id]);
             $scene->parent  = !empty($scene->parent) ? 'scene-' . $scene->parent : 0;
             $scene->id      = 'scene-' . $scene->id;
             $scene->isScene = true;
         }
 
-        return array_merge($runs, $scenes);
+        return array($runs, $scenes);
     }
 
     /**
@@ -1088,6 +1114,8 @@ class testtaskModel extends model
      */
     public function getTaskCases(int $productID, string $browseType, int $queryID, int $moduleID, string $sort, object $pager = null, object $task = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getCases();
+
         $modules = $moduleID ? $this->loadModel('tree')->getAllChildId($moduleID) : array();
         $browseType = ($browseType == 'bymodule' && $this->session->taskCaseBrowseType && $this->session->taskCaseBrowseType != 'bysearch') ? $this->session->taskCaseBrowseType : $browseType;
         $browseType = strtolower($browseType);
@@ -1183,7 +1211,7 @@ class testtaskModel extends model
      */
     public function getRunById(int $runID): object|false
     {
-        $run = $this->dao->findById($runID)->from(TABLE_TESTRUN)->fetch();
+        $run = common::isTutorialMode() ? $this->loadModel('tutorial')->getRun() : $this->dao->findById($runID)->from(TABLE_TESTRUN)->fetch();
         if(!$run) return false;
 
         $run->case = $this->loadModel('testcase')->getById($run->case, $run->version);
@@ -1253,7 +1281,8 @@ class testtaskModel extends model
         $caseResult = 'pass';
         foreach($stepResults as $stepResult)
         {
-            if($stepResult->result == 'fail' || $stepResult->result == 'blocked') $caseResult = $stepResult->result;
+            if($stepResult->result == 'n/a' || $stepResult->result == 'pass') continue;
+            if(isset($this->lang->testcase->resultList[$stepResult->result])) $caseResult = $stepResult->result;
             if($stepResult->result == 'fail') break;
         }
 
@@ -1434,6 +1463,8 @@ class testtaskModel extends model
      */
     public function getResults(int $runID, int $caseID = 0, string $status = 'all', string $type = 'all', int $deployID = 0): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getResults();
+
         $results = $this->dao->select('*')->from(TABLE_TESTRESULT)
             ->beginIF($runID > 0)->where('run')->eq($runID)->fi()
             ->beginIF($runID <= 0)->where('`case`')->eq($caseID)->fi()

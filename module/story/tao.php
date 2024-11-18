@@ -959,11 +959,8 @@ class storyTao extends storyModel
     {
         if(empty($bugID) or empty($storyID)) return;
 
-        if($this->config->edition != 'open')
-        {
-            $oldBug = $this->dao->select('feedback, status')->from(TABLE_BUG)->where('id')->eq($bugID)->fetch();
-            if($oldBug->feedback) $this->loadModel('feedback')->updateStatus('bug', $oldBug->feedback, 'closed', $oldBug->status);
-        }
+        $oldBug = $this->dao->select('*')->from(TABLE_BUG)->where('id')->eq($bugID)->fetch();
+        if($this->config->edition != 'open' && $oldBug->feedback) $this->loadModel('feedback')->updateStatus('bug', $oldBug->feedback, 'closed', $oldBug->status);
 
         $now = helper::now();
         $bug = new stdclass();
@@ -980,7 +977,9 @@ class storyTao extends storyModel
         $this->dao->update(TABLE_BUG)->data($bug)->where('id')->eq($bugID)->exec();
 
         $this->loadModel('action')->create('bug', $bugID, 'ToStory', '', $storyID);
-        $this->action->create('bug', $bugID, 'Closed');
+        $actionID = $this->action->create('bug', $bugID, 'Closed');
+        $changes  = common::createChanges($oldBug, $bug, 'bug');
+        $this->action->logHistory($actionID, $changes);
 
         /* add files to story from bug. */
         $files = $this->dao->select('*')->from(TABLE_FILE)->where('objectType')->eq('bug')->andWhere('objectID')->eq($bugID)->fetchAll();
@@ -1885,6 +1884,8 @@ class storyTao extends storyModel
         global $lang;
         $actions = array();
 
+        if(!empty($execution) && !common::canModify('execution', $execution)) return $actions;
+
         $tutorialMode = commonModel::isTutorialMode();
         if($this->config->edition == 'ipd' && $storyType == 'story')
         {
@@ -1928,7 +1929,7 @@ class storyTao extends storyModel
         /* Change button. */
         $canChange = common::hasPriv($story->type, 'change') && $this->isClickable($story, 'change');
         $title     = $canChange ? $lang->story->change : $this->lang->story->changeTip;
-        if(common::hasPriv($story->type, 'change')) $actions[] = array('name' => 'change', 'url' => $canChange ? $changeLink : null, 'hint' => $title, 'disabled' => !$canChange);
+        if(common::hasPriv($story->type, 'change')) $actions[] = array('name' => 'change', 'url' => $canChange ? $changeLink : null, 'hint' => $title, 'disabled' => !$canChange, 'class' => 'story-change-btn');
 
         /* Submitreview, review, recall buttons. */
         if(strpos('draft,changing', $story->status) !== false)
@@ -1956,7 +1957,7 @@ class storyTao extends storyModel
                 }
             }
 
-            $actReview = array('name' => 'review', 'url' => $canReview ? $reviewLink : null, 'hint' => $title, 'disabled' => !$canReview);
+            $actReview = array('name' => 'review', 'url' => $canReview ? $reviewLink : null, 'hint' => $title, 'disabled' => !$canReview, 'class' => 'story-review-btn');
         }
 
         $canRecall = common::hasPriv($story->type, 'recall') && $this->isClickable($story, $story->status == 'changing' ? 'recallchange' : 'recall');
@@ -1997,7 +1998,7 @@ class storyTao extends storyModel
         /* Batch create button. */
         $shadow = $this->dao->findByID($story->product)->from(TABLE_PRODUCT)->fetch('shadow');
 
-        $canBatchCreateStory = common::hasPriv($story->type, 'batchcreate') && $this->isClickable($story, 'batchcreate') && $story->grade < $maxGradeGroup[$story->type] && empty($story->hasOtherTypeChild);
+        $canBatchCreateStory = (common::hasPriv($story->type, 'batchcreate') && $this->isClickable($story, 'batchcreate') && $story->grade < $maxGradeGroup[$story->type] && empty($story->hasOtherTypeChild)) || common::isTutorialMode();
         if(!($this->app->rawModule == 'projectstory' && $this->app->rawMethod == 'story') || $this->config->vision == 'lite' || $shadow)
         {
             if($shadow and empty($taskGroups[$story->id])) $taskGroups[$story->id] = $this->dao->select('id')->from(TABLE_TASK)->where('story')->eq($story->id)->fetch('id');
@@ -2012,17 +2013,17 @@ class storyTao extends storyModel
              */
             if($canBatchCreateStory)
             {
-                $actions[] = array('name' => 'batchCreate', 'url' => $batchCreateStoryLink, 'hint' => $this->lang->story->split, 'icon' => 'split');
+                $actions[] = array('name' => 'batchCreate', 'url' => $batchCreateStoryLink, 'hint' => $this->lang->story->split, 'icon' => 'split', 'class' => 'batchCreateStoryBtn');
             }
             elseif($story->type == 'epic' && common::hasPriv('requirement', 'batchCreate') && $this->isClickable($story, 'batchcreate') && empty($story->hasSameTypeChild) && !($this->config->epic->gradeRule == 'stepwise' && $story->grade < $maxGradeGroup['epic']))
             {
-                $actions[] = array('name' => 'batchCreate', 'url' => helper::createLink('requirement', 'batchCreate', "productID=$story->product&branch=$story->branch&module=$story->module&$params&executionID=$executionID&plan=0"), 'hint' => $this->lang->story->split, 'icon' => 'split');
+                $actions[] = array('name' => 'batchCreate', 'url' => helper::createLink('requirement', 'batchCreate', "productID=$story->product&branch=$story->branch&module=$story->module&$params&executionID=$executionID&plan=0"), 'hint' => $this->lang->story->split, 'icon' => 'split', 'class' => 'batchCreateStoryBtn');
             }
             elseif($story->type == 'requirement' && common::hasPriv('story', 'batchCreate') && $this->isClickable($story, 'batchcreate') && empty($story->hasSameTypeChild) && !($this->config->requirement->gradeRule == 'stepwise' && $story->grade < $maxGradeGroup['requirement']))
             {
-                $actions[] = array('name' => 'batchCreate', 'url' => helper::createLink('story', 'batchCreate', "productID=$story->product&branch=$story->branch&module=$story->module&$params&executionID=$executionID&plan=0"), 'hint' => $this->lang->story->split, 'icon' => 'split');
+                $actions[] = array('name' => 'batchCreate', 'url' => helper::createLink('story', 'batchCreate', "productID=$story->product&branch=$story->branch&module=$story->module&$params&executionID=$executionID&plan=0"), 'hint' => $this->lang->story->split, 'icon' => 'split', 'class' => 'batchCreateStoryBtn');
             }
-            elseif(!$canBatchCreateStory && $story->status != 'closed' && common::hasPriv($story->type, 'batchcreate'))
+            elseif(!$canBatchCreateStory && common::hasPriv($story->type, 'batchcreate'))
             {
                 $title = $this->lang->story->split;
                 if($story->status == 'active' && $story->stage != 'wait') $title = sprintf($this->lang->story->subDivideTip['notWait'], zget($this->lang->{$story->type}->stageList, $story->stage));
@@ -2030,7 +2031,7 @@ class storyTao extends storyModel
                 if(!empty($taskGroups[$story->id])) $title = sprintf($this->lang->story->subDivideTip['notWait'], $this->lang->story->hasDividedTask);
                 if(!empty($caseGroups[$story->id])) $title = sprintf($this->lang->story->subDivideTip['notWait'], $this->lang->story->hasDividedCase);
                 if($story->grade >= $maxGradeGroup[$story->type]) $title = $this->lang->story->errorMaxGradeSubdivide;
-                if($story->status != 'active') $title = $this->lang->story->subDivideTip['notActive'];
+                if($story->status != 'active' && $story->status != 'changing') $title = $this->lang->story->subDivideTip['notActive'];
                 $actions[] = array('name' => 'batchCreate', 'hint' => $title, 'disabled' => true, 'icon' => 'split');
             }
         }
@@ -2048,7 +2049,7 @@ class storyTao extends storyModel
                 $canStoryEstimate   = common::hasPriv('execution', 'storyEstimate') && $story->type == 'story';
 
                 $actions[] = array('name' => 'createTask',      'url' => $canCreateTask      ? $createTaskLink      : null, 'disabled' => !$canCreateTask, 'className' => 'create-task-btn');
-                $actions[] = array('name' => 'batchCreateTask', 'url' => $canBatchCreateTask ? $batchCreateTaskLink : null, 'disabled' => !$canBatchCreateTask);
+                $actions[] = array('name' => 'batchCreateTask', 'url' => $canBatchCreateTask ? $batchCreateTaskLink : null, 'disabled' => !$canBatchCreateTask, 'className' => 'batchcreate-task-btn');
                 $actions[] = array('name' => 'storyEstimate',   'url' => $canStoryEstimate   ? $storyEstimateLink   : null, 'disabled' => !$canStoryEstimate);
             }
 
@@ -2385,7 +2386,7 @@ class storyTao extends storyModel
             $commitIdList .= $design->commit ? "{$design->commit}," : '';
         }
 
-        $commits = $this->dao->select('id,repo,revision,committer,comment as title')->from(TABLE_REPOHISTORY)->where('id')->in(array_unique(explode(',', $commitIdList)))->fetchAll('id');
+        if($commitIdList) $commits = $this->dao->select('id,repo,revision,committer,comment as title')->from(TABLE_REPOHISTORY)->where('id')->in(array_unique(explode(',', $commitIdList)))->fetchAll('id');
         foreach($storyGroup['design'] as $storyID => $designs)
         {
             foreach($designs as $designID => $design)

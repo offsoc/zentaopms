@@ -66,7 +66,7 @@ class mailModel extends model
         $config->password = '';
         $config->debug    = 1;
         $config->charset  = 'utf-8';
-        if(!isset($config->secure))   $config->secure   = '';
+        if(!isset($config->secure))   $config->secure   = 0;
         if(!isset($config->username)) $config->username = $username;
         if(!isset($config->host))     $config->host = '';
         if(!isset($config->auth))     $config->auth = 1;
@@ -92,7 +92,7 @@ class mailModel extends model
         $config->username = $username;
         $config->auth     = 1;
         if(!isset($config->port))   $config->port   = 25;
-        if(!isset($config->secure)) $config->secure = '';
+        if(!isset($config->secure)) $config->secure = 0;
         return $config;
     }
 
@@ -163,7 +163,7 @@ class mailModel extends model
         $config->host     = $host;
         $config->auth     = 1;
         $config->port     = $port;
-        $config->secure   = $port == 465 ? 'ssl' : '';
+        $config->secure   = $port == 465 ? 'ssl' : 0;
 
         return $config;
      }
@@ -234,20 +234,21 @@ class mailModel extends model
      * @param  bool    $includeMe
      * @param  array   $emails
      * @param  bool    $forceSync
+     * @param  bool    $processUser
      * @access public
      * @return int|string|bool
      */
-    public function send(string $toList, string $subject, string $body = '', string $ccList = '', bool $includeMe = false, array $emails = array(), bool $forceSync = false): int|string|bool
+    public function send(string $toList, string $subject, string $body = '', string $ccList = '', bool $includeMe = false, array $emails = array(), bool $forceSync = false, bool $processUser = true): int|string|bool
     {
         if(!$this->config->mail->turnon) return false;
-        if(!empty($this->config->mail->async) and !$forceSync) return $this->addQueue($toList, $subject, $body, $ccList, $includeMe);
+        if(!empty($this->config->mail->async) and !$forceSync) return $this->addQueue($toList, $subject, $body, $ccList, $includeMe, $emails = array());
 
         ob_start();
 
         $images = $this->mailTao->getImages($body);
         if($images) $body = $this->mailTao->replaceImageURL($body, $images);
 
-        list($toList, $ccList) = $this->mailTao->processToAndCC($toList, $ccList, $includeMe);
+        if($processUser) list($toList, $ccList) = $this->mailTao->processToAndCC($toList, $ccList, $includeMe);
         /* Get realname and email of users. */
         if(empty($emails)) $emails = $this->loadModel('user')->getRealNameAndEmails($toList . ',' . $ccList);
 
@@ -367,7 +368,7 @@ class mailModel extends model
     {
         $wwwRoot = $this->app->getWwwRoot();
         $images  = array_filter(array_unique($images));
-        foreach($images as $image) $this->mta->AddEmbeddedImage($wwwRoot . $image, basename($image));
+        foreach($images as $image) $this->mta->AddEmbeddedImage($image, basename($image));
     }
 
     /**
@@ -593,6 +594,7 @@ class mailModel extends model
         $title      = $this->mailTao->getObjectTitle($object, $objectType);
         $subject    = $this->mailTao->getSubject($objectType, $object, $title, $action->action);
         $domain     = zget($this->config->mail, 'domain', common::getSysURL());
+        $domain     = rtrim($domain, '/');
 
         if($objectType == 'review' and empty($object->auditedBy)) return;
 
@@ -661,7 +663,7 @@ class mailModel extends model
         {
             $this->app->loadLang('doc');
 
-            if($actionType == 'created') $titleType = 'create';
+            if($actionType == 'releaseddoc') $titleType = 'releasedDoc';
             return sprintf($this->lang->doc->mail->{$titleType}->title, $this->app->user->realname, $object->id, $object->title);
         }
 

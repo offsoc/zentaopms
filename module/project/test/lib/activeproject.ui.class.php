@@ -11,15 +11,15 @@ class activeprojectTester extends tester
      */
     public function activeProject(array $project)
     {
-        $form       = $this->initForm('project', 'browse', 'appIframe-project');
+        $form       = $this->initForm('project', 'browse', '', 'appIframe-project');
         $featureBar = (array)$this->lang->project->featureBar;
         $featureBar['browse'] = (array)$featureBar['browse'];
         $form->dom->btn($featureBar['browse']['more'])->click();
         $form->dom->closed->click();
-        $title = $form->dom->projectName->getText();
         $form->dom->activeBtn->click();
         $form->wait(1);
 
+        $title = $form->dom->title->getText();
         $form->dom->activeProject->click();
         $form->wait(1);
 

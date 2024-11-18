@@ -18,10 +18,11 @@ class storyZen extends story
      *
      * @param  int       $productID
      * @param  int       $objectID
+     * @param  string    $extra
      * @access protected
      * @return int[]
      */
-    protected function setMenuForCreate(int $productID, int $objectID): array
+    protected function setMenuForCreate(int $productID, int $objectID, string $extra = ''): array
     {
         /* Get product id according to the project id when lite vision todo transfer story */
         if($this->config->vision == 'lite' && $productID == 0)
@@ -38,7 +39,23 @@ class storyZen extends story
         }
 
         /* Set menu by tab. */
-        if($this->app->tab == 'product')   $this->product->setMenu($productID);
+        if($this->app->tab == 'product')
+        {
+            $extra = str_replace(array(',', ' '), array('&', ''), $extra);
+            parse_str($extra, $output);
+
+            if(!empty($output['from']) && $output['from'] == 'global')
+            {
+                $product = $this->product->getById($productID);
+                if(!$product || $product->deleted || $product->shadow)
+                {
+                    $newProduct = $this->product->getOrderedProducts('noclosed');
+                    if(!empty($newProduct)) $productID = (int) key($newProduct);
+                }
+            }
+
+            $this->product->setMenu($productID);
+        }
         if($this->app->tab == 'execution')
         {
             $this->execution->setMenu($objectID);
@@ -357,6 +374,7 @@ class storyZen extends story
         $initStory->category    = $story->category;
         $initStory->feedbackBy  = $story->feedbackBy;
         $initStory->notifyEmail = $story->notifyEmail;
+        $initStory->parent      = $story->parent;
 
         if($this->config->edition != 'open')
         {
@@ -449,6 +467,7 @@ class storyZen extends story
             if($product->type != 'normal')      $branches = $this->loadModel('branch')->getPairs($productID, 'active');
         }
 
+        $this->product->checkAccess($productID, $products);
         return array($products, $branches);
     }
 
@@ -818,7 +837,7 @@ class storyZen extends story
         $fields['reviewedDate']['default'] = helper::now();
         $fields['assignedTo']['default']   = $story->assignedTo;
         $fields['pri']['default']          = $story->pri;
-        $fields['estimate']['default']     = $story->estimate;
+        $fields['estimate']['default']     = $story->estimate ? $story->estimate : 0;
         $fields['status']['default']       = $story->status;
 
         $fields['closedReason']['required']   = true;
@@ -1007,6 +1026,7 @@ class storyZen extends story
         $optionMenu = $this->tree->getOptionMenu($productID, 'story', 0, $branch === 'all' ? '0' : (string)$branch, 'nodeleted');
 
         $moduleID = $moduleID ? $moduleID : (int)$this->cookie->lastStoryModule;
+        $moduleID = $moduleID ? $moduleID : $fields['module']['default'];
         $moduleID = isset($optionMenu[$moduleID]) ? $moduleID : 0;
 
         $fields['module']['options']  = $optionMenu;
@@ -1037,8 +1057,6 @@ class storyZen extends story
 
         if($this->app->tab === 'project' || $this->app->tab === 'execution')
         {
-            $hiddenParent = true;
-
             $project = $this->dao->findById((int)$objectID)->from(TABLE_PROJECT)->fetch();
             if(!empty($project->project)) $project = $this->dao->findById((int)$project->project)->from(TABLE_PROJECT)->fetch();
 
@@ -1113,14 +1131,14 @@ class storyZen extends story
      * 根据配置，删除非必要的表单字段配置。
      * Remove form fields for batch create.
      *
-     * @param  int       $productID
-     * @param  array     $fields
-     * @param  string    $productType
-     * @param  string    $storyType
+     * @param  array      $fields
+     * @param  bool       $hiddenPlan
+     * @param  string     $executionType
+     * @param  int        $executionID
      * @access protected
      * @return array
      */
-    protected function removeFormFieldsForBatchCreate(array $fields, bool $hiddenPlan, string $executionType): array
+    protected function removeFormFieldsForBatchCreate(array $fields, bool $hiddenPlan, string $executionType, int $executionID = 0): array
     {
         if($hiddenPlan) unset($fields['plan']);
 
@@ -1129,7 +1147,21 @@ class storyZen extends story
             unset($fields['region']);
             unset($fields['lane']);
         }
-        if($this->app->tab == 'project' || $this->app->tab == 'execution') $fields['parent']['hidden'] = true;
+
+        if($this->app->tab == 'project' || $this->app->tab == 'execution')
+        {
+            $fields['parent']['hidden'] = true;
+
+            $project = $this->dao->findById((int)$executionID)->from(TABLE_PROJECT)->fetch();
+            if(!empty($project->project)) $project = $this->dao->findById((int)$project->project)->from(TABLE_PROJECT)->fetch();
+
+            if(empty($project->hasProduct))
+            {
+                $teamUsers = $this->project->getTeamMemberPairs($project->id);
+                $fields['reviewer']['options']   = $teamUsers;
+                $fields['assignedTo']['options'] = $teamUsers;
+            }
+        }
 
         return $fields;
     }
@@ -1165,8 +1197,7 @@ class storyZen extends story
      */
     protected function buildStoryForCreate(int $executionID, int $bugID, string $storyType = 'story'): object|false
     {
-        $fields       = $this->config->story->form->create;
-        $editorFields = array_keys(array_filter(array_map(function($config){return $config['control'] == 'editor';}, $fields)));
+        $fields = $this->config->story->form->create;
         foreach(explode(',', trim($this->config->{$storyType}->create->requiredFields, ',')) as $field) $fields[$field]['required'] = true;
         if(!isset($_POST['plan'])) $this->config->story->create->requiredFields = str_replace(',plan,', ',', ",{$this->config->story->create->requiredFields},");
         if(!empty($_POST['modules']) && !empty($fields['module']['required']))
@@ -1188,6 +1219,7 @@ class storyZen extends story
             ->setIF(!in_array($this->post->source, $this->config->story->feedbackSource), 'notifyEmail', '')
             ->setIF($executionID > 0, 'stage', 'projected')
             ->setIF($bugID > 0, 'fromBug', $bugID)
+            ->setIF(!$this->post->estimate, 'estimate', 0)
             ->get();
 
         if(isset($_POST['reviewer'])) $_POST['reviewer'] = array_filter($_POST['reviewer']);
@@ -1200,7 +1232,7 @@ class storyZen extends story
         /* Need and force review, then set status to reviewing. */
         if($storyData->status != 'draft' and $this->story->checkForceReview($storyType) and !$this->post->needNotReview) $storyData->status = 'reviewing';
 
-        return $this->loadModel('file')->processImgURL($storyData, $editorFields, $this->post->uid);
+        return $this->loadModel('file')->processImgURL($storyData, $this->config->story->editor->create['id'], $this->post->uid);
     }
 
     /**
@@ -1240,10 +1272,8 @@ class storyZen extends story
             ->fetch('hasProduct');
         $_POST['product'] = (!empty($hasProduct) && !$hasProduct) ? $oldStory->product : $this->post->product;
 
-        $now          = helper::now();
-        $fields       = $this->config->story->form->edit;
-        $editorFields = array_keys(array_filter(array_map(function($config){return $config['control'] == 'editor';}, $fields)));
-
+        $now       = helper::now();
+        $fields    = $this->config->story->form->edit;
         $storyData = form::data($fields, $storyID)
             ->add('lastEditedBy', $this->app->user->account)
             ->add('lastEditedDate', $now)
@@ -1253,7 +1283,6 @@ class storyZen extends story
             ->setDefault('deleteFiles', array())
             ->setDefault('product', $oldStory->product)
             ->setDefault('branch', $oldStory->branch)
-            ->setDefault('estimate', $oldStory->estimate)
             ->setDefault('stage', $oldStory->stage)
             ->setDefault('stagedBy', $oldStory->stagedBy)
             ->setIF($this->post->assignedTo   != $oldStory->assignedTo, 'assignedDate', $now)
@@ -1281,7 +1310,7 @@ class storyZen extends story
             $storyData->module = 0;
         }
 
-        return $this->loadModel('file')->processImgURL($storyData, $editorFields, $this->post->uid);
+        return $this->loadModel('file')->processImgURL($storyData, $this->config->story->editor->edit['id'], $this->post->uid);
     }
 
     /**
@@ -1304,10 +1333,9 @@ class storyZen extends story
         if(!$this->post->needNotReview and empty($_POST['reviewer'])) dao::$errors['reviewer'] = $this->lang->story->errorEmptyReviewedBy;
         if(dao::isError()) return false;
 
-        $now          = helper::now();
-        $fields       = $this->config->story->form->change;
-        $editorFields = array_keys(array_filter(array_map(function($config){return $config['control'] == 'editor';}, $fields)));
-        $story        = form::data($fields, $storyID)
+        $now    = helper::now();
+        $fields = $this->config->story->form->change;
+        $story  = form::data($fields, $storyID)
             ->setDefault('lastEditedBy', $this->app->user->account)
             ->setDefault('deleteFiles', array())
             ->setDefault('lastEditedDate', $now)
@@ -1338,7 +1366,7 @@ class storyZen extends story
         }
 
         if(!isset($_POST['relievedTwins'])) unset($story->relievedTwins);
-        return $this->loadModel('file')->processImgURL($story, $editorFields, $this->post->uid);
+        return $this->loadModel('file')->processImgURL($story, $this->config->story->editor->change['id'], $this->post->uid);
     }
 
     /**
@@ -1420,7 +1448,6 @@ class storyZen extends story
         if(isset($_POST['plan']) and is_array($_POST['plan'])) $story->plan   = trim(implode(',', $_POST['plan']), ',');
         if(isset($_POST['branch']) and $_POST['branch'] == 0)  $story->branch = 0;
         if(isset($story->stage) and $oldStory->stage != $story->stage) $story->stagedBy = (strpos('tested|verified|rejected|pending|released|closed', $story->stage) !== false) ? $this->app->user->account : '';
-        if(isset($_POST['reviewer']) or isset($_POST['needNotReview'])) $this->story->doUpdateReviewer($storyID, $story);
     }
 
     /**
@@ -1456,7 +1483,6 @@ class storyZen extends story
             return false;
         }
 
-        $editorFields = array_keys(array_filter(array_map(function($config){return $config['control'] == 'editor';}, $fields)));
         $result       = $this->post->result;
         $closedReason = $this->post->closedReason;
         $storyData    = form::data($fields, $storyID)
@@ -1473,7 +1499,7 @@ class storyZen extends story
         if($result == 'reject' && $closedReason == 'duplicate' && empty($storyData->duplicateStory)) dao::$errors[] = sprintf($this->lang->error->notempty, $this->lang->story->duplicateStory);
         if(dao::isError()) return false;
 
-        return $this->loadModel('file')->processImgURL($storyData, $editorFields, $this->post->uid);
+        return $this->loadModel('file')->processImgURL($storyData, $this->config->story->editor->review['id'], $this->post->uid);
     }
 
     /**

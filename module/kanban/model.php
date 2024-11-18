@@ -816,7 +816,7 @@ class kanbanModel extends model
         $action['caret'] = false;
         $action['items'] = array();
 
-        if(common::hasPriv('kanban', 'createRegion'))                       $action['items'][] = array('text' => $this->lang->kanban->createRegion, 'url' => helper::createLink('kanban', 'createRegion', "kanbanID=$kanbanID&from=execution"), 'data-toggle' => 'modal', 'icon' => 'plus');
+        if(common::hasPriv('kanban', 'createRegion'))                       $action['items'][] = array('text' => $this->lang->kanban->createRegion, 'url' => helper::createLink('kanban', 'createRegion', "kanbanID=$kanbanID&from=execution"), 'data-toggle' => 'modal', 'icon' => 'plus', 'class' => 'kanban-createRegion-btn');
         if(common::hasPriv('kanban', 'editRegion'))                         $action['items'][] = array('text' => $this->lang->kanban->editRegion,   'url' => helper::createLink('kanban', 'editRegion', "regionID=$regionID"), 'data-toggle' => 'modal', 'icon' => 'edit');
         if(common::hasPriv('kanban', 'createLane'))                         $action['items'][] = array('text' => $this->lang->kanban->createLane,   'url' => helper::createLink('kanban', 'createLane', "kanbanID=$kanbanID&regionID=$regionID&from=execution"), 'data-toggle' => 'modal', 'icon' => 'plus');
         if(common::hasPriv('kanban', 'deleteRegion') && ($regionCount > 1)) $action['items'][] = array('text' => $this->lang->kanban->deleteRegion, 'url' => helper::createLink('kanban', 'deleteRegion', "regionID=$regionID"), 'data-confirm' => $this->lang->kanbanregion->confirmDelete, 'icon' => 'trash', 'innerClass' => 'ajax-submit');
@@ -1008,6 +1008,8 @@ class kanbanModel extends model
      */
     public function getRegionPairs(int $kanbanID, int $regionID = 0, string $from = 'kanban'): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getRegionPairs();
+
         return $this->dao->select('id,name')->from(TABLE_KANBANREGION)
             ->where('kanban')->eq($kanbanID)
             ->andWhere('deleted')->eq('0')
@@ -1041,6 +1043,8 @@ class kanbanModel extends model
      */
     public function getGroupGroupByRegions(array $regions): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getGroups();
+
         return $this->dao->select('*')->from(TABLE_KANBANGROUP)
             ->where('region')->in($regions)
             ->orderBy('order')
@@ -1058,6 +1062,8 @@ class kanbanModel extends model
      */
     public function getLaneGroupByRegions(array $regions, string $browseType = 'all'): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getLaneGroup();
+
         $lanes = $this->dao->select('*')->from(TABLE_KANBANLANE)
             ->where('deleted')->eq('0')
             ->andWhere('region')->in($regions)
@@ -1319,6 +1325,8 @@ class kanbanModel extends model
      */
     public function getRDColumnGroupByRegions(array $regions, array $groupIDList = array())
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getColumns();
+
         $columnGroup = $this->dao->select("*")->from(TABLE_KANBANCOLUMN)
             ->where('deleted')->eq('0')
             ->andWhere('region')->in($regions)
@@ -1373,6 +1381,8 @@ class kanbanModel extends model
      */
     public function getCardGroupByExecution(int $executionID, string $browseType = 'all', string $orderBy = 'id_asc', string $searchValue = ''): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getCardGroup();
+
         $cards = $this->dao->select('t1.*, t2.type as columnType, t2.group')
             ->from(TABLE_KANBANCELL)->alias('t1')
             ->leftJoin(TABLE_KANBANCOLUMN)->alias('t2')->on('t1.column=t2.id')
@@ -1651,7 +1661,7 @@ class kanbanModel extends model
         $cardData['group']      = $laneType;
         $cardData['parent']     = zget($object, 'originParent', 0);
         $cardData['status']     = zget($object, 'status', '');
-        $cardData['estimate']   = zget($object, 'estimate', 0);
+        $cardData['estimate']   = helper::formatHours(zget($object, 'estimate', 0));
         $cardData['assignedTo'] = $object->assignedTo;
         $cardData['deadline']   = zget($object, 'deadline', '');
         $cardData['severity']   = zget($object, 'severity', 0);
@@ -1662,7 +1672,7 @@ class kanbanModel extends model
         {
             $cardData['title']      = $object->name;
             $cardData['status']     = $object->status;
-            $cardData['left']       = $object->left;
+            $cardData['left']       = helper::formatHours($object->left);
             $cardData['estStarted'] = $object->estStarted;
             $cardData['mode']       = $object->mode;
             if($object->mode == 'multi') $cardData['teamMembers'] = $object->teamMembers;
@@ -2130,6 +2140,16 @@ class kanbanModel extends model
      */
     public function createLane(int $kanbanID, int $regionID, object $lane = null, string $mode = 'new'): int|bool
     {
+        $laneType = isset($_POST['laneType']) ? $_POST['laneType'] : 'common';
+        if($laneType == 'common')
+        {
+            $sameNameLane = $this->dao->select('id')->from(TABLE_KANBANLANE)->where('region')->eq($regionID)->andWhere('name')->eq($lane->name)->andWhere('deleted')->eq('0')->limit(1)->fetch();
+            if($sameNameLane)
+            {
+                dao::$errors['name'][] = $this->lang->kanbanlane->error->hasExist;
+                return false;
+            }
+        }
         if($mode == 'new')
         {
             $maxOrder = $this->dao->select('MAX(`order`) AS maxOrder')->from(TABLE_KANBANLANE)
@@ -2137,7 +2157,7 @@ class kanbanModel extends model
                 ->fetch('maxOrder');
 
             $lane->order     = $maxOrder ? $maxOrder + 1 : 1;
-            $lane->type      = isset($_POST['laneType']) ? $_POST['laneType'] : 'common';
+            $lane->type      = $laneType;
             $lane->execution = isset($_POST['laneType']) ? $kanbanID : 0;
 
             if($lane->mode == 'sameAsOther')
@@ -2736,12 +2756,13 @@ class kanbanModel extends model
             $this->dao->insert(TABLE_KANBANCOLUMN)->data($data)->exec();
             if(dao::isError()) return false;
 
-            if($type == 'design')    $designColumnID    = $this->dao->lastInsertId();
-            if($type == 'develop')   $devColumnID       = $this->dao->lastInsertId();
-            if($type == 'test')      $testColumnID      = $this->dao->lastInsertId();
-            if($type == 'resolving') $resolvingColumnID = $this->dao->lastInsertId();
+            $columnID = $this->dao->lastInsertId();
+            if($type == 'design')    $designColumnID    = $columnID;
+            if($type == 'develop')   $devColumnID       = $columnID;
+            if($type == 'test')      $testColumnID      = $columnID;
+            if($type == 'resolving') $resolvingColumnID = $columnID;
 
-            $this->addKanbanCell($executionID, $laneID, $this->dao->lastInsertId(), $laneType);
+            $this->addKanbanCell($executionID, $laneID, $columnID, $laneType);
         }
 
         return true;
@@ -2832,6 +2853,8 @@ class kanbanModel extends model
      */
     public function refreshCards(array $lane): void
     {
+        if(common::isTutorialMode()) return;
+
         $laneID        = zget($lane, 'id');
         $laneType      = zget($lane, 'type');
         $executionID   = zget($lane, 'execution');
@@ -3213,6 +3236,9 @@ class kanbanModel extends model
 
         $toCardList = rtrim($toCellCards, ',') . ",$cardID,";
         $this->dao->update(TABLE_KANBANCELL)->set('cards')->eq($toCardList)->where('`column`')->eq($toColID)->andWhere('lane')->eq($toLaneID)->exec();
+
+        $toLane = $this->getLaneById($toLaneID);
+        $this->dao->update(TABLE_KANBANCARD)->set('group')->eq($toLane->group)->where('id')->eq($cardID)->exec();
     }
 
     /**
@@ -3495,6 +3521,8 @@ class kanbanModel extends model
      */
     public function getColumnByID(int $columnID)
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getColumn();
+
         $column = $this->dao->select('t1.*, t2.type as laneType')->from(TABLE_KANBANCOLUMN)->alias('t1')
             ->leftJoin(TABLE_KANBANCELL)->alias('t2')->on('t1.id=t2.column')
             ->where('t1.id')->eq($columnID)
@@ -3820,5 +3848,23 @@ class kanbanModel extends model
         $kanbanData = $this->getKanbanData($kanbanID, $regionID);
         $kanbanData = reset($kanbanData);
         return array('name' => 'updateKanbanRegion', 'params' => array('region' . $regionID, $kanbanData));
+    }
+
+    /**
+     * 获取卡片所在的单元格。
+     * Get card cell.
+     *
+     * @param  int    $cardID
+     * @param  int    $kanbanID
+     * @access public
+     * @return object
+     */
+    public function getCellByCard(int $cardID, int $kanbanID): object|false
+    {
+        return $this->dao->select('id,cards,lane,`column`')->from(TABLE_KANBANCELL)
+            ->where('kanban')->eq($kanbanID)
+            ->andWhere('type')->eq('common')
+            ->andWhere('cards')->like("%,$cardID,%")
+            ->fetch();
     }
 }

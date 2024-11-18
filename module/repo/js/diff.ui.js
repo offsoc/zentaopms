@@ -53,7 +53,7 @@ $(function()
 
 window.downloadCode = function()
 {
-    var url            = $(this).data('link');
+    var url            = $(event.target).closest('.repoDownload-code').data('link');
     var activeFilePath = $('#monacoTabs .nav-item .active').attr('href').substring(5).replace(/-/g, '=');
     window.open(url.replace('{path}', activeFilePath), '_self');
     return;
@@ -103,6 +103,9 @@ window.getDiffs = function(fileName)
         'code': {'new': '', 'old': ''},
         'line': {'new': [], 'old': []}
     };
+
+    const newContent = [];
+    const oldContent = [];
     $.each(diffs, function(i, diff)
     {
         if(diff.fileName == fileName)
@@ -116,17 +119,20 @@ window.getDiffs = function(fileName)
                 {
                     if(code.type == 'all' || code.type == 'new')
                     {
-                        result.code.new += htmlspecialchars_decode(code.line.substring(1)) + "\n";
+                        newContent.push(htmlspecialchars_decode(code.line.substring(1)));
                         result.line.new.push(parseInt(code.newlc));
                     }
 
                     if(code.type == 'all' || code.type == 'old')
                     {
-                        result.code.old += htmlspecialchars_decode(code.line.substring(1)) + "\n";
+                        oldContent.push(htmlspecialchars_decode(code.line.substring(1)));
                         result.line.old.push(parseInt(code.oldlc));
                     }
                 })
             })
+
+            result.code.new = newContent.join('\n');
+            result.code.old = oldContent.join('\n');
             return result;
         }
     });
@@ -199,7 +205,7 @@ $(document).ready(function()
     $('.btn-right').on('click', function() {arrowTabs('monacoTabs', -2);});
 });
 
-$('.inline-appose').on('click', function()
+window.inlineAppose = function()
 {
     $('.inline-appose').hide();
     diffAppose = !diffAppose;
@@ -214,7 +220,7 @@ $('.inline-appose').on('click', function()
     var tabID = $('#monacoTabs .nav-item .active').attr('href');
     updateEditorInline(tabID);
     return;
-});
+}
 
 window.changeDiff = function()
 {

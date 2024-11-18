@@ -1,3 +1,14 @@
+$(function()
+{
+    if(taskToOpen)
+    {
+        window.waitDom('.card-list-item[z-key="' + taskToOpen + '"] .icon-checked + a', function()
+        {
+            $('.card-list-item[z-key="' + taskToOpen + '"] .icon-checked + a').trigger('click');
+        });
+    }
+})
+
 searchValue = '';
 window.getLane = function(lane)
 {
@@ -81,6 +92,7 @@ window.getColActions = function(col)
             icon: 'ellipsis-v',
             caret: false,
             items: buildColActions(col),
+            class: 'actionDrop'
         }
     );
 
@@ -92,7 +104,7 @@ window.buildColActions = function(col)
     let actions = [];
 
     if(col.actionList && col.actionList.includes('setColumn')) actions.push({text: kanbanLang.setColumn, url: $.createLink('kanban', 'setColumn', `columnID=${col.id}&executionID=${executionID}&from=RDKanban`), 'data-toggle': 'modal', 'icon': 'edit'});
-    if(col.actionList && col.actionList.includes('setWIP') && !ERURColumn.includes(col.type)) actions.push({text: kanbanLang.setWIP, url: $.createLink('kanban', 'setWIP', `columnID=${col.id}&executionID=${executionID}&from=RDKanban`), 'data-toggle': 'modal', 'icon': 'alert'});
+    if(col.actionList && col.actionList.includes('setWIP') && !ERURColumn.includes(col.type)) actions.push({text: kanbanLang.setWIP, url: $.createLink('kanban', 'setWIP', `columnID=${col.id}&executionID=${executionID}&from=RDKanban`), 'data-toggle': 'modal', 'icon': 'alert', 'class': 'setWIP-btn'});
 
     return actions;
 }
@@ -270,7 +282,7 @@ window.buildStoryActions = function(item)
 
     if(priv.canEditStory) actions.push({text: storyLang.edit, icon: 'edit', url: $.createLink('story', 'edit', 'storyID=' + item.id + '&kanbanGroup=' + groupBy), 'data-toggle': 'modal', 'data-size': 'lg'});
     if(priv.canChangeStory && item.status == 'active') actions.push({text: storyLang.change, icon: 'change', url: $.createLink('story', 'change', 'storyID=' + item.id), 'data-toggle': 'modal', 'data-size': 'lg'});
-    if(priv.canCreateTask && item.status == 'active') actions.push({text: executionLang.wbs, icon: 'plus', url: $.createLink('task', 'create', 'executionID=' + executionID + '&storyID=' + item.id), 'data-toggle': 'modal', 'data-size': 'lg'});
+    if(priv.canCreateTask && item.status == 'active') actions.push({text: executionLang.wbs, icon: 'plus', url: $.createLink('task', 'create', 'executionID=' + executionID + '&storyID=' + item.id), 'data-toggle': 'modal', 'data-size': 'lg', 'class': 'task-create-btn'});
     if(priv.canBatchCreateTask && item.status == 'active') actions.push({text: executionLang.batchWBS, icon: 'pluses', url: $.createLink('task', 'batchCreate', 'executionID=' + executionID + '&storyID=' + item.id), 'data-toggle': 'modal', 'data-size': 'lg'});
     if(priv.canActivateStory && item.status == 'closed') actions.push({text: executionLang.activate, icon: 'magic', url: $.createLink('story', 'activate', 'storyID=' + item.id), 'data-toggle': 'modal', 'data-size': 'lg'});
     if(priv.canUnlinkStory) actions.push({text: executionLang.unlinkStory, icon: 'unlink', url: $.createLink('execution', 'unlinkStory', 'executionID=' + executionID + '&storyID=' + item.id + '&confirm=no&from=' + '&laneID=' + item.lane + '&columnID=' + item.column), 'innerClass' : 'ajax-submit'});
@@ -346,7 +358,11 @@ window.onDrop = function(changes, dropInfo)
     {
         let sortList = '';
         for(let i = 0; i < dropInfo['data']['list'].length; i++) sortList += dropInfo['data']['list'][i] + ',';
-        url = $.createLink('kanban', 'sortCard', `kanbanID=${kanbanID}&laneID=${toLaneID}&columnID=${toColID}&cards=${sortList}`);
+        url = $.createLink('kanban', 'sortCard', `kanbanID=${executionID}&laneID=${toLane}&columnID=${toCol}&cards=${sortList}`);
+        $.getJSON(url, function(response)
+        {
+            if(response.result == 'success') refreshKanban(createLink('execution', 'ajaxUpdateKanban', "executionID=" + executionID + "&entertime=0&browseType=" + browseType + "&groupBy=" + groupBy + '&from=RD' + '&serachValue=' + rdSearchValue + '&orderBy=' + orderBy));
+        });
     }
     else
     {

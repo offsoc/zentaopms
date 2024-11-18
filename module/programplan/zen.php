@@ -23,8 +23,6 @@ class programplanZen extends programplan
     {
         $beginIsZeroDate = helper::isZeroDate($plan->begin);
         $endIsZeroDate   = helper::isZeroDate($plan->end);
-        if($beginIsZeroDate) dao::$errors["begin[{$rowID}]"] = $this->lang->programplan->emptyBegin;
-        if($endIsZeroDate)   dao::$errors["end[{$rowID}]"]   = $this->lang->programplan->emptyEnd;
         if(!$beginIsZeroDate and !$endIsZeroDate and $plan->end < $plan->begin) dao::$errors["end[{$rowID}]"] = $this->lang->programplan->error->planFinishSmall;
 
         if(!empty($parent))
@@ -64,17 +62,19 @@ class programplanZen extends programplan
         foreach($plans as $rowID => $plan)
         {
             if(empty($parentID) and empty($oldPlans)) $plan->id = '';
-            $plan->days       = $this->calcDaysForStage($plan->begin, $plan->end);
+            $plan->days       = isset($plan->enabled) && $plan->enabled == 'on' ? $this->calcDaysForStage($plan->begin, $plan->end) : 0;
             $plan->project    = $projectID;
             $plan->parent     = $parentID ? $parentID : $projectID;
             $plan->order      = (int)array_shift($orders);
             $plan->hasProduct = $project->hasProduct;
-            if(!empty($parentID) and !empty($parentStage) and $parentStage->attribute != 'mix') $plan->attribute = $parentStage->attribute;;
-            if(!empty($parentID) and !empty($parentStage)) $plan->acl = $parentStage->acl;
+
+            if(empty($plan->days)) $plan->days = helper::diffDate($plan->end, $plan->begin) + 1;
+            if(!empty($parentID) && !empty($parentStage) && $parentStage->attribute != 'mix') $plan->attribute = $parentStage->attribute;;
+            if(!empty($parentID) && !empty($parentStage)) $plan->acl = $parentStage->acl;
 
             if(in_array($this->config->edition, array('max', 'ipd')) && !dao::isError())
             {
-                $plan->planDuration = $this->programplan->getDuration($plan->begin, $plan->end);
+                $plan->planDuration = $this->programplan->getDuration((string)$plan->begin, (string)$plan->end);
                 $plan->realDuration = $this->programplan->getDuration((string)$plan->realBegan, (string)$plan->realEnd);
             }
 
@@ -83,7 +83,7 @@ class programplanZen extends programplan
 
             /* Check duplicated names to avoid to save same names. */
             if(in_array($plan->name, $names)) dao::$errors["name[{$rowID}]"] = empty($plan->type) ? $this->lang->programplan->error->sameName : str_replace($this->lang->execution->stage, '', $this->lang->programplan->error->sameName);
-            if(isset($plan->code))
+            if(isset($plan->code) && (!isset($plan->enabled) || (isset($plan->enabled) && $plan->enabled == 'on')))
             {
                 if(in_array($plan->code, $codes)) dao::$errors["code[{$rowID}]"] = sprintf($this->lang->error->repeat, $plan->type == 'stage' ? $this->lang->execution->code : $this->lang->code, $plan->code);
                 if(!empty($this->config->setCode) && empty($plan->code) && strpos(",{$this->config->execution->create->requiredFields},", ',code,') !== false) dao::$errors["code[{$rowID}]"] = sprintf($this->lang->error->notempty, $plan->type == 'stage' ? $this->lang->execution->code : $this->lang->code);
@@ -185,6 +185,8 @@ class programplanZen extends programplan
      */
     protected function prepareEditPlan(int $planID, int $projectID, object $plan, object|null $parentStage = null): object|false
     {
+        if($plan->end < $plan->begin) dao::$errors['end'] = $this->lang->programplan->error->planFinishSmall;
+
         if($plan->parent)
         {
             if(!empty($parentStage) && $plan->begin < $parentStage->begin) dao::$errors['begin'] = sprintf($this->lang->programplan->error->letterParent,  $parentStage->begin);
@@ -306,13 +308,15 @@ class programplanZen extends programplan
 
         foreach(explode(',', $this->config->programplan->list->$customCreateFields) as $field) $customFields[$field] = $this->lang->programplan->{$field};
 
-        $showFields = $this->config->programplan->$custom->$createFields;
+        $createRequiredFields = $this->config->execution->create->requiredFields;
+        $showFields           = $this->config->programplan->$custom->$createFields;
+        $checkCodeIsRequired  = !empty($this->config->setCode) && strpos(',' . trim($createRequiredFields, ',') . ',', ',code,') !== false;
+        if($checkCodeIsRequired) $showFields .= ',code';
         foreach(explode(',', $showFields) as $field)
         {
             if($field) $visibleFields[$field] = '';
         }
 
-        $createRequiredFields = $this->config->execution->create->requiredFields;
         if($viewData->project->model == 'ipd' && $viewData->executionType == 'stage' && !$viewData->planID) $createRequiredFields = 'enabled,point,' . trim($createRequiredFields, ',');
         foreach(explode(',', $createRequiredFields) as $field)
         {
@@ -325,6 +329,7 @@ class programplanZen extends programplan
 
         if(empty($this->config->setPercent)) unset($visibleFields['percent'], $requiredFields['percent']);
         if(empty($this->config->setCode)) unset($visibleFields['code'], $requiredFields['code']);
+        if($checkCodeIsRequired) unset($customFields['code']);
 
         return array($visibleFields, $requiredFields, $customFields, $showFields, $defaultFields);
     }

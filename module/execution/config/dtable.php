@@ -171,6 +171,7 @@ $config->execution->team->dtable->fieldList['limited']['map']      = $lang->team
 $config->execution->team->dtable->fieldList['limited']['sortType'] = false;
 
 $config->execution->team->dtable->fieldList['actions']['type']       = 'actions';
+$config->execution->team->dtable->fieldList['actions']['title']      = $lang->actions;
 $config->execution->team->dtable->fieldList['actions']['minWidth']   = 60;
 $config->execution->team->dtable->fieldList['actions']['actionsMap'] = $config->execution->team->actionList;
 
@@ -307,7 +308,6 @@ $config->execution->linkStory->dtable->fieldList['estimate']['group']    = 10;
 
 $app->loadLang('testcase');
 $app->loadLang('testtask');
-$app->loadModuleConfig('testtask');
 
 $config->execution->testtask = new stdclass();
 $config->execution->testtask->dtable = new stdclass();
@@ -332,6 +332,11 @@ $config->execution->testtask->dtable->fieldList['title']['group']    = '2';
 $config->execution->testtask->dtable->fieldList['title']['fixed']    = false;
 $config->execution->testtask->dtable->fieldList['title']['width']    = '356';
 $config->execution->testtask->dtable->fieldList['title']['data-app'] = 'execution';
+
+$config->execution->testtask->dtable->fieldList['pri']['name']  = 'pri';
+$config->execution->testtask->dtable->fieldList['pri']['title'] = $lang->priAB;
+$config->execution->testtask->dtable->fieldList['pri']['type']  = 'pri';
+$config->execution->testtask->dtable->fieldList['pri']['show']  = true;
 
 $config->execution->testtask->dtable->fieldList['build']['name']  = 'buildName';
 $config->execution->testtask->dtable->fieldList['build']['title'] = $lang->testtask->build;
@@ -366,5 +371,5 @@ $config->execution->testtask->dtable->fieldList['actions']['title']    = $lang->
 $config->execution->testtask->dtable->fieldList['actions']['type']     = 'actions';
 $config->execution->testtask->dtable->fieldList['actions']['sortType'] = false;
 $config->execution->testtask->dtable->fieldList['actions']['fixed']    = false;
-$config->execution->testtask->dtable->fieldList['actions']['list']     = $config->testtask->actionList;
+$config->execution->testtask->dtable->fieldList['actions']['list']     = $config->execution->testtaskActionList;
 $config->execution->testtask->dtable->fieldList['actions']['menu']     = array('cases', 'linkCase', 'report', 'view', 'edit', 'delete');

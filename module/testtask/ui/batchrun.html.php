@@ -15,6 +15,12 @@ if(count($cases) != count($caseIdList))
     h::js("zui.Modal.alert('{$lang->testtask->skipChangedCases}');");
 }
 
+if(!empty($emptyCases))
+{
+    $emptyCasesTip = sprintf($lang->testtask->emptyCases, $emptyCases);
+    pageJS("zui.Modal.alert({message: '{$emptyCasesTip}', icon: 'icon-exclamation-sign', iconClass: 'warning-pale rounded-full icon-2x'});\n");
+}
+
 unset($lang->testcase->resultList['n/a']);
 
 $caseItems = array();
@@ -62,7 +68,7 @@ foreach($cases as $caseID => $case)
                     (
                         set::className($stepClass),
                         set::hint(true),
-                        $currentID . '、' . $step->desc
+                        $currentID . '、' . htmlspecialchars_decode($step->desc)
                     )
                 ),
                 $step->type != 'group' ? h::td
@@ -72,7 +78,7 @@ foreach($cases as $caseID => $case)
                     span
                     (
                         set::hint(true),
-                        $lang->testcase->stepExpect . ':' . $step->expect
+                        $lang->testcase->stepExpect . ':' . htmlspecialchars_decode($step->expect)
                     )
                 ) : null,
                 $step->type != 'group' ? h::td

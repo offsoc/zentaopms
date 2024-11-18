@@ -107,4 +107,61 @@ class pivot extends control
         $this->view->users = $this->loadModel('user')->getPairs('noletter');
         $this->display();
     }
+
+    /**
+     * AJAX: 获取系统数据下拉选项。
+     * AJAX: get sys options.
+     *
+     * @param  string $search
+     * @param  int $limit
+     * @access public
+     * @return void
+     */
+    public function ajaxGetSysOptions(string $search = '', int $limit = 100)
+    {
+        $type   = zget($_POST, 'type', '');
+        $object = zget($_POST, 'object', '');
+        $field  = zget($_POST, 'field', '');
+        $saveAs = zget($_POST, 'saveAs', '');
+        $sql    = zget($_POST, 'sql', '');
+
+        $options = $this->pivot->getSysOptions($type, $object, $field, $sql, $saveAs);
+
+        /* 根据关键字过滤选项。*/
+        /* Filter options by keywords. */
+        $limitOptions = $options;
+        if(!empty($search))
+        {
+            foreach($limitOptions as $key => $text)
+            {
+                if(strpos($text, $search) === false) unset($limitOptions[$key]);
+            }
+        }
+
+        /* 根据限制数量过滤选项。*/
+        /* Filter options by limit. */
+        $limitOptions = array_slice($limitOptions, 0, $limit, true);
+
+        /* 添加默认值到选项列表。*/
+        /* Add default value to options. */
+        $values = zget($_POST, 'values', '');
+        if(!empty($values))
+        {
+            $values = explode(',', $values);
+            foreach($values as $value)
+            {
+                if(!isset($limitOptions[$value]) && isset($options[$value])) $limitOptions[$value] = $options[$value];
+            }
+        }
+
+        /* 转换为value text格式。*/
+        /* Convert to value text format. */
+        $valueTextList = array();
+        foreach($limitOptions as $value => $text)
+        {
+            $valueTextList[] = array('value' => $value, 'text' => $text);
+        }
+
+        echo json_encode($valueTextList);
+    }
 }

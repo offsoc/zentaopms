@@ -1,6 +1,7 @@
 VERSION        = $(shell head -n 1 VERSION)
 XUANVERSION    = $(shell jq -r .pkg.xuanxuan.gitVersion < ci.json)
 XVERSION       = $(shell jq -r .pkg.xuanxuan.version < ci.json)
+SUITEVERSION   = $(shell jq -r .pkg.blocksuite.version < ci.json)
 XHPROF_VERSION = 2.3.9
 
 XUANPATH      := $(XUANXUAN_SRC_PATH)
@@ -28,6 +29,8 @@ clean:
 	rm -f  *.sh
 	rm -f *.deb *.rpm
 common:
+	curl https://$(GITFOX_HOST)/_artifacts/zentao/raw/zui3/static/blocksuite/$(SUITEVERSION)/blocksuite-$(SUITEVERSION).tar.gz  | tar zxf - -C www/js/zui3/editor/
+
 	mkdir zentaopms
 	cp -fr api zentaopms/
 	cp -fr bin zentaopms/
@@ -85,6 +88,7 @@ zentaoxx:
 	cp -r xuan/xxb/module/im zentaoxx/extension/xuan/
 	cp -r xuan/xxb/module/client zentaoxx/extension/xuan/
 	cp -r xuan/xxb/module/conference zentaoxx/extension/xuan/
+	cp -r xuan/xxb/module/watermark zentaoxx/extension/xuan/
 	cp -r xuan/xxb/module/integration zentaoxx/extension/xuan/
 	mkdir -p zentaoxx/extension/xuan/common/view
 	cp -r xuan/xxb/module/common/view/header.modal.html.php zentaoxx/extension/xuan/common/view
@@ -108,6 +112,10 @@ zentaoxx:
 	mv zentaoxx/db/ zentaoxx/db_bak
 	mkdir zentaoxx/db/
 	sed -i "s/datetime NOT NULL DEFAULT '0000-00-00 00:00:00'/datetime NULL/" zentaoxx/db_bak/*.sql
+	sed -i "s/datetime NOT NULL/datetime NULL/" zentaoxx/db_bak/*.sql
+	sed -i "s/text NOT NULL DEFAULT ''/text NULL/" zentaoxx/db_bak/*.sql
+	sed -i "s/text NOT NULL/text NULL/" zentaoxx/db_bak/*.sql
+	sed -i "s/ENGINE=MyISAM/ENGINE=InnoDB/" zentaoxx/db_bak/*.sql
 	sed -i "/`xxb_user` ADD `clientStatus`/d; /`xxb_user` ADD `clientLang`/d; /`xxb_file` CHANGE `pathname`/d" zentaoxx/db_bak/xuanxuan.sql
 	cp zentaoxx/db_bak/upgradexuanxuan*.sql zentaoxx/db_bak/xuanxuan.sql zentaoxx/db/
 	rm -rf zentaoxx/db_bak/
@@ -313,6 +321,9 @@ ciCommon:
 	sed -i '/uniqueIndex/d' zentaopms/db/*.sql
 	sed -i '/uniqueIndex/d' zentaopms/db/standard/*.sql
 	sed -i 's/KEY `mtype` (`type`),/KEY `mtype` (`type`)/g' zentaopms/db/xuanxuan.sql
+
+	# Merge xuanxuan sql to zentao.
+	cat zentaopms/db/xuanxuan.sql >> zentaopms/db/zentao.sql
 
 	cp -a zentaopms zentaoalm
 	sed -i '/^\s*$$config->langs\['"'"'de'"'"']/d' zentaopms/config/config.php

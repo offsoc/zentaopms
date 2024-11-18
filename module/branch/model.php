@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * The model file of branch module of ZenTaoCMS.
+ * The model file of branch module of ZenTaoPMS.
  *
  * @copyright   Copyright 2009-2023 禅道软件（青岛）有限公司(ZenTao Software (Qingdao) Co., Ltd. www.cnezsoft.com)
  * @license     ZPL(http://zpl.pub/page/zplv12.html) or AGPL(https://www.gnu.org/licenses/agpl-3.0.en.html)
@@ -55,6 +55,8 @@ class branchModel extends model
      */
     public function getList(int $productID, int $executionID = 0, string $browseType = 'active', string $orderBy = 'order', object|null $pager = null, bool $withMainBranch = true): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBranches();
+
         $product = $this->loadModel('product')->getById($productID);
         if(!$product) return array();
 
@@ -124,6 +126,8 @@ class branchModel extends model
      */
     public function getPairs(int $productID, string $params = '', int $executionID = 0, string $mergedBranches = ''): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBranchPairs();
+
         $executionBranches = array();
         if($executionID)
         {
@@ -312,7 +316,11 @@ class branchModel extends model
                     ->where('id')->eq($branchID)
                     ->exec();
 
-                if(dao::isError()) dao::$errors[] = 'branch#' . ($index + 1) . dao::getError(true);
+                if(dao::isError())
+                {
+                    dao::$errors["name[$index]"] = dao::getError(true);
+                    return false;
+                }
 
                 $changes[$branchID] = common::createChanges($oldBranchList[$branchID], $branch);
             }

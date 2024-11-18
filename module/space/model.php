@@ -118,10 +118,11 @@ class spaceModel extends model
             ->beginIF($spaceID)->andWhere('space')->eq($spaceID)->fi()
             ->beginIF($status !== 'all')->andWhere('status')->eq($status)->fi()
             ->beginIF(!empty($searchName))->andWhere('name')->like("%{$searchName}%")->fi()
-            ->orderBy('id desc')->page($pager)->fetchAll('id');
+            ->orderBy('id desc')
+            ->page($pager)
+            ->fetchAll('id');
 
-        $this->loadModel('store');
-        foreach($instances as $instance) $instance->latestVersion = $this->store->appLatestVersion($instance->appID, $instance->version);
+        $instances = $this->loadModel('store')->batchSetLatestVersions($instances);
 
         $solutionIDList = helper::arrayColumn($instances, 'solution');
         $solutions      = $this->dao->select('*')->from(TABLE_SOLUTION)->where('id')->in($solutionIDList)->fetchAll('id');
@@ -156,10 +157,21 @@ class spaceModel extends model
      */
     public function getExternalAppByApp(object $instance): object|false
     {
-        return $this->dao->select('*')->from(TABLE_PIPELINE)
+        $server = $this->dao->select('*')->from(TABLE_PIPELINE)
+            ->where('deleted')->eq('0')
+            ->andWhere('createdBy')->eq('system')
+            ->andWhere('instanceID')->eq($instance->id)
+            ->fetch();
+        if($server) return $server;
+
+        $server = $this->dao->select('*')->from(TABLE_PIPELINE)
             ->where('deleted')->eq('0')
             ->andWhere('createdBy')->eq('system')
             ->andWhere('url')->like("%{$instance->domain}%")
             ->fetch();
+        if(!$server) return false;
+
+        $this->dao->update(TABLE_PIPELINE)->set('instanceID')->eq($instance->id)->where('id')->eq($server->id)->exec();
+        return $server;
     }
 }

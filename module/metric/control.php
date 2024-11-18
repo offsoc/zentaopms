@@ -73,6 +73,9 @@ class metric extends control
             $result    = $this->metric->getResultByCode($current->code, array(), 'cron', $pager);
             $allResult = $this->metric->getResultByCode($current->code, array(), 'cron');
 
+            $result    = $this->completeMissingRecords($result, $current);
+            $allResult = $this->completeMissingRecords($allResult, $current);
+
             $resultHeader  = $this->metric->getViewTableHeader($current);
             $resultData    = $this->metric->getViewTableData($current, $result);
             $allResultData = $this->metric->getViewTableData($current, $allResult);
@@ -173,6 +176,10 @@ class metric extends control
         // 开启调试模式
         $this->config->debug = 2;
 
+        $this->metric->saveLogs('----------------------------------');
+        $this->metric->saveLogs('| The new task: updateMetricLib. |');
+        $this->metric->saveLogs('----------------------------------');
+
         $calcList = $this->metric->getCalcInstanceList();
         $classifiedCalcGroup = $this->metric->classifyCalc($calcList);
         $this->metricZen->calculateMetric($classifiedCalcGroup);
@@ -195,6 +202,10 @@ class metric extends control
 
         // 开启调试模式
         $this->config->debug = 2;
+
+        $this->metric->saveLogs('-------------------------------------------');
+        $this->metric->saveLogs('| The new task: updateDashboardMetricLib. |');
+        $this->metric->saveLogs('-------------------------------------------');
 
         $dashboards = array_keys($this->config->metric->dashboard);
 
@@ -332,6 +343,7 @@ class metric extends control
         $this->view->metric        = $metric;
         $this->view->chartTypeList = $this->metric->getChartTypeList($resultHeader);
         $this->view->echartOptions = $this->metric->getEchartsOptions($resultHeader, $allResultData);
+        $this->view->noDataTip     = $this->metric->getNoDataTip($metric->code);
 
         $this->display();
     }

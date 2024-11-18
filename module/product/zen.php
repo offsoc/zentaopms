@@ -253,6 +253,12 @@ class productZen extends product
         if(isset($fields['program'])) $fields['program']['options'] = $this->loadModel('program')->getTopPairs('noclosed');
         if(isset($fields['line']))    $fields['line']['options'] = $this->product->getLinePairs($programID, true);
 
+        if($this->config->edition != 'open' && isset($fields['workflowGroup']))
+        {
+            $groupPairs = $this->loadModel('workflowGroup')->getPairs();
+            $fields['workflowGroup']['options'] = $this->workflowGroup->appendBuildinLabel($groupPairs);
+        }
+
         return $fields;
     }
 
@@ -299,7 +305,7 @@ class productZen extends product
         if($programID and strpos(",{$hasPrivPrograms},", ",{$programID},") === false) $fields['program']['control'] = 'hidden';
         if(isset($fields['program']) and !isset($fields['program']['options'][$programID]) and $programID)
         {
-            $program = $this->program->getByID($programID);
+            $program = $this->loadModel('program')->getByID($programID);
             $fields['program']['options'] += array($programID => $program->name);
         }
 
@@ -452,12 +458,19 @@ class productZen extends product
      * 获取在ajaxGetDropMenu方法中使用的产品。
      * Get products for ajaxGetDropMenu method.
      *
-     * @param  string $shadow  0|all
+     * @param  string    $shadow  0|all
+     * @param  string    $module
      * @access protected
      * @return array
      */
-    protected function getProducts4DropMenu(string $shadow = '0'): array
+    protected function getProducts4DropMenu(string $shadow = '0', string $module = ''): array
     {
+        if($this->config->edition != 'open')
+        {
+            $flow = $this->loadModel('workflow')->getByModule($module);
+            if($flow && $flow->belong == 'product') return $this->product->getList(0, 'all', 0, 0, $shadow);
+        }
+
         if($this->app->tab == 'project')  return $this->product->getProducts($this->session->project);
         if($this->app->tab == 'feedback') return $this->loadModel('feedback')->getGrantProducts(false);
         return $this->product->getList(0, 'all', 0, 0, $shadow);
@@ -553,14 +566,13 @@ class productZen extends product
      */
     protected function buildProductForCreate(): object
     {
-        $editorFields = array_keys(array_filter(array_map(function($config){return (!empty($config['control']) && $config['control'] == 'editor');}, $this->config->product->form->create)));
-        $productData  = form::data($this->config->product->form->create)
+        $productData = form::data($this->config->product->form->create)
             ->setIF($this->config->systemMode == 'light', 'program', (int)zget($this->config->global, 'defaultProgram', 0))
             ->setIF($this->post->acl == 'open', 'whitelist', '')
             ->setDefault('vision', $this->config->vision)
             ->get();
 
-        return $this->loadModel('file')->processImgURL($productData, $editorFields, $this->post->uid);
+        return $this->loadModel('file')->processImgURL($productData, $this->config->product->editor->create['id'], $this->post->uid);
     }
 
     /**
@@ -573,12 +585,11 @@ class productZen extends product
      */
     protected function buildProductForEdit(int $productID): object
     {
-        $editorFields = array_keys(array_filter(array_map(function($config){return (!empty($config['control']) && $config['control'] == 'editor');}, $this->config->product->form->edit)));
-        $productData  = form::data($this->config->product->form->edit, $productID)
+        $productData = form::data($this->config->product->form->edit, $productID)
             ->setIF($this->post->acl == 'open', 'whitelist', '')
             ->get();
 
-        return $this->loadModel('file')->processImgURL($productData, $editorFields, $this->post->uid);
+        return $this->loadModel('file')->processImgURL($productData, $this->config->product->editor->edit['id'], $this->post->uid);
     }
 
     /**
@@ -835,6 +846,8 @@ class productZen extends product
      */
     protected function getModuleTree(int $projectID, int $productID, string &$branch, int $param, string $storyType, string $browseType): array|string
     {
+        if(common::isTutorialMode()) return array();
+
         /* Set moduleTree. */
         $createModuleLink = 'createStoryLink';
         if($storyType == 'requirement') $createModuleLink = 'createRequirementLink';
@@ -1419,7 +1432,7 @@ class productZen extends product
         $this->view->isProjectStory  = $isProjectStory;
         $this->view->branch          = $branch;
         $this->view->branchID        = $branchID;
-        $this->view->modulePairs     = !empty($showModule) ? $this->tree->getModulePairs($productID, 'story', $showModule) : array();
+        $this->view->modulePairs     = !empty($showModule) ? $this->loadModel('tree')->getModulePairs($productID, 'story', $showModule) : array();
         $this->view->branchOptions   = (empty($product) && $isProjectStory) ? $this->getBranchOptions($projectProducts, $projectID) : array($productID => $branchOpt);
         $this->view->branchTagOption = $branchTagOpt;
         $this->view->projectProducts = $projectProducts;
@@ -1431,7 +1444,7 @@ class productZen extends product
         $this->view->summary    = $this->product->summary($stories, $storyType);
         $this->view->plans      = $this->loadModel('productplan')->getPairs($productID, isset($projectProducts[$productID]) ? array(BRANCH_MAIN) + $projectProducts[$productID]->branches : (($branch === 'all' || empty($branch)) ? '' : $branch), 'unexpired,noclosed', true);
         $this->view->users      = $this->loadModel('user')->getPairs('noletter|pofirst|nodeleted');
-        $this->view->modules    = $this->tree->getOptionMenu($productID, 'story', 0, $branchID);
+        $this->view->modules    = $this->loadModel('tree')->getOptionMenu($productID, 'story', 0, $branchID);
         $this->view->storyTasks = $this->loadModel('task')->getStoryTaskCounts($storyIdList);
         $this->view->storyBugs  = $this->loadModel('bug')->getStoryBugCounts($storyIdList);
         $this->view->storyCases = $this->loadModel('testcase')->getStoryCaseCounts($storyIdList);

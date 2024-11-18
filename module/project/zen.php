@@ -327,6 +327,13 @@ class projectZen extends project
             }
         }
 
+        $hasProduct = isset($copyProject->hasProduct) ? $copyProject->hasProduct : 1;
+        if($this->config->edition != 'open')
+        {
+            $workflowGroups = $this->loadModel('workflowgroup')->getPairs('project', $model, $hasProduct);
+            $this->view->workflowGroups = $this->workflowgroup->appendBuildinLabel($workflowGroups);
+        }
+
         /* Get copy projects. */
         $copyProjects     = $this->project->getPairsByModel($model, '', 0, false);
         $copyProjectPairs = !commonModel::isTutorialMode() ? array_combine(array_keys($copyProjects), array_column($copyProjects, 'name')) : $copyProjects;
@@ -945,10 +952,30 @@ class projectZen extends project
      */
     protected function buildClosedForm(int $projectID): void
     {
-        $this->view->title   = $this->lang->project->close;
-        $this->view->users   = $this->loadModel('user')->getPairs('noletter');
-        $this->view->project = $this->project->getByID($projectID);
-        $this->view->actions = $this->loadModel('action')->getList('project', $projectID);
+        $project    = $this->project->getByID($projectID);
+        $confirmTip = '';
+        if(empty($project->multiple))
+        {
+            $executionID   = $this->loadModel('execution')->getNoMultipleID($projectID);
+            $unclosedTasks = $executionID ? $this->loadModel('task')->getUnclosedTasksByExecution($executionID) : array();
+            if(!empty($unclosedTasks)) $confirmTip = sprintf($this->lang->execution->confirmCloseExecution, implode($this->lang->comma, $unclosedTasks));
+            $confirmTip = str_replace($this->lang->executionCommon, $this->lang->projectCommon, $confirmTip);
+        }
+        else
+        {
+            $unclosedExecutions = $this->loadModel('execution')->getByProject($projectID, 'noclosed', 0, true);
+            if(!empty($unclosedExecutions))
+            {
+                $unclosedExecutions = implode($this->lang->comma, $unclosedExecutions);
+                $unclosedExecutions = str_replace("{$project->name}/", '', $unclosedExecutions);
+                $confirmTip         = sprintf($this->lang->project->confirmCloseProject, $unclosedExecutions);
+            }
+        }
+        $this->view->title      = $this->lang->project->close;
+        $this->view->users      = $this->loadModel('user')->getPairs('noletter');
+        $this->view->project    = $project;
+        $this->view->actions    = $this->loadModel('action')->getList('project', $projectID);
+        $this->view->confirmTip = $confirmTip;
         $this->display();
     }
 
@@ -1232,6 +1259,11 @@ class projectZen extends project
             {
                 $currentProducts += $programProducts;
             }
+        }
+
+        foreach($linkedProducts as $product)
+        {
+            if($product->deleted == '1') $product->name = $product->name . ' (' . $this->lang->product->deleted . ')';
         }
 
         $this->view->currentProducts = $currentProducts;
@@ -1563,10 +1595,17 @@ class projectZen extends project
     {
         $this->loadModel('product');
 
-        $projects = $this->project->getList($status, $orderBy);
-        $users    = $this->loadModel('user')->getPairs('noletter');
+        $projects        = $this->project->getList($status, $orderBy);
+        $users           = $this->loadModel('user')->getPairs('noletter');
+        $canViewProjects = $this->app->user->view->projects;
         foreach($projects as $i => $project)
         {
+            if(!$this->app->user->admin && strpos(",{$canViewProjects},", ",{$project->id},") === false)
+            {
+                unset($projects[$i]);
+                continue;
+            }
+
             $projectBudget = $project->budget === '' ? '0' : $project->budget;
 
             $project->PM     = zget($users, $project->PM);

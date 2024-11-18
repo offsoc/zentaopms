@@ -62,7 +62,7 @@ $lang->admin->menuList->system['menuOrder']['35'] = 'cache';
 $lang->admin->menuList->system['menuOrder']['40'] = 'cron';
 $lang->admin->menuList->system['menuOrder']['45'] = 'timezone';
 $lang->admin->menuList->system['menuOrder']['50'] = 'buildindex';
-$lang->admin->menuList->system['menuOrder']['55'] = 'tableengine';
+$lang->admin->menuList->system['menuOrder']['65'] = 'tableengine';  // The order 51-64 is reserved for extension.
 
 $lang->admin->menuList->system['dividerMenu'] = ',safe,';
 
@@ -86,7 +86,7 @@ $lang->admin->menuList->model['menuOrder']['15'] = 'waterfall';
 $lang->admin->menuList->model['menuOrder']['20'] = 'agileplus';
 $lang->admin->menuList->model['menuOrder']['25'] = 'waterfallplus';
 
-$lang->admin->menuList->model['tabMenu']['common']['project']      = array('link' => "{$lang->project->common}|custom|required|module=project", 'alias' => 'set', 'exclude' => 'custom', 'links' => array('custom|set|module=project&field=unitList'));
+$lang->admin->menuList->model['tabMenu']['common']['project']      = array('link' => "{$lang->project->common}|custom|required|module=project", 'alias' => 'set,project', 'links' => array('custom|set|module=project&field=unitList'));
 if(helper::hasFeature('waterfall') or helper::hasFeature('waterfallplus')) $lang->admin->menuList->model['tabMenu']['common']['stage'] = array('link' => "{$lang->stage->type}|stage|settype|", 'subModule' => 'stage');
 $lang->admin->menuList->model['tabMenu']['common']['build']        = array('link' => "{$lang->build->common}|custom|required|module=build", 'alias' => 'set', 'exclude' => 'custom');
 $lang->admin->menuList->model['tabMenu']['common']['flow']         = array('link' => "{$lang->custom->flow}|custom|flow|", 'divider' => true);

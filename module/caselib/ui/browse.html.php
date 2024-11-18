@@ -11,14 +11,14 @@ declare(strict_types=1);
 namespace zin;
 
 jsVar('confirmBatchDelete', $lang->testcase->confirmBatchDelete);
-
 $canView              = common::hasPriv('caselib', 'view');
-$canExport            = common::hasPriv('caselib', 'exportTemplate');
+$canExport            = common::hasPriv('caselib', 'exportCase');
+$canExportTemplate    = common::hasPriv('caselib', 'exportTemplate');
 $canImport            = common::hasPriv('caselib', 'import');
 $canCreateLib         = common::hasPriv('caselib', 'create');
 $canCreateCase        = common::hasPriv('caselib', 'createCase');
 $canBatchCreateCase   = common::hasPriv('caselib', 'batchCreateCase');
-$canBatchEdit         = common::hasPriv('testcase', 'batchEdit');
+$canBatchEdit         = common::hasPriv('caselib', 'batchEditCase');
 $canBatchDelete       = common::hasPriv('testcase', 'batchDelete');
 $canBatchReview       = common::hasPriv('testcase', 'batchReview') and ($config->testcase->needReview or !empty($config->testcase->forceReview));
 $canBatchChangeModule = common::hasPriv('testcase', 'batchChangeModule');
@@ -36,6 +36,19 @@ featureBar
 
 $createCaseItem      = array('text' => $lang->testcase->create, 'url' => helper::createLink('caselib', 'createCase', "libID=$libID&moduleID=" . (isset($moduleID) ? $moduleID : 0)));
 $batchCreateCaseItem = array('text' => $lang->testcase->batchCreate, 'url' => helper::createLink('caselib', 'batchCreateCase', "libID=$libID&moduleID=" . (isset($moduleID) ? $moduleID : 0)));
+
+$exportItems = array();
+if($canExport)
+{
+    $link = $this->createLink('caselib', 'exportCase', "libID={$libID}&orderBy={$orderBy}&browseType={$browseType}");
+    $exportItems[] = array('text' => $lang->caselib->exportCase, 'url' => $link, 'data-toggle' => 'modal');
+}
+if($canExportTemplate)
+{
+    $link = $this->createLink('caselib', 'exportTemplate', "libID={$libID}");
+    $exportItems[] = array('text' => $lang->caselib->exportTemplate, 'url' => $link, 'data-toggle' => 'modal', 'data-size' => 'sm');
+}
+
 toolbar
 (
     $canView ? a
@@ -47,17 +60,18 @@ toolbar
         icon('list-alt'),
         $lang->caselib->view
     ) : '',
-    $canExport || $canImport ? btngroup
+    !empty($exportItems) || $canImport ? btngroup
     (
-        $canExport ? a
+        $exportItems ? dropdown
         (
-            setClass('toolbar-item ghost btn btn-default'),
-            set::href(createLink('caselib', 'exportTemplate', "libID={$libID}")),
-            set('data-toggle', 'modal'),
-            set('data-size', 'sm'),
-            icon('export'),
-            $lang->caselib->exportTemplate
-        ) : '',
+            btn
+            (
+                setClass('btn ghost square'),
+                set::icon('export'),
+            ),
+            set::items($exportItems),
+            set::placement('bottom-end')
+        ) : null,
         $canImport ? a
         (
             setClass('toolbar-item ghost btn btn-default'),
@@ -141,7 +155,7 @@ $footToolbar = $canBatchAction ? array('items' => array
 (
     array('type' => 'btn-group', 'items' => array
     (
-        $canBatchEdit ? array('text' => $lang->edit, 'className' => 'batch-btn not-open-url', 'data-url' => helper::createLink('testcase', 'batchEdit', "libID=$libID&branch=0&type=lib")) : null,
+        $canBatchEdit ? array('text' => $lang->edit, 'className' => 'batch-btn not-open-url', 'data-url' => helper::createLink('caselib', 'batchEditCase', "libID=$libID&branch=0&type=lib")) : null,
         !empty($navActions) ? array('caret' => 'up', 'btnType' => 'secondary', 'items' => $navActions, 'data-placement' => 'top-start') : null
     )),
 ), 'btnProps' => array('btnType' => 'secondary')) : null;
@@ -153,6 +167,7 @@ dtable
     set::customData(array('modules' => $modulePairs)),
     set::onRenderCell(jsRaw('window.onRenderCell')),
     set::userMap($users),
+    set::customCols(true),
     set::checkable($canBatchAction),
     set::emptyTip($lang->testcase->noCase),
     set::createTip($lang->testcase->create),

@@ -36,7 +36,7 @@ foreach($lang->project->modelList as $key => $text)
     $modelMenuItems[] = array('text' => $text, 'selected' => $key == $model, 'url' => createLink('project', 'create', "model=$key"));
 }
 
-$modeDropdown = dropdown
+$modeDropdown = common::isTutorialMode() ? null : dropdown
 (
     btn
     (
@@ -54,6 +54,7 @@ $handleLongTimeChange = jsCallback()->do(<<<'JS'
     endPicker.render({disabled: isLongTime});
     if(isLongTime) endPicker.$.setValue('');
     $element.find('[name=days]').attr('disabled', isLongTime ? 'disabled' : null);
+    checkProjectInfo();
 JS);
 
 $toggleLongTime = jsCallback()->do(<<<'JS'
@@ -70,7 +71,7 @@ formGridPanel
 (
     to::titleSuffix($modeDropdown),
     set::ajax(array('submitDisabledValue' => false)),
-    to::headingActions
+    common::isTutorialMode() ? null : to::headingActions
     (
         btn
         (
@@ -82,7 +83,7 @@ formGridPanel
         divider(setClass('h-4 mr-4 ml-2 self-center'))
     ),
     formHidden('storyType[]', 'story'),
-    on::click('[name=name], [name=code], [data-name=begin] .pick *, [name=days], [data-name="parent"] .pick *', 'removeTips'),
+    on::click('[name=name], [name=code], [data-name=begin] .pick *, [name=days], [data-name="parent"] .pick *, [name=longTime]', 'removeTips'),
     on::click('[type=submit]', 'removeAllTips'),
     on::click('[name=multiple]', $toggleLongTime),
     on::change('[name=hasProduct]', 'changeType'),

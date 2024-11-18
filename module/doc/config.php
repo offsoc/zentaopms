@@ -58,6 +58,7 @@ $config->doc->spaceMethod['product']   = 'productspace';
 $config->doc->spaceMethod['project']   = 'projectspace';
 $config->doc->spaceMethod['execution'] = 'projectspace';
 $config->doc->spaceMethod['custom']    = 'teamspace';
+$config->doc->spaceMethod['custom']    = 'teamspace';
 
 $config->doc->search['module']               = 'doc';
 $config->doc->search['fields']['title']      = $lang->doc->title;
@@ -114,3 +115,9 @@ $config->doc->showfiles->actionList['download']['hint']   = $lang->doc->download
 $config->doc->showfiles->actionList['download']['text']   = $lang->doc->download;
 $config->doc->showfiles->actionList['download']['url']    = array('module' => 'file', 'method' => 'download', 'params' => 'fileID={id}');
 $config->doc->showfiles->actionList['download']['target'] = '_blank';
+
+$config->doc->quickMenu = array();
+$config->doc->quickMenu['view']      = array('id' => 1, 'name' => $lang->doc->myView);
+$config->doc->quickMenu['createdby'] = array('id' => 2, 'name' => $lang->doc->myCreation);
+$config->doc->quickMenu['collect']   = array('id' => 3, 'name' => $lang->doc->myCollection);
+$config->doc->quickMenu['editedby']  = array('id' => 4, 'name' => $lang->doc->myEdited);

@@ -281,7 +281,7 @@ class productplanZen extends productplan
         unset($storyStatusList['closed']);
         $this->config->product->search['params']['status'] = array('operator' => '=', 'control' => 'select', 'values' => $storyStatusList);
 
-        $product = $this->loadModel('product')->fetchByID($plan->product);
+        $product = $this->loadModel('product')->getByID($plan->product);
         if($product->type == 'normal')
         {
             unset($this->config->product->search['fields']['branch']);
@@ -337,7 +337,7 @@ class productplanZen extends productplan
 
         unset($this->config->bug->search['fields']['product']);
 
-        $product = $this->loadModel('product')->fetchByID($plan->product);
+        $product = $this->loadModel('product')->getByID($plan->product);
         if($product->type == 'normal')
         {
             unset($this->config->bug->search['fields']['branch']);
@@ -444,6 +444,11 @@ class productplanZen extends productplan
 
         /* 对需求重新按照父子关系排序，保证进入需求详情后上一页下一页的URL符合预期。 */
         $objectList = $this->loadModel('story')->reorderStories($stories);
-        if($objectList) $this->session->set('storyBrowseList', array('sql' => $sql, 'idkey' => 'id', 'objectList' => $objectList), $this->app->tab);
+        if($objectList)
+        {
+            $this->session->set('storyBrowseList', array('sql' => $sql, 'idkey' => 'id', 'objectList' => $objectList), $this->app->tab);
+            $this->session->set('epicBrowseList', array('sql' => $sql, 'idkey' => 'id', 'objectList' => $objectList), $this->app->tab);
+            $this->session->set('requirementBrowseList', array('sql' => $sql, 'idkey' => 'id', 'objectList' => $objectList), $this->app->tab);
+        }
     }
 }

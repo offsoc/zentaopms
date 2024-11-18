@@ -1,8 +1,8 @@
 {
   "pkg": {
     "xuanxuan": {
-      "gitVersion": "ea25dbc21d1acd1bc48b65445f02170e3267f1a8",
-      "version": "9.0"
+      "gitVersion": "ca19e71757be425f4cd3b29b00d29a49ce99d221",
+      "version": "9.2"
     },
     "zentaoext": {
       "gitRepo": "zentao/zentaoext"
@@ -11,10 +11,13 @@
       "gitRepo": "zentao/devops"
     },
     "downgrade": {
-      "gitRepo": "devops/zentaopms-downgrade"
+      "gitRepo": "ci/zentaopms-downgrade"
     },
     "downgradeExt": {
-      "gitRepo": "devops/zentaoext-downgrade"
+      "gitRepo": "ci/zentaoext-downgrade"
+    },
+    "blocksuite": {
+        "version": "0.17.10"
     }
   },
   "image": {

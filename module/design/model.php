@@ -234,6 +234,8 @@ class designModel extends model
      */
     public function getByID(int $designID = 0): object|bool
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getDesign();
+
         $design = $this->dao->select('*')->from(TABLE_DESIGN)->where('id')->eq($designID)->fetch();
         if(!$design) return false;
 
@@ -316,6 +318,8 @@ class designModel extends model
      */
     public function getList(int $projectID = 0, int $productID = 0, string $type = 'all', int $param = 0, string $orderBy = 'id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getDesigns();
+
         if($type == 'bySearch')
         {
             $designs = $this->getBySearch($projectID, $productID, $param, $orderBy, $pager);
@@ -426,8 +430,8 @@ class designModel extends model
     {
         return $this->dao->select('t1.revision,t3.id AS id,t3.name AS title')
             ->from(TABLE_REPOHISTORY)->alias('t1')
-            ->leftJoin(TABLE_RELATION)->alias('t2')->on('t2.relation="completedin" AND t2.BType="commit" AND t2.BID=t1.id')
-            ->leftJoin(TABLE_DESIGN)->alias('t3')->on('t2.AType="design" AND t2.AID=t3.id')
+            ->leftJoin(TABLE_RELATION)->alias('t2')->on("t2.relation='completedin' AND t2.BType='commit' AND t2.BID=t1.id")
+            ->leftJoin(TABLE_DESIGN)->alias('t3')->on("t2.AType='design' AND t2.AID=t3.id")
             ->where('t1.revision')->in($revisions)
             ->andWhere('t1.repo')->eq($repoID)
             ->andWhere('t3.id')->ne('')

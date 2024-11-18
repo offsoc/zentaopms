@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * The model file of testreport module of ZenTaoCMS.
+ * The model file of testreport module of ZenTaoPMS.
  *
  * @copyright   Copyright 2009-2023 禅道软件（青岛）有限公司(ZenTao Software (Qingdao) Co., Ltd. www.cnezsoft.com)
  * @license     ZPL(http://zpl.pub/page/zplv12.html) or AGPL(https://www.gnu.org/licenses/agpl-3.0.en.html)
@@ -94,6 +94,8 @@ class testreportModel extends model
      */
     public function getList(int $objectID, string $objectType, int $extra = 0, string $orderBy = 'id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getTestReports();
+
         return $this->dao->select('*')->from(TABLE_TESTREPORT)
             ->where('deleted')->eq(0)
             ->beginIF($objectType == 'execution')->andWhere('execution')->eq($objectID)->fi()
@@ -209,7 +211,7 @@ class testreportModel extends model
         $failResults     = 0;
         $runCasesResults = array();
         foreach($results as $result) $runCasesResults[$result->run] = $result->caseResult;
-        foreach($runCasesResults as $lastResult) if($lastResult != 'success') $failResults++;
+        foreach($runCasesResults as $lastResult) if($lastResult != 'pass') $failResults++;
 
         return sprintf($this->lang->testreport->caseSummary, $caseCount, count($runCasesResults), count($results), $failResults);
     }

@@ -39,15 +39,15 @@ class editPlanTester extends tester
         //编辑失败时，校验提示信息是否正确
         if ($this->response('method') != 'view')
         {
-            if ($this->checkFormTips('productplan')) return $this->success('编辑计划表单页提示信息正确');
+            if ($this->checkFormTips('productplan')) return $this->success('编辑计划提示信息正确');
             if ($form->dom->endTip)
             {
                 //检查结束日期小于开始日期
                 $endTipform = $form->dom->endTip->getText();
                 $endTip     = sprintf($this->lang->error->ge, $this->lang->productplan->end, $form->dom->begin->getValue());
-                return ($endTipform == $endTip) ? $this->success('编辑计划表单页提示信息正确') : $this->failed('编辑计划表单页提示信息不正确');
+                return ($endTipform == $endTip) ? $this->success('日期校验正确') : $this->failed('日期校验不正确');
             }
-            return $this->failed('编辑计划表单页提示信息不正确');
+            return $this->failed('编辑计划提示信息不正确');
         }
         else
         {
@@ -56,7 +56,7 @@ class editPlanTester extends tester
             $viewPage->waitElement($this->lang->productplan->view);
             $viewPage->dom->btn($this->lang->productplan->view)->click();
             // 检查是否编辑为待定计划
-            if ($productplan->future == 'future')
+            if (isset($productplan->future))
             {
                 $planBegin = $viewPage->dom->begin->getText();
                 return ($planBegin == $this->lang->productplan->future) ? $this->success('编辑为待定计划成功') : $this->failed('编辑为待定计划失败');

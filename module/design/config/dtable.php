@@ -18,6 +18,7 @@ $config->design->dtable->fieldList['id']['type']  = 'id';
 $config->design->dtable->fieldList['name']['type'] = 'title';
 $config->design->dtable->fieldList['name']['link'] = array('module' => 'design', 'method' => 'view', 'params' => 'designID={id}');
 
+$config->design->dtable->fieldList['product']['title']    = $lang->design->product;
 $config->design->dtable->fieldList['product']['type']     = 'desc';
 $config->design->dtable->fieldList['product']['sortType'] = true;
 

@@ -97,6 +97,19 @@ class caselib extends control
     }
 
     /**
+     * 编辑用例。
+     * Edit a case.
+     *
+     * @param  int    $caseID
+     * @access public
+     * @return void
+     */
+    public function editCase(int $caseID)
+    {
+        echo $this->fetch('testcase', 'edit', "caseID=$caseID");
+    }
+
+    /**
      * 删除一个用例库。
      * Delete a case lib.
      *
@@ -282,6 +295,21 @@ class caselib extends control
     }
 
     /**
+     * 批量编辑用例。
+     * Batch edit case.
+     *
+     * @param  int        $libID
+     * @param  string|int $branch
+     * @param  string     $type
+     * @access public
+     * @return void
+     */
+    public function batchEditCase(int $libID, string|int $branch = '', string $type = '')
+    {
+        echo $this->fetch('testcase', 'batchEdit', "libID=$libID&branch=$branch&type=$type");
+    }
+
+    /**
      * 查看用例库信息。
      * View a library.
      *
@@ -304,6 +332,20 @@ class caselib extends control
         $this->view->users   = $this->loadModel('user')->getPairs('noclosed|noletter');
         $this->view->actions = $this->loadModel('action')->getList('caselib', $libID);
         $this->display();
+    }
+
+    /**
+     * 查看用例。
+     * View a case.
+     *
+     * @param  int    $caseID
+     * @param  int    $version
+     * @access public
+     * @return void
+     */
+    public function viewCase(int $caseID, int $version = 0)
+    {
+        echo $this->fetch('testcase', 'view', "caseID=$caseID&version=$version");
     }
 
     /**
@@ -371,6 +413,8 @@ class caselib extends control
         {
             $file = $this->loadModel('file')->getUpload('file');
             $file = $file[0];
+
+            if(!$file || (isset($file['extension']) && $file['extension'] != 'csv')) return $this->send(array('result' => 'fail', 'message' => $this->lang->file->errorFileFormat));
 
             $fileName = $this->file->savePath . $this->file->getSaveName($file['pathname']);
             move_uploaded_file($file['tmpname'], $fileName);
@@ -461,6 +505,41 @@ class caselib extends control
         $this->view->pageID      = $pageID;
         $this->view->maxImport   = $maxImport;
         $this->view->dataInsert  = $insert;
+        $this->display();
+    }
+
+    /**
+     * 导出用例。
+     * Export case.
+     *
+     * @param  int    $libID
+     * @param  string $orderBy
+     * @param  string $browseType
+     * @access public
+     * @return void
+     */
+    public function exportCase(int $libID, string $orderBy = 'id_desc', string $browseType = 'all')
+    {
+        $lib = $this->caselib->getById($libID);
+
+        if($_POST)
+        {
+            $fields = $this->caselibZen->getExportCasesFields();
+            $cases  = $this->caselib->getCasesToExport($this->post->exportType, $orderBy, (int)$this->post->limit);
+            $cases  = $this->caselibZen->processCasesForExport($cases, $libID);
+
+            $this->post->set('fields', $fields);
+            $this->post->set('rows', $cases);
+            $this->post->set('kind', 'testcase');
+            $this->fetch('file', 'export2' . $this->post->fileType, $_POST);
+        }
+
+        $fileName   = $this->lang->testcase->common;
+        $browseType = isset($this->lang->caselib->featureBar['browse'][$browseType]) ? $this->lang->caselib->featureBar['browse'][$browseType] : '';
+
+        $this->view->fileName        = $lib->name . $this->lang->dash . $browseType . $fileName;
+        $this->view->allExportFields = $this->config->caselib->exportFields;
+        $this->view->customExport    = true;
         $this->display();
     }
 }

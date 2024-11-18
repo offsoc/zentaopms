@@ -24,6 +24,18 @@ $lang->pivot->designAB     = 'Design';
 $lang->pivot->exportType   = 'Export Type';
 $lang->pivot->exportRange  = 'Export Range';
 $lang->pivot->story        = 'Story';
+$lang->pivot->clear        = 'Clear';
+$lang->pivot->keep         = 'Keep';
+
+$lang->pivot->accessDenied  = 'You do not have access to this pivot';
+$lang->pivot->acl = 'Access Control';
+$lang->pivot->aclList['open']    = 'Public (with pivot view permissions and dimension permissions can access it)';
+$lang->pivot->aclList['private'] = 'Private (Only creators and whitelisted users with dimension permissions can access it)';
+
+$lang->pivot->otherLang = new stdclass();
+$lang->pivot->otherLang->product       = 'Product';
+$lang->pivot->otherLang->productStatus = 'Product Status';
+$lang->pivot->otherLang->productType   = 'Product type';
 
 $lang->pivot->cancelAndBack = 'Cancel save and back';
 
@@ -73,7 +85,7 @@ $lang->pivot->setLang     = 'Set Langs';
 $lang->pivot->toDesign    = 'To Design';
 $lang->pivot->toPreview   = 'Exit Design';
 $lang->pivot->variable    = 'Variable';
-$lang->pivot->varCode     = 'Var Code';
+$lang->pivot->varCode     = 'Code';
 $lang->pivot->varLabel    = 'Var Label';
 $lang->pivot->monopolize  = 'Self';
 $lang->pivot->varNameTip  = 'Input letters';
@@ -283,6 +295,7 @@ $lang->pivot->nameEmpty     = '『Name』should not be blank';
 $lang->pivot->notEmpty      = 'Can\'t be empty.';
 
 $lang->pivot->noPivotTip      = 'After you save the Settings, you can display the pivot table';
+$lang->pivot->filterEmptyVal  = 'Use filters to view data';
 $lang->pivot->noQueryTip      = 'No filter.';
 $lang->pivot->noPivot         = 'No Pivot table';
 $lang->pivot->noDrillTip      = 'No Data Drill.';
@@ -294,6 +307,7 @@ $lang->pivot->clearSettings   = 'The configuration of the query data has been mo
 $lang->pivot->draftSave       = 'The pivot table has been published and will be in draft state. Do you want to continue?';
 $lang->pivot->cannotAddQuery  = 'Result filter has been added, query filter cannot be added.';
 $lang->pivot->cannotAddResult = 'Query filter has been added, result filter cannot be added.';
+$lang->pivot->cannotNextStep  = 'Please click Query Update data before proceeding to the next step.';
 //$lang->pivot->cannotAddDrill  = 'GROUP BY exists in the query statement or filters are configured. Therefore, data cannot be configured to drill down';
 $lang->pivot->permissionDenied = 'The %s directory does not have enough permissions. Run chmod 777 %s to change the permissions.';
 
@@ -407,8 +421,15 @@ $lang->pivot->stepDesign->groupsTip   = 'By selecting a grouping field, the data
 $lang->pivot->stepDesign->columnsTip  = 'Add 1 column to the pivot table and set it.';
 
 $lang->pivot->stepDesign->columnTotal    = 'Show column totals';
+$lang->pivot->stepDesign->columnCalc     = 'Summary calculation';
+$lang->pivot->stepDesign->columnPosition = 'Summary position';
 $lang->pivot->stepDesign->columnTotalTip = 'Add a row to display the summary data for each column.';
 $lang->pivot->stepDesign->total          = 'Total';
+
+$lang->pivot->stepDesign->columnPositionList = array();
+$lang->pivot->stepDesign->columnPositionList['bottom'] = 'Display on table bottom';
+$lang->pivot->stepDesign->columnPositionList['row']    = 'Display on row group';
+$lang->pivot->stepDesign->columnPositionList['all']    = 'Display on row group and table bottom';
 
 $lang->pivot->stepDesign->columnTotalList = array();
 $lang->pivot->stepDesign->columnTotalList['noShow'] = 'No Show';

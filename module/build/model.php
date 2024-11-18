@@ -25,6 +25,8 @@ class buildModel extends model
      */
     public function getByID(int $buildID, bool $setImgSize = false): object|false
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBuild();
+
         $build = $this->dao->select('t1.*, t2.name as executionName, t3.name as productName, t3.type as productType')
             ->from(TABLE_BUILD)->alias('t1')
             ->leftJoin(TABLE_EXECUTION)->alias('t2')->on('t1.execution = t2.id')
@@ -163,6 +165,8 @@ class buildModel extends model
      */
     public function getExecutionBuilds(int $executionID, string $type = '', string $param = '', string $orderBy = 't1.date_desc,t1.id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBuilds();
+
         return $this->dao->select('t1.*, t2.name as executionName, t3.name as productName')
             ->from(TABLE_BUILD)->alias('t1')
             ->leftJoin(TABLE_EXECUTION)->alias('t2')->on('t1.execution = t2.id')
@@ -251,6 +255,8 @@ class buildModel extends model
      */
     public function getBuildPairs(array|int $productIdList, string|int $branch = 'all', string $params = 'noterminate, nodone', int $objectID = 0, string $objectType = 'execution', string $buildIdList = '', bool $replace = true): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBuildPairs();
+
         $sysBuilds = array();
         if(strpos($params, 'notrunk') === false) $sysBuilds = array('trunk' => $this->lang->trunk);
 
@@ -413,6 +419,7 @@ class buildModel extends model
             ->beginIF($objectType === 'project' && $objectID)->andWhere("(FIND_IN_SET('$objectID', t1.project)")->orWhere('t1.project')->eq('0')->markRight(1)->fi()
             ->beginIF($objectType === 'execution' && $objectID)->andWhere('t2.execution')->eq($objectID)->fi()
             ->beginIF(strpos($params, 'nowaitrelease') !== false)->andWhere('t1.status')->ne('wait')->fi()
+            ->beginIF(strpos($params, 'nofail') !== false)->andWhere('t1.status')->ne('fail')->fi()
             ->andWhere('((t1.deleted')->eq(0)
             ->andWhere('t1.shadow')->ne(0)
             ->markRight(true)
@@ -479,6 +486,7 @@ class buildModel extends model
                 }
             }
             if($relationBranch) $build->branch = implode(',', $relationBranch);
+            $this->config->build->create->requiredFields = str_replace('execution,', '', $this->config->build->create->requiredFields);
         }
         else
         {

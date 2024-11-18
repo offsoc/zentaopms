@@ -24,6 +24,18 @@ $lang->pivot->designAB     = '设计';
 $lang->pivot->exportType   = '导出格式';
 $lang->pivot->exportRange  = '导出范围';
 $lang->pivot->story        = '需求';
+$lang->pivot->clear        = '清空';
+$lang->pivot->keep         = '保留设计';
+
+$lang->pivot->accessDenied  = '您无权访问该透视表';
+$lang->pivot->acl = '访问控制';
+$lang->pivot->aclList['open']    = '公开（有透视表视图权限与所在维度的访问权限即可访问）';
+$lang->pivot->aclList['private'] = '私有（仅创建者和白名单用户可访问）';
+
+$lang->pivot->otherLang = new stdclass();
+$lang->pivot->otherLang->product       = '产品';
+$lang->pivot->otherLang->productStatus = '产品状态';
+$lang->pivot->otherLang->productType   = '产品类型';
 
 $lang->pivot->cancelAndBack = '取消保存并返回';
 
@@ -73,7 +85,7 @@ $lang->pivot->setLang     = '设置语言项';
 $lang->pivot->toDesign    = '进入设计';
 $lang->pivot->toPreview   = '退出设计';
 $lang->pivot->variable    = '变量名称';
-$lang->pivot->varCode     = '变量代号';
+$lang->pivot->varCode     = '代号';
 $lang->pivot->varLabel    = '变量标签';
 $lang->pivot->monopolize  = '独占一列';
 $lang->pivot->varNameTip  = '请输入字母';
@@ -283,17 +295,19 @@ $lang->pivot->nameEmpty     = '『名称』不能为空';
 $lang->pivot->notEmpty      = '不能为空。';
 
 $lang->pivot->noPivotTip      = '保存设置后，即可显示透视表';
+$lang->pivot->filterEmptyVal  = '使用筛选器以查看数据';
 $lang->pivot->noQueryTip      = '暂时没有筛选器。';
 $lang->pivot->noPivot         = '暂时没有透视表';
 $lang->pivot->noDrillTip      = '未配置数据下钻。';
 $lang->pivot->dataError       = '"%s" 填写的不是合法的值';
 $lang->pivot->noChartSelected = '请选择至少一个图表。';
 $lang->pivot->beginGtEnd      = '开始时间不得大于结束时间。';
-$lang->pivot->resetSettings   = '查询数据的配置已修改，是否清空透视表设计，重新设计。';
+$lang->pivot->resetSettings   = '查询数据的SQL语句发生变化，是否清空透视表设计？';
 $lang->pivot->clearSettings   = '查询数据的配置已修改，是否清空透视表设计并保存。';
 $lang->pivot->draftSave       = '该透视表已发布，将变为草稿态，是否继续？';
 $lang->pivot->cannotAddQuery  = '已添加结果筛选器，无法添加查询筛选器';
 $lang->pivot->cannotAddResult = '已添加查询筛选器，无法添加结果筛选器';
+$lang->pivot->cannotNextStep  = '请先点击查询更新数据后再进行后续操作。';
 //$lang->pivot->cannotAddDrill  = '查询语句中存在GROUP BY或配置了筛选器，暂时无法配置数据下钻';
 $lang->pivot->permissionDenied = '目录 %s 权限不足，执行命令 chmod 777 %s 修改权限。';
 
@@ -407,8 +421,15 @@ $lang->pivot->stepDesign->groupsTip   = '通过选择分组字段，对SQL查询
 $lang->pivot->stepDesign->columnsTip  = '在透视表中添加1列并对其进行设置。';
 
 $lang->pivot->stepDesign->columnTotal    = '显示列的汇总';
+$lang->pivot->stepDesign->columnCalc     = '汇总的计算方式';
+$lang->pivot->stepDesign->columnPosition = '汇总的展示位置';
 $lang->pivot->stepDesign->columnTotalTip = '增加一行显示每一列的汇总数据。';
 $lang->pivot->stepDesign->total          = '总计';
+
+$lang->pivot->stepDesign->columnPositionList = array();
+$lang->pivot->stepDesign->columnPositionList['bottom'] = '仅在整张表下方展示';
+$lang->pivot->stepDesign->columnPositionList['row']    = '仅在每层行分组下方展示';
+$lang->pivot->stepDesign->columnPositionList['all']    = '在整张表与每层行分组下方均展示';
 
 $lang->pivot->stepDesign->columnTotalList = array();
 $lang->pivot->stepDesign->columnTotalList['noShow'] = '不显示';

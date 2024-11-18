@@ -67,6 +67,7 @@ $config->task->form->edit['type']           = array('type' => 'string',   'requi
 $config->task->form->edit['status']         = array('type' => 'string',   'required' => true);
 $config->task->form->edit['pri']            = array('type' => 'int',      'required' => false, 'default' => 0);
 $config->task->form->edit['estStarted']     = array('type' => 'date',     'required' => false, 'default' => null);
+$config->task->form->edit['realStarted']    = array('type' => 'datetime', 'required' => false, 'default' => null);
 $config->task->form->edit['deadline']       = array('type' => 'date',     'required' => false, 'default' => null);
 $config->task->form->edit['estimate']       = array('type' => 'float',    'required' => false, 'default' => 0);
 $config->task->form->edit['left']           = array('type' => 'float',    'required' => false, 'default' => 0);
@@ -94,6 +95,7 @@ $config->task->form->team->edit = $config->task->form->team->create;
 $config->task->form->batchedit = array();
 $config->task->form->batchedit['id']             = array('type' => 'int',      'required' => false, 'default' => 0, 'base' => true);
 $config->task->form->batchedit['module']         = array('type' => 'int',      'required' => false, 'default' => 0);
+$config->task->form->batchedit['story']          = array('type' => 'int',      'required' => false, 'default' => 0);
 $config->task->form->batchedit['name']           = array('type' => 'string',   'required' => true,  'default' => '');
 $config->task->form->batchedit['color']          = array('type' => 'string',   'required' => false, 'default' => '');
 $config->task->form->batchedit['type']           = array('type' => 'string',   'required' => true,  'default' => '');
@@ -124,6 +126,7 @@ $config->task->form->batchcreate['deadline']      = array('type' => 'date',     
 $config->task->form->batchcreate['desc']          = array('type' => 'string',   'required' => false, 'default' => '');
 $config->task->form->batchcreate['pri']           = array('type' => 'int',      'required' => false, 'default' => 0);
 $config->task->form->batchcreate['lane']          = array('type' => 'int',      'required' => false, 'default' => 0);
+$config->task->form->batchcreate['column']        = array('type' => 'int',      'required' => false, 'default' => 0);
 $config->task->form->batchcreate['openedBy']      = array('type' => 'string',   'required' => false, 'default' => $account);
 $config->task->form->batchcreate['openedDate']    = array('type' => 'datetime', 'required' => false, 'default' => $now);
 $config->task->form->batchcreate['vision']        = array('type' => 'string',   'required' => false, 'default' => $config->vision);

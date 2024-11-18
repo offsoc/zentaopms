@@ -22,6 +22,64 @@ class projectModel extends model
     }
 
     /**
+     * 获取当前登录用户参与的项目列表.
+     * Get project list by current user.
+     *
+     * @param  string    $fields
+     * @access public
+     * @return array
+     */
+    public function getInvolvedListByCurrentUser(string $fields = 't1.*') :array
+    {
+        $stmt = $this->dao->select($fields)->from(TABLE_PROJECT)->alias('t1');
+        $stmt = $this->leftJoinInvolvedTable($stmt);
+
+        $stmt->where('t1.type')->eq('project')
+            ->beginIF($this->config->vision)->andWhere('t1.vision')->eq($this->config->vision)->fi()
+            ->andWhere('t1.deleted')->eq(0)
+            ->beginIF(!$this->app->user->admin)->andWhere('t1.id')->in($this->app->user->view->projects)->fi();
+        $stmt = $this->appendInvolvedCondition($stmt);
+
+        return $stmt->orderBy('order_asc,id_desc')
+            ->fetchAll('id');
+    }
+
+    /**
+     * 左链接 "我参与的" 条件需要的表，传入的$stmt t1应为 TABLE_PROJECT 表
+     * LeftJoin "I participate" condition required table.
+     *
+     * @param  object $stmt
+     * @access public
+     * @return object
+     */
+    public function leftJoinInvolvedTable($stmt)
+    {
+        return $stmt->leftJoin(TABLE_TEAM)->alias('t2')->on('t1.id = t2.root')
+            ->leftJoin(TABLE_STAKEHOLDER)->alias('t3')->on('t1.id=t3.objectID');
+    }
+
+    /**
+     * 添加 "我参与的" 条件所需的查询条件，项目的PM、项目的成员、项目的干系人、项目的白名单
+     * Add the query condition for the "I Participate".
+     *
+     * @param  object $stmt
+     * @access public
+     * @return object
+     */
+    public function appendInvolvedCondition($stmt)
+    {
+        return $stmt->andWhere('t2.type')->eq('project')
+            ->andWhere('t1.openedBy', true)->eq($this->app->user->account)
+            ->orWhere('t1.PM')->eq($this->app->user->account)
+            ->orWhere('t2.account')->eq($this->app->user->account)
+            ->orWhere('(t3.user')->eq($this->app->user->account)
+            ->andWhere('t3.deleted')->eq(0)
+            ->markRight(1)
+            ->orWhere("CONCAT(',', t1.whitelist, ',')")->like("%,{$this->app->user->account},%")
+            ->markRight(1);
+    }
+
+    /**
      * 查找项目执行下关联的产品
      * Get linked products with execution under the project.
      *
@@ -167,7 +225,7 @@ class projectModel extends model
     public function getByID(int $projectID, string $type = ''): object|false
     {
         /* Using demo data during tutorials. */
-        if(commonModel::isTutorialMode()) return $this->loadModel('tutorial')->getProject();
+        if(commonModel::isTutorialMode()) return empty($projectID) ? false : $this->loadModel('tutorial')->getProject();
 
         /* Get project info. */
         $project = $this->projectTao->fetchProjectInfo($projectID, $type);
@@ -510,11 +568,14 @@ class projectModel extends model
 
             return helper::createLink($linkParams[0], $linkParams[1], $linkParams[2]) . $linkParams[3];
         }
-
-        if(in_array($module, $this->config->waterfallModules))
+        if($this->config->edition != 'open')
         {
-            return helper::createLink($module, 'browse', "projectID=%s");
+            $flow = $this->loadModel('workflow')->getByModule($module);
+            if(!empty($flow->app) && in_array($flow->app, array('scrum', 'waterfall'))) $flow->app = 'project';
+            if(!empty($flow) && $flow->buildin == '0') return helper::createLink('flow', 'ajaxSwitchBelong', "objectID=%s&moduleName=$module") . "#app=$flow->app";
         }
+
+        if(in_array($module, $this->config->waterfallModules)) return helper::createLink($module, 'browse', "projectID=%s");
 
         return $link;
     }
@@ -714,6 +775,8 @@ class projectModel extends model
      */
     public function getBranchesByProject(int $projectID): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getBranchesByProject();
+
         return $this->dao->select('*')->from(TABLE_PROJECTPRODUCT)
             ->where('project')->eq($projectID)
             ->fetchGroup('product', 'branch');
@@ -788,6 +851,7 @@ class projectModel extends model
      */
     public function getProjectList(string $status, string $order, int $limit, string $excludedModel): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getProjectStats();
         return $this->projectTao->fetchProjectListByQuery($status, 0, $order, $limit, $excludedModel);
     }
 
@@ -920,25 +984,25 @@ class projectModel extends model
      * 根据项目集和模型获取项目列表(列表索引为项目编号)。
      * Get project pairs by model and project.
      *
-     * @param  string  $model all|scrum|waterfall|kanban
-     * @param  string  $param noclosed
-     * @param  int     $projectID
-     * @param  bool    $pairs
+     * @param  string|array  $model all|scrum|waterfall|kanban
+     * @param  string        $param noclosed
+     * @param  int           $projectID
+     * @param  bool          $pairs
      * @access public
-     * @return array   array(projectID => projectName, ...)
+     * @return array         array(projectID => projectName, ...)
      */
-    public function getPairsByModel(string $model = 'all', string $param = '', int $projectID = 0, bool $pairs = true): array
+    public function getPairsByModel(string|array $model = 'all', string $param = '', int $projectID = 0, bool $pairs = true): array
     {
         if(commonModel::isTutorialMode()) return $this->loadModel('tutorial')->getProjectPairs();
 
         /* Get project list. */
         $projects = $this->projectTao->fetchProjectListByQuery(strpos($param, 'noclosed') !== false ? 'unclosed' : 'all', $projectID);
 
-        if($model == 'agileplus')     $model = array('scrum', 'agileplus');
-        if($model == 'waterfallplus') $model = array('waterfall', 'waterfallplus');
+        if(is_string($model) && $model == 'agileplus')     $model = array('scrum', 'agileplus');
+        if(is_string($model) && $model == 'waterfallplus') $model = array('waterfall', 'waterfallplus');
 
         /* Set first program to the project attribute. */
-        $model    = $model == 'all' ? array() : (array)$model;
+        $model    = is_string($model) && $model == 'all' ? array() : (array)$model;
         $multiple = strpos($param, 'multiple') !== false;
         foreach($projects as $projectID => $project)
         {
@@ -1348,11 +1412,11 @@ class projectModel extends model
         $this->updatePlans($projectID, (array)$this->post->plans); // 更新关联的计划列表。
         if($oldProject->hasProduct > 0) $this->updateProducts($projectID, (array)$this->post->products, $postProductData); // 更新关联的产品列表。
         $this->updateTeamMembers($project, $oldProject, zget($_POST, 'teamMembers', array())); // 更新关联的用户信息。
-        if($postProductData) $this->updateProductStage($projectID, (string)$oldProject->stageBy, $postProductData); // 更新关联的所有产品的阶段。
+        if(!empty((array)$postProductData)) $this->updateProductStage($projectID, (string)$oldProject->stageBy, $postProductData); // 更新关联的所有产品的阶段。
 
         $this->file->updateObjectID((string)$this->post->uid, $projectID, 'project'); // 通过uid更新文件id。
 
-        if($oldProject->parent != $project->parent) $this->loadModel('program')->processNode($projectID, $project->parent, $oldProject->path, $oldProject->grade); // 更新项目从属路径。
+        if($oldProject->parent != $project->parent) $this->loadModel('program')->processNode($projectID, (int)$project->parent, $oldProject->path, $oldProject->grade); // 更新项目从属路径。
         if($oldProject->storyType != $project->storyType)
         {
             /* 编辑项目时如果取消关联需求类型，则把对应类型的需求移除。 */
@@ -2164,7 +2228,7 @@ class projectModel extends model
     {
         $this->session->set('multiple', true);
 
-        $project = $this->projectTao->fetchProjectInfo($projectID);
+        $project = common::isTutorialMode() ? $this->loadModel('tutorial')->getProject() : $this->projectTao->fetchProjectInfo($projectID);
         if(empty($project) || $project->multiple) return false;
         if(!in_array($project->type, array('project', 'sprint', 'kanban'))) return false;
 
@@ -2584,8 +2648,11 @@ class projectModel extends model
             return $output;
         }
 
-        $dropMenuLink = helper::createLink('project', 'ajaxGetDropMenu', "objectID=$projectID&module=$currentModule&method=$currentMethod");
-        $output  = "<div class='btn-group header-btn' id='swapper'><button data-toggle='dropdown' type='button' class='btn' id='currentItem' title='{$currentProjectName}'><span class='text'>{$currentProjectName}</span> <span class='caret' style='margin-bottom: -1px'></span></button><div id='dropMenu' class='dropdown-menu search-list' data-ride='searchList' data-url='$dropMenuLink'>";
+        $this->app->loadConfig('index');
+        $dropMenuMethod = in_array("{$this->app->moduleName}-{$this->app->methodName}", $this->config->index->oldPages) ? 'ajaxGetOldDropMenu' : 'ajaxGetDropMenu';
+        $dataRide       = in_array("{$this->app->moduleName}-{$this->app->methodName}", $this->config->index->oldPages) ? 'searchList'         : 'dropmenu' ;
+        $dropMenuLink   = helper::createLink('project', $dropMenuMethod, "objectID=$projectID&module=$currentModule&method=$currentMethod");
+        $output  = "<div class='btn-group header-btn' id='swapper'><button data-toggle='dropdown' type='button' class='btn' id='currentItem' title='{$currentProjectName}'><span class='text'>{$currentProjectName}</span> <span class='caret' style='margin-bottom: -1px'></span></button><div id='dropMenu' class='dropdown-menu search-list' data-ride='{$dataRide}' data-url='$dropMenuLink'>";
         $output .= '<div class="input-control search-box has-icon-left has-icon-right search-example"><input type="search" class="form-control search-input" /><label class="input-control-icon-left search-icon"><i class="icon icon-search"></i></label><a class="input-control-icon-right search-clear-btn"><i class="icon icon-close icon-sm"></i></a></div>';
         $output .= "</div></div>";
 

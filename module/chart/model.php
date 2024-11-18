@@ -26,6 +26,23 @@ class chartModel extends model
     }
 
     /**
+     * 判断是否有权限访问。
+     * Check chart access.
+     *
+     * @param  int    $chartID
+     * @access public
+     * @return array
+     */
+    public function checkAccess($chartID, $method = 'preview')
+    {
+        $viewableObjects = $this->bi->getViewableObject('chart');
+        if(!in_array($chartID, $viewableObjects))
+        {
+            return $this->app->control->sendError($this->lang->chart->accessDenied, helper::createLink('chart', $method));
+        }
+    }
+
+    /**
      * 获取指定维度下的第一个分组 id。
      * Get the first group id under the specified dimension.
      *
@@ -63,6 +80,7 @@ class chartModel extends model
 
         $this->app->loadModuleConfig('screen');
 
+        $viewableObjects = $this->bi->getViewableObject('chart');
         /* 获取分组下的第一个图表。*/
         /* Get the first chart under the group. */
         foreach($groups as $groupID)
@@ -74,6 +92,7 @@ class chartModel extends model
                 ->markRight(1)
                 ->andWhere("FIND_IN_SET({$groupID}, `group`)")
                 ->andWhere('stage')->eq('published')
+                ->andWhere('id')->in($viewableObjects)
                 ->orderBy('id_desc')
                 ->limit(1)
                 ->fetch();
@@ -156,6 +175,7 @@ class chartModel extends model
 
         $this->app->loadModuleConfig('screen');
 
+        $viewableObjects = $this->bi->getViewableObject('chart');
         /* 获取每个分组下的图表以供生成菜单树。*/
         /* Get the charts under each group for generating the menu tree. */
         $chartGroups = array();
@@ -168,6 +188,7 @@ class chartModel extends model
                 ->markRight(1)
                 ->andWhere("FIND_IN_SET({$group->id}, `group`)")
                 ->andWhere('stage')->eq('published')
+                ->andWhere('id')->in($viewableObjects)
                 ->orderBy($orderBy)
                 ->fetchAll();
         }
@@ -737,37 +758,6 @@ class chartModel extends model
         }
 
         return $filterFormat;
-    }
-
-    /**
-     * 在sql中将变量解析为空字符串。
-     * Parse variables to null string in sql.
-     *
-     * @param  string $sql
-     * @param  array  $filters
-     * @access public
-     * @return string
-     */
-    public function parseSqlVars(string $sql, array $filters): string
-    {
-        if($filters)
-        {
-            foreach($filters as $filter)
-            {
-                if(!isset($filter['default'])) continue;
-                if(isset($filter['from']) and $filter['from'] == 'query')
-                {
-                    $default = "'{$filter['default']}'";
-                    $sql     = str_replace('$' . $filter['field'], $default, $sql);
-                }
-            }
-        }
-        if(preg_match_all("/[\$]+[a-zA-Z0-9]+/", $sql, $out))
-        {
-            foreach($out[0] as $match) $sql = str_replace($match, "''", $sql);
-        }
-
-        return $sql;
     }
 
     /**

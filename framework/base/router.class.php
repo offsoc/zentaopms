@@ -316,6 +316,15 @@ class baseRouter
     public $dbh;
 
     /**
+     * $dao对象，用于访问或者更新数据库。
+     * The $dao object, used to access or update database.
+     *
+     * @var dao
+     * @access public
+     */
+    public $dao;
+
+    /**
      * 从数据库的句柄。
      * The slave database handler.
      *
@@ -829,7 +838,11 @@ class baseRouter
      */
     protected function setupProfiling(): void
     {
-        if(!empty($this->config->debug) && $this->config->debug >= 3 && $this->config->installed) $this->dbh->exec('SET profiling = 1');
+        if(!empty($this->config->debug) && $this->config->debug >= 3 && $this->config->installed)
+        {
+            $this->dbh->exec('SET profiling_history_size = 200');
+            $this->dbh->exec('SET profiling = 1');
+        }
     }
 
     /**
@@ -905,7 +918,7 @@ class baseRouter
 
         $vision = '';
         $sql    = new sql();
-        if($this->config->installed and validater::checkAccount($account))
+        if($this->config->installed and validater::checkAccount($account) and !$this->upgrading)
         {
             $account = $sql->quote($account);
 
@@ -915,14 +928,13 @@ class baseRouter
             }
             else
             {
-                $vision  = $this->dbQuery("SELECT * FROM " . TABLE_CONFIG . " WHERE owner = $account AND `key` = 'vision' LIMIT 1")->fetch();
-                if($vision) $vision = $vision->value;
+                $vision = $this->dao->select("value")->from(TABLE_CONFIG)->where('owner')->eq($account)->andWhere('`key`')->eq('vision')->limit(1)->fetch('value');
             }
 
-            $user = $this->dbQuery("SELECT * FROM " . TABLE_USER . " WHERE account = $account AND deleted = '0' LIMIT 1")->fetch();
+            $user = $this->dao->select('*')->from(TABLE_USER)->where('account')->eq($account)->andWhere('deleted')->eq('0')->limit(1)->fetch();
             if(!empty($user->visions))
             {
-                $userVisions = explode(',', (string) $user->visions);
+                $userVisions = explode(',', $user->visions);
                 if(!in_array($vision, $userVisions)) $vision = '';
                 if(empty($vision)) [$vision] = $userVisions;
             }
@@ -948,10 +960,10 @@ class baseRouter
     {
         if(!isset($this->config->installed) || !$this->config->installed) return false;
 
-        $version = $this->dbQuery("SELECT `value` FROM " . TABLE_CONFIG . " WHERE `owner` = 'system' AND `key` = 'version' AND `module` = 'common' AND `section` = 'global' LIMIT 1")->fetch();
+        $version = $this->dao->select('`value`')->from(TABLE_CONFIG)->where('`owner`')->eq('system')->andWhere('`key`')->eq('version')->andWhere('`module`')->eq('common')->andWhere('`section`')->eq('global')->limit(1)->fetch('value');
         if(!$version && ($this->config->inContainer || $this->config->inQuickon)) return false;
 
-        $version = $version ? $version->value : '0.3.beta';                  // No version, set as 0.3.beta.
+        if(!$version) $version = '0.3.beta';              // No version, set as 0.3.beta.
         if($version == '3.0.stable') $version = '3.0';    // convert 3.0.stable to 3.0.
         return $version;
     }
@@ -1679,7 +1691,7 @@ class baseRouter
             $controlFile = $this->controlFile;
             spl_autoload_register(function($class) use ($moduleName, $controlFile)
             {
-                if($class == $moduleName) include $controlFile;
+                if($class == $moduleName) helper::import($controlFile);
             });
         }
 
@@ -2797,10 +2809,10 @@ class baseRouter
     {
         if(!$this->checkInstalled()) return false;
 
-        $globalCache = $this->dbQuery("SELECT `value` FROM " . TABLE_CONFIG . " WHERE `module` = 'common' AND `section` = 'global' AND `key` = 'cache' LIMIT 1")->fetch();
+        $globalCache = $this->dao->select('`value`')->from(TABLE_CONFIG)->where('`module`')->eq('common')->andWhere('`section`')->eq('global')->andWhere('`key`')->eq('cache')->limit(1)->fetch('value');
         if(!$globalCache) return false;
 
-        $caches = json_decode($globalCache->value);
+        $caches = json_decode($globalCache);
         foreach($caches as $cacheKey => $cache)
         {
             if(!isset($this->config->cache->$cacheKey)) $this->config->cache->$cacheKey = new stdClass();
@@ -3026,32 +3038,56 @@ class baseRouter
      */
     public function connectDB()
     {
-        global $config, $dbh, $slaveDBH;
-        if(!isset($config->installed) or !$config->installed) return;
+        global $dbh, $slaveDBH;
+        if(!isset($this->config->installed) or !$this->config->installed) return;
 
         /* Set master db. */
-        if(isset($config->db->host)) $this->dbh = $dbh = $this->connectByPDO($config->db, 'MASTER');
+        if(isset($this->config->db->host)) $this->dbh = $dbh = $this->connectByPDO($this->config->db, 'MASTER');
 
         /* Set slave db. */
-        if(empty($config->slaveDBList)) return;
-
-        $biIndex   = 0;
-        $slaveList = array();
-        foreach($config->slaveDBList as $index => $db)
+        if(!empty($this->config->slaveDBList))
         {
-            if(isset($db->type) && $db->type == 'bi')
+            $biIndex   = 0;
+            $slaveList = array();
+            foreach($this->config->slaveDBList as $index => $db)
             {
-                $biIndex = $index;
+                if(isset($db->type) && $db->type == 'bi')
+                {
+                    $biIndex = $index;
+                }
+                else
+                {
+                    $slaveList[] = $index;
+                }
             }
-            else
-            {
-                $slaveList[] = $index;
-            }
-        }
-        $slaveIndex = empty($slaveList) ? $biIndex : $slaveList[array_rand($slaveList)];
 
-        $config->biDB   = $this->initSlaveDB($biIndex);
-        $this->slaveDBH = $slaveDBH = $this->connectByPDO($this->initSlaveDB($slaveIndex), 'SLAVE');
+            $slaveIndex = empty($slaveList) ? $biIndex : $slaveList[array_rand($slaveList)];
+
+            $this->config->biDB   = $this->initSlaveDB($biIndex);
+            $this->slaveDBH = $slaveDBH = $this->connectByPDO($this->initSlaveDB($slaveIndex), 'SLAVE');
+        }
+
+        $this->loadDAO();
+    }
+
+    /**
+     * 加载DAO。
+     * Load DAO.
+     *
+     * @access public
+     * @return void
+     */
+    public function loadDAO()
+    {
+        global $dao;
+
+        $driver = $this->config->db->driver;
+
+        $classFile = $this->coreLibRoot . 'dao' . DS . $driver . '.class.php';
+        include($classFile);
+
+        $dao = new $driver($this);
+        $this->dao = $dao;
     }
 
     /**
@@ -3294,7 +3330,7 @@ class baseRouter
         if(!empty($this->config->debug) && $this->config->debug > 1)
         {
             /* Send non-serious errors to page in zin mode. */
-            $isZinRequest      = isset($this->config->zin) || isset($_SERVER['HTTP_X_ZIN_OPTIONS']);
+            $isZinRequest      = isset($_SERVER['HTTP_X_ZIN_OPTIONS']);
             $isNonSeriousError = $level !== E_ERROR && $level !== E_PARSE && $level !== E_CORE_ERROR && $level !== E_COMPILE_ERROR;
             if($isZinRequest && $isNonSeriousError)
             {

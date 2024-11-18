@@ -82,6 +82,7 @@ class project extends control
             $this->fetch('file', 'export2' . $this->post->fileType, $_POST);
         }
 
+        $this->view->fileName = zget($this->lang->project->featureBar['index'], $status, '') . '.' . $this->lang->projectCommon;
         $this->display();
     }
 
@@ -95,14 +96,57 @@ class project extends control
      * @access public
      * @return void
      */
-    public function ajaxGetDropMenu(int $projectID, string $module, string $method, string $extra = '')
+    public function ajaxGetDropMenu(int $projectID, string $module, string $method, string $extra = '', int $useLink = 1)
     {
         /* Set cookie for show all project. */
         $_COOKIE['showClosed'] = 1;
 
         /* Query user's project and program. */
-        $projects = $this->project->getListByCurrentUser();
-        $programs = $this->loadModel('program')->getPairs(true);
+        $projects         = $this->project->getListByCurrentUser();
+        $involvedProjects = $this->project->getInvolvedListByCurrentUser();
+        $programs         = $this->loadModel('program')->getPairs(true);
+
+        /* Generate project tree. */
+        $orderedProjects = array();
+        foreach($projects as $project)
+        {
+            $project->parent = $this->program->getTopByID($project->parent);
+            $project->parent = isset($programs[$project->parent]) ? $project->parent : $project->id;
+
+            $orderedProjects[$project->parent][] = $project;
+        }
+
+        $this->view->link      = $useLink == 1 ? $this->project->getProjectLink($module, $method, $projectID, $extra) : '#'; // Create the link from module,method.
+        $this->view->projectID = $projectID;
+        $this->view->module    = $module;
+        $this->view->method    = $method;
+        $this->view->programs  = $programs;
+
+        $this->view->projects         = $orderedProjects;
+        $this->view->involvedProjects = $involvedProjects;
+
+        $this->display();
+    }
+
+    /**
+     * 旧页面：设置1.5级项目下拉菜单。
+     * Ajax get project drop menu.
+     *
+     * @param  int    $projectID
+     * @param  string $module
+     * @param  string $method
+     * @access public
+     * @return void
+     */
+    public function ajaxGetOldDropMenu(int $projectID, string $module, string $method, string $extra = '')
+    {
+        /* Set cookie for show all project. */
+        $_COOKIE['showClosed'] = 1;
+
+        /* Query user's project and program. */
+        $projects         = $this->project->getListByCurrentUser();
+        $involvedProjects = $this->project->getInvolvedListByCurrentUser();
+        $programs         = $this->loadModel('program')->getPairs(true);
 
         /* Generate project tree. */
         $orderedProjects = array();
@@ -116,10 +160,12 @@ class project extends control
 
         $this->view->link      = $this->project->getProjectLink($module, $method, $projectID, $extra); // Create the link from module,method.
         $this->view->projectID = $projectID;
-        $this->view->projects  = $orderedProjects;
         $this->view->module    = $module;
         $this->view->method    = $method;
         $this->view->programs  = $programs;
+
+        $this->view->projects         = $orderedProjects;
+        $this->view->involvedProjects = $involvedProjects;
 
         $this->display();
     }
@@ -323,10 +369,8 @@ class project extends control
         $actionURL = $this->createLink('project', 'browse', "&programID=$programID&browseType=bySearch&queryID=myQueryID");
         $this->project->buildSearchForm($queryID, $actionURL);
 
-        $this->loadModel('program')->refreshStats(); // Refresh stats fields of projects.
-
         $programTitle = $this->loadModel('setting')->getItem("owner={$this->app->user->account}&module=project&key=programTitle");
-        $projectStats = $this->program->getProjectStats($programID, $browseType, $queryID, $orderBy, $programTitle, false, $pager);
+        $projectStats = $this->loadModel('program')->getProjectStats($programID, $browseType, $queryID, $orderBy, $programTitle, false, $pager);
 
         $this->view->title         = $this->lang->project->browse;
         $this->view->projectStats  = $this->projectZen->processProjectListData($projectStats);
@@ -602,6 +646,8 @@ class project extends control
         $this->executeHooks($projectID);
         list($userPairs, $userList) = $this->projectZen->buildUsers();
 
+        if($this->config->edition != 'open') $this->view->workflowGroups = $this->loadModel('workflowgroup')->getPairs('project', $project->model, $project->hasProduct, 'all');
+
         $this->view->title        = $this->lang->project->view;
         $this->view->projectID    = $projectID;
         $this->view->project      = $project;
@@ -782,8 +828,6 @@ class project extends control
         $this->app->loadClass('pager', true);
         $pager = new pager($recTotal, $recPerPage, $pageID);
 
-        $this->loadModel('program')->refreshStats(); // Refresh stats fields of projects.
-
         $sort = $orderBy;
         if(strpos($sort, 'rawID_') !== false) $sort = str_replace('rawID_', 'id_', $sort);
         if(strpos($sort, 'nameCol_') !== false) $sort = str_replace('nameCol_', 'name_', $sort);
@@ -830,6 +874,7 @@ class project extends control
         $this->loadModel('search');
 
         $this->project->setMenu($projectID);
+        $this->session->set('bugList', $this->app->getURI(true), 'project');
 
         $projectID = (int)$projectID;
         $product   = $this->product->getById($productID);
@@ -969,10 +1014,13 @@ class project extends control
         $this->project->setMenu($projectID);
         $project = $this->project->getByID($projectID);
 
+        if($type == 'product') $this->session->set('buildProductID', $param);
+        if(!$this->session->buildProductID) $this->session->set('buildProductID', $param);
+
         /* Build the search form. */
         $type     = strtolower($type);
         $products = $this->loadModel('product')->getProducts($projectID, 'all', '', false);
-        $this->project->buildProjectBuildSearchForm($products, $type == 'bysearch' ? (int)$param : 0, $projectID, $param, 'project');
+        $this->project->buildProjectBuildSearchForm($products, $type == 'bysearch' ? (int)$param : 0, $projectID, $this->session->buildProductID, 'project');
 
         /* Build the search form. */
         $this->app->loadClass('pager', true);
@@ -993,7 +1041,7 @@ class project extends control
         $this->view->title     = $project->name . $this->lang->hyphen . $this->lang->execution->build;
         $this->view->users     = $this->loadModel('user')->getPairs('noletter');
         $this->view->builds    = $this->projectZen->processBuildListData($builds, $projectID);
-        $this->view->productID = $type == 'product' ? $param : 'all';
+        $this->view->productID = $this->session->buildProductID;
         $this->view->project   = $project;
         $this->view->products  = $products;
         $this->view->type      = $type;
@@ -1145,23 +1193,32 @@ class project extends control
             return $this->send(array('message' => $this->lang->saveSuccess, 'result' => 'success', 'load' => $this->createLink('project', 'team', "projectID=$projectID")));
         }
 
-        $users        = $this->user->getPairs('noclosed|nodeleted|devfirst');
-        $roles        = $this->user->getUserRoles(array_keys($users));
-        $deptUsers    = $dept === '' ? array() : $this->dept->getDeptUserPairs((int)$dept);
+        $users          = $this->user->getPairs('noclosed|nodeleted|devfirst');
+        $roles          = $this->user->getUserRoles(array_keys($users));
+        $deptUsers      = $dept === '' ? array() : $this->dept->getDeptUserPairs((int)$dept);
+        $executions     = $this->project->getExecutionList(array($projectID));
+        $executionTeams = $this->execution->getMembersByIdList(array_keys($executions));
+
+        $executionMembers = array();
+        foreach($executionTeams as $executionID => $executionTeam)
+        {
+            $executionMembers += array_keys($executionTeam);
+        }
 
         $currentMembers = $this->project->getTeamMembers($projectID);
         $members2Import = $this->project->getMembers2Import($copyProjectID, array_keys($currentMembers));
 
-        $this->view->title          = $this->lang->project->manageMembers . $this->lang->hyphen . $project->name;
-        $this->view->project        = $project;
-        $this->view->users          = $users;
-        $this->view->roles          = $roles;
-        $this->view->dept           = $dept;
-        $this->view->depts          = $this->dept->getOptionMenu();
-        $this->view->teams2Import   = $this->loadModel('personnel')->getCopiedObjects($projectID, 'project', true);
-        $this->view->currentMembers = $currentMembers;
-        $this->view->copyProjectID  = $copyProjectID;
-        $this->view->teamMembers    = $this->projectZen->buildMembers($currentMembers, $members2Import, $deptUsers, $project->days);
+        $this->view->title            = $this->lang->project->manageMembers . $this->lang->hyphen . $project->name;
+        $this->view->project          = $project;
+        $this->view->users            = $users;
+        $this->view->roles            = $roles;
+        $this->view->dept             = $dept;
+        $this->view->depts            = $this->dept->getOptionMenu();
+        $this->view->teams2Import     = $this->loadModel('personnel')->getCopiedObjects($projectID, 'project', true);
+        $this->view->currentMembers   = $currentMembers;
+        $this->view->copyProjectID    = $copyProjectID;
+        $this->view->teamMembers      = $this->projectZen->buildMembers($currentMembers, $members2Import, $deptUsers, $project->days);
+        $this->view->executionMembers = $executionMembers;
         $this->display();
     }
 
@@ -1211,6 +1268,9 @@ class project extends control
         $this->view->deptTree     = $this->loadModel('dept')->getTreeMenu(0, array('deptModel', 'createGroupManageMemberLink'), (int)$groupID);
         $this->view->groupUsers   = $groupUsers;
         $this->view->otherUsers   = $otherUsers;
+        $this->view->deptID       = $deptID;
+        $this->view->noUsers      = empty($groupUsers) && empty($otherUsers);
+
         $this->view->outsideUsers = array_diff_assoc($outsideUsers, $groupUsers);
 
         $this->display('group', 'manageMember');
@@ -1578,7 +1638,7 @@ class project extends control
         if($pageType == 'old')
         {
             $disabled = empty($project->multiple) ? 'disabled' : '';
-            return print(html::select('execution', $executions, '', "class='form-control $disabled' $disabled"));
+            return print(html::select('execution', array(0 => '') + $executions, '', "class='form-control $disabled' $disabled"));
         }
 
         $data             = array();
@@ -1656,5 +1716,23 @@ class project extends control
         $this->view->projectID     = $projectID;
         $this->view->currentMethod = $currentMethod;
         $this->display();
+    }
+
+    /**
+     * Ajax get workflow group items.
+     *
+     * @param  string $model
+     * @param  int    $hasProduct
+     * @access public
+     * @return void
+     */
+    public function ajaxGetWorkflowGroups(string $model, int $hasProduct)
+    {
+        if($this->config->edition == 'open') return false;
+
+        $workflowGroups = $this->loadModel('workflowgroup')->getPairs('project', $model, $hasProduct);
+
+        $items = $this->workflowgroup->appendBuildinLabel($workflowGroups);
+        return $this->send(array('items' => array_values($items), 'defaultValue' => key($workflowGroups)));
     }
 }

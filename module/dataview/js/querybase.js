@@ -347,6 +347,49 @@ function setRelatedField(obj)
 }
 
 /**
+ * handle click table item in data dictionary
+ *
+ * @param  obj    $event
+ * @access public
+ * @return void
+ */
+function handleClickDictTable(event)
+{
+    if(!$(event.target).hasClass('list-toggle') && !$(event.target).closest('li').hasClass('field-item'))
+    {
+        const table = $(event.target).closest('li').data('dict');
+        appendTextToSqlForm(table);
+        event.stopPropagation();
+    }
+}
+
+/**
+ * handle click field item in data dictionary
+ *
+ * @param  obj    $event
+ * @access public
+ * @return void
+ */
+function handleClickDictField(event)
+{
+    const field = $(event.target).closest('li').data('dict');
+    appendTextToSqlForm(field);
+}
+
+/**
+ * append text to sql form.
+ *
+ * @param  string $text
+ * @access public
+ * @return void
+ */
+function appendTextToSqlForm(text)
+{
+    const sqlForm = $('textarea[name="sql"]');
+    sqlForm.val(sqlForm.val() + text);
+}
+
+/**
  * Active field.
  *
  * @param  obj $obj

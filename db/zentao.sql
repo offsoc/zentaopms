@@ -179,7 +179,7 @@ CREATE TABLE IF NOT EXISTS `zt_approvalflow` (
   `version` mediumint(8) NOT NULL DEFAULT '1',
   `createdBy` varchar(30) NOT NULL DEFAULT '',
   `createdDate` datetime NULL,
-  `type` varchar(30) NOT NULL DEFAULT '',
+  `workflow` varchar(30) NOT NULL DEFAULT '',
   `deleted` tinyint(4) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -498,11 +498,14 @@ CREATE TABLE IF NOT EXISTS `zt_chart` (
   `name` varchar(255) NOT NULL DEFAULT '',
   `code` varchar(255) NOT NULL DEFAULT '',
   `driver` enum('mysql', 'duckdb') not NULL default 'mysql',
+  `mode` enum('text', 'builder') not NULL default 'builder',
   `dimension` mediumint(8) unsigned NOT NULL DEFAULT 0,
   `type` varchar(30) NOT NULL DEFAULT '',
   `group` varchar(255) NOT NULL DEFAULT '',
   `dataset` varchar(30) NOT NULL DEFAULT '0',
   `desc` text NULL,
+  `acl` enum('open','private') NOT NULL DEFAULT 'open',
+  `whitelist` text NULL,
   `settings` mediumtext NULL,
   `filters` mediumtext NULL,
   `step` tinyint(3) unsigned NOT NULL DEFAULT '0',
@@ -526,6 +529,8 @@ CREATE TABLE IF NOT EXISTS `zt_screen` (
   `dimension` mediumint(8) unsigned NOT NULL DEFAULT 0,
   `name` varchar(255) NOT NULL DEFAULT '',
   `desc` mediumtext NULL,
+  `acl` enum('open','private') NOT NULL DEFAULT 'open',
+  `whitelist` text NULL,
   `cover` mediumtext NULL,
   `scheme` mediumtext NULL,
   `status` enum('draft','published') NOT NULL DEFAULT 'draft',
@@ -544,6 +549,8 @@ CREATE TABLE IF NOT EXISTS `zt_dimension` (
   `name` varchar(90) NOT NULL DEFAULT '',
   `code` varchar(45) NOT NULL DEFAULT '',
   `desc` text NULL,
+  `acl` enum('open','private') NOT NULL DEFAULT 'open',
+  `whitelist` text NULL,
   `createdBy` varchar(30) NOT NULL DEFAULT '',
   `createdDate` datetime NULL,
   `editedBy` varchar(30) NOT NULL DEFAULT '',
@@ -576,7 +583,7 @@ CREATE TABLE IF NOT EXISTS `zt_compile` (
   `job` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `queue` mediumint(8) NOT NULL DEFAULT '0',
   `status` varchar(255) NOT NULL DEFAULT '',
-  `logs` text NULL,
+  `logs` longtext NULL,
   `atTime` varchar(10) NOT NULL DEFAULT '',
   `testtask` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `tag` varchar(255) NOT NULL DEFAULT '',
@@ -657,6 +664,7 @@ CREATE TABLE IF NOT EXISTS `zt_dataview` (
   `group` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `name` varchar(155) NOT NULL DEFAULT '',
   `code` varchar(50) NOT NULL DEFAULT '',
+  `mode` enum('text', 'builder') not NULL default 'builder',
   `view` varchar(57) NOT NULL DEFAULT '',
   `sql` text NULL,
   `fields` mediumtext NULL,
@@ -816,6 +824,7 @@ CREATE TABLE IF NOT EXISTS `zt_doclib` (
   `addedBy` varchar(30) NOT NULL DEFAULT '',
   `addedDate` datetime NULL,
   `deleted` enum('0','1') NOT NULL DEFAULT '0',
+  `orderBy` varchar(30) NOT NULL DEFAULT 'id_asc',
   PRIMARY KEY  (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE INDEX `product` ON `zt_doclib`(`product`);
@@ -948,7 +957,9 @@ CREATE TABLE IF NOT EXISTS `zt_history` (
   `action` mediumint(8) unsigned NOT NULL default '0',
   `field` varchar(30) NOT NULL default '',
   `old` text NULL,
+  `oldValue` text NULL,
   `new` text NULL,
+  `newValue` text NULL,
   `diff` mediumtext NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
@@ -962,6 +973,7 @@ CREATE TABLE IF NOT EXISTS `zt_job` (
   `product` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `frame` varchar(20) NOT NULL DEFAULT '',
   `engine` varchar(20) NOT NULL DEFAULT '',
+  `autoRun` enum('0','1') NOT NULL DEFAULT '1',
   `server` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `pipeline` varchar(500) NOT NULL DEFAULT '',
   `triggerType` varchar(255) NOT NULL DEFAULT '',
@@ -972,6 +984,7 @@ CREATE TABLE IF NOT EXISTS `zt_job` (
   `atTime` varchar(10) NOT NULL DEFAULT '',
   `customParam` text NULL,
   `comment` varchar(255) NOT NULL DEFAULT '',
+  `triggerActions` varchar(255) NOT NULL DEFAULT '',
   `createdBy` varchar(30) NOT NULL DEFAULT '',
   `createdDate` datetime NULL,
   `editedBy` varchar(30) NOT NULL DEFAULT '',
@@ -1228,6 +1241,7 @@ CREATE TABLE IF NOT EXISTS `zt_mr` (
   `compileStatus` char(30) NOT NULL DEFAULT '',
   `removeSourceBranch` enum('0','1') NOT NULL DEFAULT '0',
   `squash` enum('0','1') NOT NULL DEFAULT '0',
+  `isFlow` ENUM('0', '1') NOT NULL DEFAULT '0',
   `synced` enum('0','1') COLLATE 'utf8_general_ci' NOT NULL DEFAULT '1',
   `syncError` varchar(255) NOT NULL DEFAULT '',
   `hasNoConflict` enum('0','1') COLLATE 'utf8_general_ci' NOT NULL DEFAULT '0',
@@ -1276,6 +1290,7 @@ CREATE TABLE IF NOT EXISTS `zt_oauth` (
 CREATE INDEX `account`      ON `zt_oauth` (`account`);
 CREATE INDEX `providerType` ON `zt_oauth` (`providerType`);
 CREATE INDEX `providerID`   ON `zt_oauth` (`providerID`);
+CREATE UNIQUE INDEX `account_openID` ON `zt_oauth`(`account`,`openID`,`providerType`,`providerID`);
 
 -- DROP TABLE IF EXISTS `zt_pipeline`;
 CREATE TABLE IF NOT EXISTS `zt_pipeline` (
@@ -1287,6 +1302,7 @@ CREATE TABLE IF NOT EXISTS `zt_pipeline` (
   `password` varchar(255) NULL,
   `token` varchar(255) NULL,
   `private` char(32) NULL,
+  `instanceID` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `createdBy` varchar(30) NOT NULL DEFAULT '',
   `createdDate` datetime NULL,
   `editedBy` varchar(30) NOT NULL DEFAULT '',
@@ -1366,6 +1382,7 @@ CREATE TABLE IF NOT EXISTS `zt_product` (
   `RD` varchar(30) NOT NULL DEFAULT '',
   `feedback` varchar(30) NOT NULL DEFAULT '',
   `ticket` varchar(30) NOT NULL DEFAULT '',
+  `workflowGroup` int(8) NOT NULL DEFAULT '0',
   `acl` enum('open','private','custom') NOT NULL DEFAULT 'open',
   `groups` text NULL,
   `whitelist` text NULL,
@@ -1456,6 +1473,7 @@ CREATE TABLE IF NOT EXISTS `zt_project` (
   `name` varchar(90) NOT NULL DEFAULT '',
   `code` varchar(45) NOT NULL DEFAULT '',
   `hasProduct` tinyint(1) unsigned NOT NULL DEFAULT 1,
+  `workflowGroup` int(8) NOT NULL DEFAULT '0',
   `begin` date NULL,
   `end` date NULL,
   `firstEnd` date DEFAULT NULL,
@@ -2020,8 +2038,8 @@ CREATE TABLE `zt_taskteam` (
   `consumed` decimal(12,2) NOT NULL DEFAULT '0.00',
   `left` decimal(12,2) NOT NULL DEFAULT '0.00',
   `transfer` char(30) NOT NULL DEFAULT '',
-  `status` enum('wait','doing','done') NOT NULL DEFAULT 'wait',
-  `order` tinyint(3) NOT NULL DEFAULT '0',
+  `status` enum('wait','doing','done','cancel','closed') NOT NULL DEFAULT 'wait',
+  `order` int(8) NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE INDEX `task` ON `zt_taskteam` (`task`);
@@ -2487,23 +2505,23 @@ CREATE OR REPLACE VIEW `ztv_productbugs` AS select `zt_bug`.`product` AS `produc
 -- DROP VIEW IF EXISTS `ztv_productstories`;
 CREATE OR REPLACE VIEW `ztv_productstories` AS select `zt_story`.`product` AS `product`,COUNT(1) AS `stories`,sum(if((`zt_story`.`status` = 'closed'),0,1)) AS `undone` from `zt_story` where (`zt_story`.`deleted` = '0') group by `zt_story`.`product`;
 -- DROP VIEW IF EXISTS `ztv_dayuserlogin`;
-CREATE OR REPLACE VIEW `ztv_dayuserlogin` AS select COUNT(1) AS `userlogin`,left(`zt_action`.`date`,10) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'user') and (`zt_action`.`action` = 'login')) group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_dayuserlogin` AS select COUNT(1) AS `userlogin`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'user') and (`zt_action`.`action` = 'login')) group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_dayeffort`;
 CREATE OR REPLACE VIEW `ztv_dayeffort` AS select round(sum(`zt_effort`.`consumed`),1) AS `consumed`,`zt_effort`.`date` AS `date` from `zt_effort` group by `zt_effort`.`date`;
 -- DROP VIEW IF EXISTS `ztv_daystoryopen`;
-CREATE OR REPLACE VIEW `ztv_daystoryopen` AS select COUNT(1) AS `storyopen`,left(`zt_action`.`date`,10) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'story') and (`zt_action`.`action` = 'opened')) group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_daystoryopen` AS select COUNT(1) AS `storyopen`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'story') and (`zt_action`.`action` = 'opened')) group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_daystoryclose`;
-CREATE OR REPLACE VIEW `ztv_daystoryclose` AS select COUNT(1) AS `storyclose`,left(`zt_action`.`date`,10) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'story') and (`zt_action`.`action` = 'closed')) group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_daystoryclose` AS select COUNT(1) AS `storyclose`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'story') and (`zt_action`.`action` = 'closed')) group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_daytaskopen`;
-CREATE OR REPLACE VIEW `ztv_daytaskopen` AS select COUNT(1) AS `taskopen`,left(`zt_action`.`date`,10) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'task') and (`zt_action`.`action` = 'opened')) group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_daytaskopen` AS select COUNT(1) AS `taskopen`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'task') and (`zt_action`.`action` = 'opened')) group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_daytaskfinish`;
-CREATE OR REPLACE VIEW `ztv_daytaskfinish` AS select COUNT(1) AS `taskfinish`,left(`zt_action`.`date`,10) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'task') and (`zt_action`.`action` = 'finished')) group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_daytaskfinish` AS select COUNT(1) AS `taskfinish`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'task') and (`zt_action`.`action` = 'finished')) group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_daybugopen`;
-CREATE OR REPLACE VIEW `ztv_daybugopen` AS select COUNT(1) AS `bugopen`,left(`zt_action`.`date`,10) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'bug') and (`zt_action`.`action` = 'opened')) group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_daybugopen` AS select COUNT(1) AS `bugopen`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'bug') and (`zt_action`.`action` = 'opened')) group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_daybugresolve`;
-CREATE OR REPLACE VIEW `ztv_daybugresolve` AS select COUNT(1) AS `bugresolve`,left(`zt_action`.`date`,10) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'bug') and (`zt_action`.`action` = 'resolved')) group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_daybugresolve` AS select COUNT(1) AS `bugresolve`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` where ((`zt_action`.`objectType` = 'bug') and (`zt_action`.`action` = 'resolved')) group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_dayactions`;
-CREATE OR REPLACE VIEW `ztv_dayactions` AS select COUNT(1) AS `actions`,left(`zt_action`.`date`,10) AS `day` from `zt_action` group by left(`zt_action`.`date`,10);
+CREATE OR REPLACE VIEW `ztv_dayactions` AS select COUNT(1) AS `actions`,CAST(`zt_action`.`date` AS DATE) AS `day` from `zt_action` group by CAST(`zt_action`.`date` AS DATE);
 -- DROP VIEW IF EXISTS `ztv_normalproduct`;
 CREATE OR REPLACE VIEW `ztv_normalproduct` AS SELECT * FROM `zt_product` WHERE `shadow` = 0;
 
@@ -3354,7 +3372,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (1,	'bug',	'batchResolve'),
 (1,	'bug',	'browse'),
 (1,	'bug',	'close'),
-(1,	'bug',	'confirmBug'),
+(1,	'bug',	'confirm'),
 (1,	'bug',	'confirmStoryChange'),
 (1,	'bug',	'create'),
 (1,	'bug',	'delete'),
@@ -3380,9 +3398,11 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (1,	'build',	'unlinkStory'),
 (1,	'build',	'view'),
 (1,	'caselib',	'batchCreateCase'),
+(1,	'caselib',	'batchEditCase'),
 (1,	'caselib',	'browse'),
 (1,	'caselib',	'create'),
 (1,	'caselib',	'createCase'),
+(1,	'caselib',	'editCase'),
 (1,	'caselib',	'delete'),
 (1,	'caselib',	'edit'),
 (1,	'caselib',	'exportTemplet'),
@@ -3391,6 +3411,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (1,	'caselib',	'justtest'),
 (1,	'caselib',	'showImport'),
 (1,	'caselib',	'view'),
+(1,	'caselib',	'viewCase'),
 (1,	'ci',	'checkCompileStatus'),
 (1,	'ci',	'commitResult'),
 (1,	'classify',	'browse'),
@@ -3515,11 +3536,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (1,	'doc',	'importToPracticeLib'),
 (1,	'doc',	'index'),
 (1,	'doc',	'manageBook'),
-(1,	'doc',	'myCollection'),
-(1,	'doc',	'myCreation'),
-(1,	'doc',	'myEdited'),
 (1,	'doc',	'mySpace'),
-(1,	'doc',	'myView'),
+(1,	'doc',	'quick'),
 (1,	'doc',	'productSpace'),
 (1,	'doc',	'projectSpace'),
 (1,	'doc',	'showFiles'),
@@ -4784,7 +4802,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (2,	'bug',	'batchResolve'),
 (2,	'bug',	'browse'),
 (2,	'bug',	'close'),
-(2,	'bug',	'confirmBug'),
+(2,	'bug',	'confirm'),
 (2,	'bug',	'confirmStoryChange'),
 (2,	'bug',	'create'),
 (2,	'bug',	'delete'),
@@ -4883,11 +4901,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (2,	'doc',	'moveDoc'),
 (2,	'doc',	'sortDoc'),
 (2,	'doc',	'index'),
-(2,	'doc',	'myCollection'),
-(2,	'doc',	'myCreation'),
-(2,	'doc',	'myEdited'),
 (2,	'doc',	'mySpace'),
-(2,	'doc',	'myView'),
+(2,	'doc',	'quick'),
 (2,	'doc',	'productSpace'),
 (2,	'doc',	'projectSpace'),
 (2,	'doc',	'showFiles'),
@@ -5569,7 +5584,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (3,	'bug',	'batchResolve'),
 (3,	'bug',	'browse'),
 (3,	'bug',	'close'),
-(3,	'bug',	'confirmBug'),
+(3,	'bug',	'confirm'),
 (3,	'bug',	'confirmStoryChange'),
 (3,	'bug',	'create'),
 (3,	'bug',	'delete'),
@@ -5587,14 +5602,17 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (3,	'build',	'edit'),
 (3,	'build',	'view'),
 (3,	'caselib',	'batchCreateCase'),
+(3,	'caselib',	'batchEditCase'),
 (3,	'caselib',	'browse'),
 (3,	'caselib',	'createCase'),
+(3,	'caselib',	'editCase'),
 (3,	'caselib',	'exportTemplet'),
 (3,	'caselib',	'import'),
 (3,	'caselib',	'index'),
 (3,	'caselib',	'justtest'),
 (3,	'caselib',	'showImport'),
 (3,	'caselib',	'view'),
+(3,	'caselib',	'viewCase'),
 (3,	'classify',	'browse'),
 (3,	'cm',	'browse'),
 (3,	'cm',	'create'),
@@ -5618,11 +5636,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (3,	'doc',	'diff'),
 (3,	'doc',	'edit'),
 (3,	'doc',	'index'),
-(3,	'doc',	'myCollection'),
-(3,	'doc',	'myCreation'),
-(3,	'doc',	'myEdited'),
 (3,	'doc',	'mySpace'),
-(3,	'doc',	'myView'),
+(3,	'doc',	'quick'),
 (3,	'doc',	'productSpace'),
 (3,	'doc',	'projectSpace'),
 (3,	'doc',	'showFiles'),
@@ -6209,7 +6224,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (4,	'bug',	'batchResolve'),
 (4,	'bug',	'browse'),
 (4,	'bug',	'close'),
-(4,	'bug',	'confirmBug'),
+(4,	'bug',	'confirm'),
 (4,	'bug',	'confirmStoryChange'),
 (4,	'bug',	'create'),
 (4,	'bug',	'delete'),
@@ -6235,9 +6250,11 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (4,	'build',	'unlinkStory'),
 (4,	'build',	'view'),
 (4,	'caselib',	'batchCreateCase'),
+(4,	'caselib',	'batchEditCase'),
 (4,	'caselib',	'browse'),
 (4,	'caselib',	'create'),
 (4,	'caselib',	'createCase'),
+(4,	'caselib',	'editCase'),
 (4,	'caselib',	'delete'),
 (4,	'caselib',	'edit'),
 (4,	'caselib',	'exportTemplet'),
@@ -6246,6 +6263,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (4,	'caselib',	'justtest'),
 (4,	'caselib',	'showImport'),
 (4,	'caselib',	'view'),
+(4,	'caselib',	'viewCase'),
 (4,	'ci',	'checkCompileStatus'),
 (4,	'ci',	'commitResult'),
 (4,	'classify',	'browse'),
@@ -6311,11 +6329,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (4,	'doc',	'importToPracticeLib'),
 (4,	'doc',	'index'),
 (4,	'doc',	'manageBook'),
-(4,	'doc',	'myCollection'),
-(4,	'doc',	'myCreation'),
-(4,	'doc',	'myEdited'),
 (4,	'doc',	'mySpace'),
-(4,	'doc',	'myView'),
+(4,	'doc',	'quick'),
 (4,	'doc',	'productSpace'),
 (4,	'doc',	'projectSpace'),
 (4,	'doc',	'showFiles'),
@@ -7278,7 +7293,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (5,	'bug',	'batchResolve'),
 (5,	'bug',	'browse'),
 (5,	'bug',	'close'),
-(5,	'bug',	'confirmBug'),
+(5,	'bug',	'confirm'),
 (5,	'bug',	'confirmStoryChange'),
 (5,	'bug',	'create'),
 (5,	'bug',	'delete'),
@@ -7360,11 +7375,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (5,	'doc',	'moveDoc'),
 (5,	'doc',	'sortDoc'),
 (5,	'doc',	'index'),
-(5,	'doc',	'myCollection'),
-(5,	'doc',	'myCreation'),
-(5,	'doc',	'myEdited'),
 (5,	'doc',	'mySpace'),
-(5,	'doc',	'myView'),
+(5,	'doc',	'quick'),
 (5,	'doc',	'productSpace'),
 (5,	'doc',	'projectSpace'),
 (5,	'doc',	'showFiles'),
@@ -8217,7 +8229,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (6,	'bug',	'batchResolve'),
 (6,	'bug',	'browse'),
 (6,	'bug',	'close'),
-(6,	'bug',	'confirmBug'),
+(6,	'bug',	'confirm'),
 (6,	'bug',	'confirmStoryChange'),
 (6,	'bug',	'create'),
 (6,	'bug',	'delete'),
@@ -8294,11 +8306,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (6,	'doc',	'moveDoc'),
 (6,	'doc',	'sortDoc'),
 (6,	'doc',	'index'),
-(6,	'doc',	'myCollection'),
-(6,	'doc',	'myCreation'),
-(6,	'doc',	'myEdited'),
 (6,	'doc',	'mySpace'),
-(6,	'doc',	'myView'),
+(6,	'doc',	'quick'),
 (6,	'doc',	'productSpace'),
 (6,	'doc',	'projectSpace'),
 (6,	'doc',	'showFiles'),
@@ -9028,7 +9037,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (7,	'bug',	'batchResolve'),
 (7,	'bug',	'browse'),
 (7,	'bug',	'close'),
-(7,	'bug',	'confirmBug'),
+(7,	'bug',	'confirm'),
 (7,	'bug',	'confirmStoryChange'),
 (7,	'bug',	'create'),
 (7,	'bug',	'delete'),
@@ -9105,11 +9114,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (7,	'doc',	'moveDoc'),
 (7,	'doc',	'sortDoc'),
 (7,	'doc',	'index'),
-(7,	'doc',	'myCollection'),
-(7,	'doc',	'myCreation'),
-(7,	'doc',	'myEdited'),
 (7,	'doc',	'mySpace'),
-(7,	'doc',	'myView'),
+(7,	'doc',	'quick'),
 (7,	'doc',	'productSpace'),
 (7,	'doc',	'projectSpace'),
 (7,	'doc',	'showFiles'),
@@ -9858,7 +9864,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (8,	'bug',	'batchResolve'),
 (8,	'bug',	'browse'),
 (8,	'bug',	'close'),
-(8,	'bug',	'confirmBug'),
+(8,	'bug',	'confirm'),
 (8,	'bug',	'confirmStoryChange'),
 (8,	'bug',	'create'),
 (8,	'bug',	'delete'),
@@ -9877,9 +9883,11 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (8,	'build',	'edit'),
 (8,	'build',	'view'),
 (8,	'caselib',	'batchCreateCase'),
+(8,	'caselib',	'batchEditCase'),
 (8,	'caselib',	'browse'),
 (8,	'caselib',	'create'),
 (8,	'caselib',	'createCase'),
+(8,	'caselib',	'editCase'),
 (8,	'caselib',	'delete'),
 (8,	'caselib',	'edit'),
 (8,	'caselib',	'exportTemplet'),
@@ -9887,6 +9895,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (8,	'caselib',	'index'),
 (8,	'caselib',	'showImport'),
 (8,	'caselib',	'view'),
+(8,	'caselib',	'viewCase'),
 (8,	'ci',	'checkCompileStatus'),
 (8,	'ci',	'commitResult'),
 (8,	'classify',	'browse'),
@@ -9931,11 +9940,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (8,	'doc',	'moveDoc'),
 (8,	'doc',	'sortDoc'),
 (8,	'doc',	'index'),
-(8,	'doc',	'myCollection'),
-(8,	'doc',	'myCreation'),
-(8,	'doc',	'myEdited'),
 (8,	'doc',	'mySpace'),
-(8,	'doc',	'myView'),
+(8,	'doc',	'quick'),
 (8,	'doc',	'productSpace'),
 (8,	'doc',	'projectSpace'),
 (8,	'doc',	'showFiles'),
@@ -10714,7 +10720,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (9,	'bug',	'batchResolve'),
 (9,	'bug',	'browse'),
 (9,	'bug',	'close'),
-(9,	'bug',	'confirmBug'),
+(9,	'bug',	'confirm'),
 (9,	'bug',	'confirmStoryChange'),
 (9,	'bug',	'create'),
 (9,	'bug',	'delete'),
@@ -10784,11 +10790,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (9,	'doc',	'moveDoc'),
 (9,	'doc',	'sortDoc'),
 (9,	'doc',	'index'),
-(9,	'doc',	'myCollection'),
-(9,	'doc',	'myCreation'),
-(9,	'doc',	'myEdited'),
 (9,	'doc',	'mySpace'),
-(9,	'doc',	'myView'),
+(9,	'doc',	'quick'),
 (9,	'doc',	'productSpace'),
 (9,	'doc',	'projectSpace'),
 (9,	'doc',	'showFiles'),
@@ -11427,7 +11430,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (10,	'bug',	'batchResolve'),
 (10,	'bug',	'browse'),
 (10,	'bug',	'close'),
-(10,	'bug',	'confirmBug'),
+(10,	'bug',	'confirm'),
 (10,	'bug',	'confirmStoryChange'),
 (10,	'bug',	'create'),
 (10,	'bug',	'edit'),
@@ -11459,11 +11462,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (10,	'doc',	'diff'),
 (10,	'doc',	'edit'),
 (10,	'doc',	'index'),
-(10,	'doc',	'myCollection'),
-(10,	'doc',	'myCreation'),
-(10,	'doc',	'myEdited'),
 (10,	'doc',	'mySpace'),
-(10,	'doc',	'myView'),
+(10,	'doc',	'quick'),
 (10,	'doc',	'productSpace'),
 (10,	'doc',	'projectSpace'),
 (10,	'doc',	'showFiles'),
@@ -11940,7 +11940,7 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (11,	'bug',	'batchResolve'),
 (11,	'bug',	'browse'),
 (11,	'bug',	'close'),
-(11,	'bug',	'confirmBug'),
+(11,	'bug',	'confirm'),
 (11,	'bug',	'confirmStoryChange'),
 (11,	'bug',	'create'),
 (11,	'bug',	'edit'),
@@ -11969,11 +11969,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (11,	'design',	'view'),
 (11,	'doc',	'collect'),
 (11,	'doc',	'index'),
-(11,	'doc',	'myCollection'),
-(11,	'doc',	'myCreation'),
-(11,	'doc',	'myEdited'),
 (11,	'doc',	'mySpace'),
-(11,	'doc',	'myView'),
+(11,	'doc',	'quick'),
 (11,	'doc',	'productSpace'),
 (11,	'doc',	'projectSpace'),
 (11,	'doc',	'showFiles'),
@@ -12424,11 +12421,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (17, 'doc', 'moveDoc'),
 (17, 'doc', 'sortDoc'),
 (17, 'doc', 'index'),
-(17, 'doc', 'myCollection'),
-(17, 'doc', 'myCreation'),
-(17, 'doc', 'myEdited'),
 (17, 'doc', 'mySpace'),
-(17, 'doc', 'myView'),
+(17, 'doc', 'quick'),
 (17, 'doc', 'productSpace'),
 (17, 'doc', 'projectSpace'),
 (17, 'doc', 'showFiles'),
@@ -12624,11 +12618,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (18, 'doc', 'moveDoc'),
 (18, 'doc', 'sortDoc'),
 (18, 'doc', 'index'),
-(18, 'doc', 'myCollection'),
-(18, 'doc', 'myCreation'),
-(18, 'doc', 'myEdited'),
 (18, 'doc', 'mySpace'),
-(18, 'doc', 'myView'),
+(18, 'doc', 'quick'),
 (18, 'doc', 'productSpace'),
 (18, 'doc', 'projectSpace'),
 (18, 'doc', 'showFiles'),
@@ -12801,11 +12792,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (19, 'doc', 'moveDoc'),
 (19, 'doc', 'sortDoc'),
 (19, 'doc', 'index'),
-(19, 'doc', 'myCollection'),
-(19, 'doc', 'myCreation'),
-(19, 'doc', 'myEdited'),
 (19, 'doc', 'mySpace'),
-(19, 'doc', 'myView'),
+(19, 'doc', 'quick'),
 (19, 'doc', 'productSpace'),
 (19, 'doc', 'projectSpace'),
 (19, 'doc', 'showFiles'),
@@ -13013,11 +13001,8 @@ REPLACE INTO `zt_grouppriv` (`group`, `module`, `method`) VALUES
 (20, 'doc', 'moveDoc'),
 (20, 'doc', 'sortDoc'),
 (20, 'doc', 'index'),
-(20, 'doc', 'myCollection'),
-(20, 'doc', 'myCreation'),
-(20, 'doc', 'myEdited'),
 (20, 'doc', 'mySpace'),
-(20, 'doc', 'myView'),
+(20, 'doc', 'quick'),
 (20, 'doc', 'productSpace'),
 (20, 'doc', 'projectSpace'),
 (20, 'doc', 'showFiles'),
@@ -13188,6 +13173,7 @@ SELECT `module`, `method`, 16 from `zt_grouppriv` where `group` = 9;
 -- DROP TABLE IF EXISTS `zt_workflow`;
 CREATE TABLE IF NOT EXISTS `zt_workflow` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `group` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `parent` varchar(30) NOT NULL DEFAULT '',
   `child` varchar(30) NOT NULL DEFAULT '',
   `type` varchar(10) NOT NULL DEFAULT 'flow',
@@ -13197,6 +13183,7 @@ CREATE TABLE IF NOT EXISTS `zt_workflow` (
   `module` varchar(30) NOT NULL DEFAULT '',
   `table` varchar(50) NOT NULL DEFAULT '',
   `name` varchar(30) NOT NULL DEFAULT '',
+  `icon` varchar(30) NOT NULL DEFAULT 'flow',
   `titleField` varchar(30) NOT NULL DEFAULT '',
   `contentField` text NULL,
   `flowchart` text NULL,
@@ -13204,6 +13191,8 @@ CREATE TABLE IF NOT EXISTS `zt_workflow` (
   `css` text NULL,
   `order` smallint(5) unsigned NOT NULL DEFAULT '0',
   `buildin` tinyint(1) unsigned NOT NULL DEFAULT '0',
+  `role` varchar(10) NOT NULL DEFAULT 'buildin',
+  `belong` varchar(50) NOT NULL DEFAULT '',
   `administrator` text NULL,
   `desc` text NULL,
   `version` varchar(10) NOT NULL DEFAULT '1.0',
@@ -13216,15 +13205,38 @@ CREATE TABLE IF NOT EXISTS `zt_workflow` (
   `editedDate` datetime NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-CREATE UNIQUE INDEX `unique` ON `zt_workflow`(`app`,`module`,`vision`);
+CREATE UNIQUE INDEX `unique` ON `zt_workflow`(`group`,`app`,`module`,`vision`);
 CREATE INDEX `type`   ON `zt_workflow` (`type`);
 CREATE INDEX `app`    ON `zt_workflow` (`app`);
 CREATE INDEX `module` ON `zt_workflow` (`module`);
 CREATE INDEX `order`  ON `zt_workflow` (`order`);
 
+-- DROP TABLE IF EXISTS `zt_workflowgroup`;
+CREATE TABLE IF NOT EXISTS `zt_workflowgroup` (
+  `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `type` varchar(10) NOT NULL DEFAULT '',
+  `projectModel` varchar(10) NOT NULL DEFAULT '',
+  `projectType` varchar(10) NOT NULL DEFAULT '',
+  `name` varchar(30) NOT NULL DEFAULT '',
+  `code` varchar(30) NOT NULL DEFAULT '',
+  `desc` text NULL,
+  `disabledModules` varchar(255) NOT NULL DEFAULT '',
+  `status` varchar(10) NOT NULL DEFAULT 'wait',
+  `vision` varchar(10) NOT NULL DEFAULT 'rnd',
+  `main` enum('0','1') NOT NULL DEFAULT '0',
+  `createdBy` varchar(30) NOT NULL DEFAULT '',
+  `createdDate` datetime NULL,
+  `editedBy` varchar(30) NOT NULL DEFAULT '',
+  `editedDate` datetime NULL,
+  `deleted` enum('0', '1') NOT NULL DEFAULT '0',
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+CREATE INDEX `type` ON `zt_workflowgroup` (`type`);
+
 -- DROP TABLE IF EXISTS `zt_workflowaction`;
 CREATE TABLE IF NOT EXISTS `zt_workflowaction` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `group` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `module` varchar(30) NOT NULL DEFAULT '',
   `action` varchar(50) NOT NULL DEFAULT '',
   `method` varchar(50) NOT NULL DEFAULT '',
@@ -13257,7 +13269,7 @@ CREATE TABLE IF NOT EXISTS `zt_workflowaction` (
   `editedDate` datetime NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-CREATE UNIQUE INDEX `unique` ON `zt_workflowaction`(`module`,`action`,`vision`);
+CREATE UNIQUE INDEX `unique` ON `zt_workflowaction`(`group`,`module`,`action`,`vision`);
 CREATE INDEX `module` ON `zt_workflowaction` (`module`);
 CREATE INDEX `action` ON `zt_workflowaction` (`action`);
 CREATE INDEX `order`  ON `zt_workflowaction` (`order`);
@@ -13285,6 +13297,7 @@ CREATE INDEX `type` ON `zt_workflowdatasource` (`type`);
 -- DROP TABLE IF EXISTS `zt_workflowfield`;
 CREATE TABLE IF NOT EXISTS `zt_workflowfield` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `group` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `module` varchar(30) NOT NULL DEFAULT '',
   `field`  varchar(50) NOT NULL DEFAULT '',
   `type` varchar(20) NOT NULL DEFAULT 'varchar',
@@ -13312,7 +13325,7 @@ CREATE TABLE IF NOT EXISTS `zt_workflowfield` (
   `editedDate` datetime NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-CREATE UNIQUE INDEX `unique` ON `zt_workflowfield`(`module`, `field`);
+CREATE UNIQUE INDEX `unique` ON `zt_workflowfield`(`group`, `module`, `field`);
 CREATE INDEX `module` ON `zt_workflowfield` (`module`);
 CREATE INDEX `field`  ON `zt_workflowfield` (`field`);
 CREATE INDEX `order`  ON `zt_workflowfield` (`order`);
@@ -13320,6 +13333,7 @@ CREATE INDEX `order`  ON `zt_workflowfield` (`order`);
 -- DROP TABLE IF EXISTS `zt_workflowlayout`;
 CREATE TABLE IF NOT EXISTS `zt_workflowlayout` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `group` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `module` varchar(30) NOT NULL DEFAULT '',
   `action` varchar(50) NOT NULL DEFAULT '',
   `ui` mediumint(8) NOT NULL DEFAULT 0,
@@ -13335,7 +13349,7 @@ CREATE TABLE IF NOT EXISTS `zt_workflowlayout` (
   `vision` varchar(10) NOT NULL DEFAULT 'rnd',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-CREATE UNIQUE INDEX `unique` ON `zt_workflowlayout`(`module`,`action`,`ui`,`field`,`vision`);
+CREATE UNIQUE INDEX `unique` ON `zt_workflowlayout`(`group`,`module`,`action`,`ui`,`field`,`vision`);
 CREATE INDEX `module` ON `zt_workflowlayout` (`module`);
 CREATE INDEX `action` ON `zt_workflowlayout` (`action`);
 CREATE INDEX `order`  ON `zt_workflowlayout` (`order`);
@@ -13343,6 +13357,7 @@ CREATE INDEX `order`  ON `zt_workflowlayout` (`order`);
 -- DROP TABLE IF EXISTS `zt_workflowlabel`;
 CREATE TABLE IF NOT EXISTS `zt_workflowlabel` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `group` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `module` varchar(30) NOT NULL DEFAULT '',
   `action` varchar(30) NOT NULL DEFAULT 'browse',
   `code` varchar(30) NOT NULL DEFAULT '',
@@ -13455,14 +13470,15 @@ CREATE INDEX `version` ON `zt_workflowversion` (`version`);
 -- DROP TABLE IF EXISTS `zt_workflowui`;
 CREATE TABLE IF NOT EXISTS `zt_workflowui` (
   `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `group` mediumint(8) unsigned NOT NULL DEFAULT '0',
   `module` varchar(30) NOT NULL,
   `action` varchar(50) NOT NULL,
   `name` varchar(30) NOT NULL,
-  `conditions` text NOT NULL,
-  PRIMARY KEY `id` (`id`)
-) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-CREATE INDEX `module`  ON `zt_workflowui` (`module`);
-CREATE INDEX `action`  ON `zt_workflowui` (`action`);
+  `conditions` text NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
+CREATE INDEX `module` ON `zt_workflowui` (`module`);
+CREATE INDEX `action` ON `zt_workflowui` (`action`);
 
 -- DROP TABLE IF EXISTS `zt_workflowreport`;
 CREATE TABLE IF NOT EXISTS `zt_workflowreport` (
@@ -13489,13 +13505,18 @@ REPLACE INTO `zt_workflowrule`(`type`, `name`, `rule`, `createdBy`, `createdDate
 ('system','电话','phone','admin','2020-10-14 14:06:14'),
 ('system','IP','ip','admin','2020-10-14 14:06:14');
 
+INSERT INTO `zt_workflowgroup` (`type`, `projectModel`, `projectType`, `name`, `code`, `status`, `vision`, `main`) VALUES
+('product', '',          'project', '默认流程',           'productproject',  'normal', 'rnd', '1'),
+('project', 'scrum',     'product', '产品型敏捷项目流程', 'scrumproduct',    'normal', 'rnd', '1'),
+('project', 'scrum',     'project', '项目型敏捷项目流程', 'scrumproject',    'normal', 'rnd', '1'),
+('project', 'waterfall', 'product', '产品型瀑布项目流程', 'waterfallproduct','normal', 'rnd', '1'),
+('project', 'waterfall', 'project', '项目型瀑布项目流程', 'waterfallproject','normal', 'rnd', '1');
+
 INSERT INTO `zt_workflowdatasource` (`type`, `name`, `code`, `buildin`, `vision`, `createdBy`, `createdDate`, `datasource`, `view`, `keyField`, `valueField`) VALUES
 ('system',      '产品',           'products',                 '1', 'rnd', 'admin', '1970-01-01 00:00:01', '{\"app\":\"system\",\"module\":\"product\",\"method\":\"getPairs\",\"methodDesc\":\"Get product pairs.\",\"params\":[{\"name\":\"mode\",\"type\":\"string\",\"desc\":\"\",\"value\":\"all\"}]}',       '',     '',     ''),
 ('system',      '项目',           'projects',                 '1', 'rnd', 'admin', '1970-01-01 00:00:01', '{\"app\":\"system\",\"module\":\"project\",\"method\":\"getPairsByModel\",\"methodDesc\":\"Get project pairs by model and project.\",\"params\":[{\"name\":\"model\",\"type\":\"string\",\"desc\":\"all|scrum|waterfall\",\"value\":\"all\"},{\"name\":\"programID\",\"type\":\"int\",\"desc\":\"\",\"value\":\"0\"},{\"name\":\"param\",\"type\":\"\",\"desc\":\"\",\"value\":\"\"}]}',  '',     '',     ''),
 ('system',      '产品线',         'productLines',             '1', 'rnd', 'admin', '1970-01-01 00:00:01', '{\"app\":\"system\",\"module\":\"product\",\"method\":\"getLinePairs\",\"methodDesc\":\"Get line pairs.\",\"params\":[{\"name\":\"useShort\",\"type\":\"bool\",\"desc\":\"\",\"value\":\"\"}]}',  '',     '',     ''),
 ('sql',         '软件需求',       'stories',                  '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'select id,title from zt_story where deleted=\"0\" and type=\"story\"',    'view_datasource_4',    'id',   'title'),
-('sql',         '用户需求',       'requirements',             '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'select id,title from zt_story where deleted=\"0\" and type=\"requirement\"',    'view_datasource_3',    'id',   'title'),
-('sql',         '业务需求',       'epics',                    '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'select id,title from zt_story where deleted=\"0\" type=\"epic\"',    'view_datasource_2',    'id',   'title'),
 ('sql',         '任务',           'tasks',                    '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'select id,name from zt_task where deleted=\"0\" and vision=\"rnd\"',      'view_datasource_5',    'id',   'name'),
 ('sql',         'Bug',            'bugs',                     '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'select id,title from zt_bug where deleted=\"0\"',      'view_datasource_6',    'id',   'title'),
 ('system',      '权限分组',       'groups',                   '1', 'rnd', 'admin', '1970-01-01 00:00:01', '{\"app\":\"system\",\"module\":\"group\",\"method\":\"getPairs\",\"methodDesc\":\"\",\"params\":[]}',  '',     '',     ''),
@@ -13535,7 +13556,7 @@ INSERT INTO `zt_workflowdatasource` (`type`, `name`, `code`, `buildin`, `vision`
 ('sql',         '用例',           'cases',                    '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'select id,title from zt_case where deleted=\"0\"',     'view_datasource_41',   'id',   'title'),
 ('system',      '反馈分支',       'feedbackModules',          '1', 'rnd', 'admin', '1970-01-01 00:00:01', '{\"app\":\"system\",\"module\":\"tree\",\"method\":\"getOptionMenu\",\"methodDesc\":\"Create an option menu in html.\",\"params\":[{\"name\":\"rootID\",\"type\":\"int\",\"desc\":\"\",\"value\":\"0\"},{\"name\":\"type\",\"type\":\"string\",\"desc\":\"\",\"value\":\"feedback\"},{\"name\":\"startModule\",\"type\":\"int\",\"desc\":\"\",\"value\":\"0\"},{\"name\":\"branch\",\"type\":\"\",\"desc\":\"\",\"value\":\"0\"}]}',   '',     '',     ''),
 ('lang',        '需求类型',       'storyType',                '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'storyType',    '',     '',     ''),
-('system',	'执行',	          'executions',               '1', 'rnd', 'admin', '1970-01-01 00:00:01', '{\"app\":\"system\",\"module\":\"execution\",\"method\":\"getPairs\",\"methodDesc\":\"Get execution pairs.\",\"params\":[{\"name\":\"projectID\",\"type\":\"int\",\"desc\":\"\",\"value\":\"0\"},{\"name\":\"type\",\"type\":\"string\",\"desc\":\"all|sprint|stage|kanban\",\"value\":\"all\"},{\"name\":\"mode\",\"type\":\"string\",\"desc\":\"all|noclosed|stagefilter or empty\",\"value\":\"\"}]}',  '',     '',     ''),
+('system',  	'执行',	          'executions',               '1', 'rnd', 'admin', '1970-01-01 00:00:01', '{\"app\":\"system\",\"module\":\"execution\",\"method\":\"getPairs\",\"methodDesc\":\"Get execution pairs.\",\"params\":[{\"name\":\"projectID\",\"type\":\"int\",\"desc\":\"\",\"value\":\"0\"},{\"name\":\"type\",\"type\":\"string\",\"desc\":\"all|sprint|stage|kanban\",\"value\":\"all\"},{\"name\":\"mode\",\"type\":\"string\",\"desc\":\"all|noclosed|stagefilter or empty\",\"value\":\"\"}]}',  '',     '',     ''),
 ('lang',        '项目模型',       'projectModel',             '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'projectModel', '', '', ''),
 ('lang',        '反馈类型',       'feedbackType',             '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'feedbackType', '', '', ''),
 ('lang',        '反馈处理方案',   'feedbackSolution',         '1', 'rnd', 'admin', '1970-01-01 00:00:01', 'feedbackSolution',     '', '', ''),
@@ -13570,7 +13591,9 @@ INSERT INTO `zt_workflowdatasource` (`type`, `name`, `code`, `buildin`, `vision`
 ('lang',        '需求类别',       'demandCategory',           '1', 'or',  'admin',  '1970-01-01 00:00:01', 'demandCategory', '', '', ''),
 ('lang',        '需求状态',       'demandStatus',             '1', 'or',  'admin',  '1970-01-01 00:00:01', 'demandStatus', '', '', ''),
 ('lang',        '需求管理周期',   'demandDuration',           '1', 'or',  'admin',  '1970-01-01 00:00:01', 'demandDuration', '', '', ''),
-('lang',        '需求BSA',        'demandBSA',                '1', 'or',  'admin',  '1970-01-01 00:00:01', 'demandBSA', '', '', '');
+('lang',        '需求BSA',        'demandBSA',                '1', 'or',  'admin',  '1970-01-01 00:00:01', 'demandBSA', '', '', ''),
+('sql',         '用户需求',       'requirements',             '1', 'rnd', 'admin',  '1970-01-01 00:00:01', 'select id,title from zt_story where deleted=\"0\" and type=\"requirement\"',    'view_datasource_3',    'id',   'title'),
+('sql',         '业务需求',       'epics',                    '1', 'rnd', 'admin',  '1970-01-01 00:00:01', 'select id,title from zt_story where deleted=\"0\" type=\"epic\"',    'view_datasource_2',    'id',   'title');
 
 DROP VIEW IF EXISTS `view_datasource_2`;
 DROP VIEW IF EXISTS `view_datasource_3`;
@@ -13730,6 +13753,7 @@ CREATE TABLE IF NOT EXISTS `zt_auditresult` (
   `checkedBy` varchar(30) NOT NULL DEFAULT '',
   `checkedDate` date NULL,
   `comment` text NULL,
+  `severity` char(30) NOT NULL DEFAULT '',
   `assignedTo` varchar(30) NOT NULL DEFAULT '',
   `status` varchar(30) NOT NULL DEFAULT '',
   `createdBy` varchar(30) NOT NULL DEFAULT '',
@@ -13872,7 +13896,7 @@ CREATE TABLE IF NOT EXISTS `zt_basicmeas` (
   `object` char(30) NOT NULL DEFAULT '',
   `name` varchar(90) NOT NULL DEFAULT '',
   `code` char(30) NOT NULL DEFAULT '',
-  `unit` varchar(10) NOT NULL DEFAULT '',
+  `unit` varchar(100) NOT NULL DEFAULT '',
   `configure` text NULL,
   `params` text NULL,
   `definition` text NULL,
@@ -14373,6 +14397,7 @@ CREATE TABLE IF NOT EXISTS `zt_opportunity` (
   `actualClosedDate` date NULL,
   `lib` mediumint(8) unsigned NOT NULL default 0,
   `from` mediumint(8) unsigned NOT NULL default 0,
+  `desc` mediumtext NULL,
   `version` smallint(6) NOT NULL default 1,
   `createdBy` varchar(30) NOT NULL DEFAULT '',
   `createdDate` datetime NULL,
@@ -14453,8 +14478,8 @@ CREATE TABLE `zt_scene` (
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
-REPLACE INTO `zt_approvalflow` (`id`, `name`, `code`, `desc`, `version`, `createdBy`, `createdDate`, `type`, `deleted`) VALUES
-(1, '最简审批', 'simple', '', 1, 'admin', '2022-04-29 08:46:40', 'project', 0);
+REPLACE INTO `zt_approvalflow` (`id`, `name`, `code`, `desc`, `version`, `createdBy`, `createdDate`, `workflow`, `deleted`) VALUES
+(1, '最简审批', 'simple', '', 1, 'admin', '2022-04-29 08:46:40', '', 0);
 
 REPLACE INTO `zt_approvalflowspec` (`id`, `flow`, `version`, `nodes`, `createdBy`, `createdDate`) VALUES
 (1, 1, 1, '[{\"type\":\"start\",\"ccs\":[]},{\"id\":\"3ewcj92p55e\",\"type\":\"approval\",\"title\":\"审批\",\"reviewType\":\"manual\",\"multiple\":\"and\",\"agentType\":\"pass\",\"reviewers\":[{\"type\":\"select\"}],\"ccs\":[]},{\"type\":\"end\",\"ccs\":[]}]', 'admin', '2022-04-29 08:46:40');
@@ -15353,49 +15378,6 @@ REPLACE INTO `zt_zoutput` (`id`, `activity`, `name`, `content`, `optional`, `tai
 (493, 328, '项目度量数据库', '', 'yes', '', '', 'admin', '2020-01-09 14:55:08', '', NULL, 615, '0'),
 (494, 329, '《量化项目计划及跟踪表》', '', 'no', '', '', 'admin', '2020-01-09 14:59:04', '', NULL, 630, '0');
 
-REPLACE INTO `zt_basicmeas` (`id`, `purpose`, `scope`, `object`, `name`, `code`, `unit`, `configure`, `params`, `definition`, `source`, `collectType`, `collectConf`, `execTime`, `collectedBy`, `createdBy`, `createdDate`, `editedBy`, `editedDate`, `order`, `deleted`) VALUES
-(2,'scale','project','userRequest','项目用户需求初始规模','pgmURInitScale','故事点或功能点','CREATE FUNCTION qc_pgmurinitscale($project int) returns float (10,2)\r\nbegin\r\n    declare scale float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'URS\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_initscale($project, \'URS\',\'requestEst\') into scale__DELIMITER__\r\n    return scale__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nend','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目每个产品的第一个用户需求规格说明书基线版本的规模之和','从基线表中查询该项目下面每个产品的第一个用户需求规模说明书版本，然后查询对应的需求，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 14:19:41',10,'0'),
-(3,'scale','project','softRequest','项目软件需求初始规模','pgmSRInitScale','故事点或功能点','CREATE FUNCTION qc_pgmsrinitscale($project int) returns float (10,2)\r\nbegin\r\n    declare scale float (10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'SRS\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_initscale($project, \'SRS\',\'storyEst\') into scale __DELIMITER__\r\n    return scale __DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nend','{\"$project\":{\"showName\":\"\\u6240\\u9700\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目每个产品的第一个软件需求规格说明书基线版本的规模之和','从基线表中查询该项目下面每个产品的第一个软件需求规模说明书版本，然后查询对应的需求，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 14:21:53',15,'0'),
-(4,'scale','project','userRequest','项目用户需求实时规模','pgmURRealScale','故事点或功能点','CREATE FUNCTION `qc_pgmurrealscale`($project int) RETURNS float (10,2)\r\nBEGIN\r\n  declare totalEstimate float(10,2) default 0__DELIMITER__\r\n  select CAST(sum(estimate) as DECIMAL(10,2)) as estimate from zt_story where project=$project and type=\'requirement\' and deleted=\'0\' and closedReason not in (\'subdivided\', \'duplicate\', \'willnotdo\', \'cancel\', \'bydesign\') into totalEstimate__DELIMITER__\r\n  return totalEstimate__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目用户需求实际的规模','从需求表中查询该项目下的所有用户需求，对规模进行求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 14:22:17',20,'0'),
-(5,'scale','project','softRequest','项目软件需求实时规模','pgmSRRealScale','故事点或功能点','CREATE FUNCTION `qc_pgmsrrealscale`($project int) RETURNS float (10,2)\r\nBEGIN\r\n  declare totalEstimate float (10,2) default 0__DELIMITER__\r\n  select CAST(sum(estimate) as DECIMAL(10,2)) as estimate from zt_story where id in (select story from zt_projectstory where project=$project) and type=\'story\' and deleted=\'0\' and closedReason not in (\'subdivided\', \'duplicate\', \'willnotdo\', \'cancel\', \'bydesign\') into totalEstimate__DELIMITER__\r\n  return totalEstimate__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":false,\"options\":\"project\",\"defaultValue\":\"702\"}}','项目软件需求实际的规模','从需求表中查询该项目下的所有软件需求，对规模进行求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 14:28:01',25,'0'),
-(6,'scale','project','program','项目估算规模','pgmPlanScale','故事点或功能点','CREATE FUNCTION `qc_pgmplanscale`($project int) RETURNS float (10,2)\r\nBEGIN\r\n   declare programScale float (10,2) default 0__DELIMITER__\r\n   select `scale` from zt_workestimation where project = $project into programScale__DELIMITER__\r\n   return programScale__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目最初估算时估计的规模','从项目估算表里面查询项目的估算规模。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 14:26:01',30,'0'),
-(8,'duration','project','stage','项目需求阶段计划天数','pgmRequestPlanDays','天','CREATE FUNCTION `qc_pgmrequestplandays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeplanneddays($project,\'request\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有需求阶段计划天数的和','从阶段表里面统计该项目下面所有类型为需求的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',40,'0'),
-(9,'duration','project','stage','项目设计阶段计划天数','pgmDesigntPlanDays','天','CREATE FUNCTION `qc_pgmdesigntplandays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeplanneddays($project,\'design\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有设计阶段计划天数的和','从阶段表里面统计该项目下面所有类型为设计的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',45,'0'),
-(10,'duration','project','stage','项目开发阶段计划天数','pgmDevelPlanDays','天','CREATE FUNCTION `qc_pgmdevelplandays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeplanneddays($project,\'dev\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有研发阶段计划天数的和','从阶段表里面统计该项目下面所有类型为开发的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',50,'0'),
-(11,'duration','project','stage','项目测试阶段计划天数','pgmTestPlanDays','天','CREATE FUNCTION `qc_pgmtestplandays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeplanneddays($project,\'qa\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有测试阶段计划天数的和','从阶段表里面统计该项目下面所有类型为测试的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',55,'0'),
-(12,'duration','project','stage','项目需求阶段实际天数','pgmRequestRealDays','天','CREATE FUNCTION `qc_pgmrequestrealdays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeactualdays($project,\'request\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有需求阶段实际天数的和','从阶段表里面统计该项目下面所有类型为需求的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',60,'0'),
-(13,'duration','project','stage','项目设计阶段实际天数','pgmDesigntRealDays','天','CREATE FUNCTION `qc_pgmdesigntrealdays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeactualdays($project,\'design\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有设计阶段实际天数的和','从阶段表里面统计该项目下面所有类型为设计的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',65,'0'),
-(14,'duration','project','stage','项目开发阶段实际天数','pgmDevelRealDays','天','CREATE FUNCTION `qc_pgmdevelrealdays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeactualdays($project,\'dev\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有研发阶段实际天数的和','从阶段表里面统计该项目下面所有类型为开发的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',70,'0'),
-(15,'duration','project','stage','项目测试阶段实际天数','pgmTestRealDays','天','CREATE FUNCTION `qc_pgmtestrealdays`($project int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmspecifiedtypeactualdays($project,\'qa\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"3\"}}','项目下面所有测试阶段实际天数的和','从阶段表里面统计该项目下面所有类型为测试的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',75,'0'),
-(26,'duration','product','stage','分产品需求阶段计划天数','prdRequestPlanDays','天','CREATE FUNCTION `qc_prdrequestplandays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageplannedduration($product, \'request\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"\"}}','产品下面所有需求阶段计划天数的和','从阶段表里面统计该产品在该项目下所有类型为需求的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',130,'0'),
-(27,'duration','product','stage','分产品设计阶段计划天数','prdDesigntPlanDays','天','CREATE FUNCTION `qc_prddesigntplandays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageplannedduration($product, \'design\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"\"}}','产品下面所有设计阶段计划天数的和','从阶段表里面统计该产品在该项目下所有类型为设计的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',135,'0'),
-(28,'duration','product','stage','分产品开发阶段计划天数','prdDevelPlanDays','天','CREATE FUNCTION `qc_prddevelplandays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageplannedduration($product, \'dev\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"1\"}}','产品下面所有研发阶段计划天数的和','从阶段表里面统计该产品在该项目下所有类型为开发的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',140,'0'),
-(29,'duration','product','stage','分产品测试阶段计划天数','prdTestPlanDays','天','CREATE FUNCTION `qc_prdtestplandays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageplannedduration($product, \'qa\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"\"}}','产品下面所有测试阶段计划天数的和','从阶段表里面统计该产品在该项目下所有类型为测试的阶段的计划天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',145,'0'),
-(30,'duration','product','stage','分产品需求阶段实际天数','prdRequestRealDays','天','CREATE FUNCTION `qc_prdrequestrealdays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageactualduration($product,\'request\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"\"}}','产品下面所有需求阶段实际天数的和','从阶段表里面统计该产品在该项目下所有类型为需求的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',150,'0'),
-(31,'duration','product','stage','分产品设计阶段实际天数','prdDesigntRealDays','天','CREATE FUNCTION `qc_prddesigntrealdays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageactualduration($product, \'design\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"\"}}','产品下面所有设计阶段实际天数的和','从阶段表里面统计该产品在该项目下所有类型为设计的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',155,'0'),
-(32,'duration','product','stage','分产品开发阶段实际天数','prdDevelRealDays','天','CREATE FUNCTION `qc_prddevelrealdays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageactualduration($product, \'dev\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"\"}}','产品下面所有研发阶段实际天数的和','从阶段表里面统计该产品在该项目下所有类型为开发的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',160,'0'),
-(33,'duration','product','stage','分产品测试阶段实际天数','prdTestRealDays','天','CREATE FUNCTION `qc_prdtestrealdays`($product int) RETURNS int(11)\r\nBEGIN\r\n    select qc_pgmstageactualduration($product, \'qa\') as days into @days__DELIMITER__\r\n    return @days__DELIMITER__\r\nEND','{\"$product\":{\"showName\":\"\\u6240\\u5c5e\\u4ea7\\u54c1\",\"varName\":\"$product\",\"varType\":\"select\",\"options\":\"product\",\"defaultValue\":\"1\"}}','产品下面所有测试阶段实际天数的和','从阶段表里面统计该产品在该项目下所有类型为测试的阶段的实际天数，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','','1970-01-01 00:00:01',165,'0'),
-(34,'workload','project','finance','项目任务实时预计工时数','pgmRealEstHours','小时','CREATE FUNCTION `qc_pgmrealesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    select sum(estimate) from zt_task where project=$project and parent >= 0 and status != \'cancel\' and deleted = \'0\' into @estimate__DELIMITER__\r\nreturn @estimate__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有任务的最初预计工时和','从任务表中查询该项目的所有任务，统计最初预计工>时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 19:51:39',170,'0'),
-(35,'workload','project','finance','项目需求工作实时总预计工时数','pgmRequestRealEstHours','小时','CREATE FUNCTION `qc_pgmrequestrealesthours`($project int) RETURNS float (10,2)\r\nBEGIN\r\nreturn qc_pgmesthoursbytype($project, \'request\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有需求相关任务的最初预计工时和','从任务表中查询该项目所有任务类型为需求的任务，统计最初预计工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-23 13:49:17',175,'0'),
-(36,'workload','project','finance','项目设计工作实时总预计工时数','pgmDesgignRealEstHours','小时','CREATE FUNCTION `qc_pgmdesgignrealesthours`($project int) RETURNS float (10,2)\r\nBEGIN\r\nreturn qc_pgmesthoursbytype($project, \'design\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有设计相关任务的最初预计工时和','从任务表中查询该项目所有任务类型为设计的任务，统计最初预计工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-23 13:45:32',180,'0'),
-(37,'workload','project','finance','项目开发工作实时总预计工时数','pgmDevelRealEstHours','小时','CREATE FUNCTION `qc_pgmdevelrealesthours`($project int) RETURNS float (10,2)\r\nBEGIN\r\nreturn qc_pgmesthoursbytype($project, \'devel\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有开发相关任务的最初预计工时和','从任务表中查询该项目所有任务类型为开发的任务，统计最初预计工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-23 13:46:53',185,'0'),
-(38,'workload','project','finance','项目测试工作实时总预计工时数','pgmTestRealEstHours','小时','CREATE FUNCTION `qc_pgmtestrealesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\nreturn qc_pgmesthoursbytype($project, \'test\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有测试相关任务的最初预计工时和','从任务表中查询该项目所有任务类型为测试的任务，统计最初预计工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-23 13:44:13',190,'0'),
-(39,'workload','project','finance','项目任务实际消耗工时数','pgmRealHours','小时','CREATE FUNCTION `qc_pgmrealhours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n  select CAST(sum(consumed) as DECIMAL(10,2)) as consumed from zt_task where project=$project and parent >= 0 and status != \'cancel\' and deleted = \'0\'  into @consumed__DELIMITER__\r\n  return @consumed__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目下面所有任务的实际消耗工时和','从任务表中查询该项目的所有任务，统计实际消耗工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 19:49:32',195,'0'),
-(40,'workload','project','finance','项目需求工作实际消耗工时数','pgmRequestRealHours','小时','CREATE FUNCTION `qc_pgmrequestrealhours`($project int) RETURNS float(10,2)\r\nBEGIN\r\nreturn qc_pgmrealhoursbytype($project, \'request\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有需求相关任务的实际消耗工时和','从任务表中查询该项目所有任务类型为需求的任务，统计实际消耗工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 19:49:03',200,'0'),
-(41,'workload','project','finance','项目设计工作实际消耗工时数','pgmDesignRealHours','小时','CREATE FUNCTION `qc_pgmdesignrealhours`($project int) RETURNS float(10,2)\r\nBEGIN\r\nreturn qc_pgmrealhoursbytype($project, \'design\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有设计相关任务的实际消耗工时和','从任务表中查询该项目所有任务类型为设计的任务，统计实际消耗工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 19:48:35',205,'0'),
-(42,'workload','project','finance','项目开发工作实际消耗工时数','pgmDevelRealHours','小时','CREATE FUNCTION `qc_pgmdevelrealhours`($project int) RETURNS float(10,2)\r\nBEGIN\r\nreturn qc_pgmrealhoursbytype($project, \'devel\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有开发相关任务的实际消耗工时和','从任务表中查询该项目所有任务类型为开发的任务，统计实际消耗工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 18:34:51',210,'0'),
-(43,'workload','project','finance','项目测试工作实际消耗工时数','pgmTestRealHours','小时','CREATE FUNCTION `qc_pgmtestrealhours`($project int) RETURNS float(10, 2)\r\nBEGIN\r\nreturn qc_pgmrealhoursbytype($project, \'test\')__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目所有测试相关任务的实际消耗工时和','从任务表中查询该项目所有任务类型为测试的任务，统计实际消耗工时，求和。','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','system','1970-01-01 00:00:01','admin','2020-07-07 18:09:01',215,'0'),
-(44,'workload','project','finance','项目开发工作最初总预计工时数','pgmDevelFirstEstHours','小时','CREATE FUNCTION `qc_pgmdevelfirstesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getdevelfirstesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划第一个基线版本中所有开发相关工作最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-22 13:13:51','','1970-01-01 00:00:01',220,'0'),
-(45,'workload','project','finance','项目设计工作最初总预计工时数','pgmDesignFirstEstHours','小时','CREATE FUNCTION `qc_pgmdesignfirstesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getdesignfirstesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划第一个基线版本中所有设计相关工作最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-22 16:33:20','admin','2020-07-23 10:31:23',225,'0'),
-(46,'workload','project','finance','项目测试工作最初总预计工时数','pgmTestFirstEstHours','小时','CREATE FUNCTION `qc_pgmtestfirstesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_gettestfirstesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划第一个基线版本中所有测试相关工作最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 10:31:17','','1970-01-01 00:00:01',230,'0'),
-(47,'workload','project','finance','项目需求工作最初总预计工时数','pgmRequestFirstEstHours','小时','CREATE FUNCTION `qc_pgmrequestfirstesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getstoryfirstesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划第一个基线版本中所有需求相关工作最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 10:53:09','','1970-01-01 00:00:01',235,'0'),
-(48,'workload','project','finance','项目任务最初总预计工时数','pgmFirstEstHours','小时','CREATE FUNCTION `qc_pgmfirstesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getfirstesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划第一个基线版本中所有任务最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 13:06:59','','1970-01-01 00:00:01',240,'0'),
-(49,'workload','project','finance','项目开发工作最终总预计工时数','pgmDevelLastEstHours','小时','CREATE FUNCTION `qc_pgmdevellastesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project, \'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getdevlastesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划最后一个基线版本中所有开发相关任务最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 13:41:38','','1970-01-01 00:00:01',245,'0'),
-(50,'workload','project','finance','项目需求工作最终总预计工时数','pgmRequestLastEstHours','小时','CREATE FUNCTION `qc_pgmrequestlastesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project,\'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getrequestlastesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划最后一个基线版本中所有需求相关任务最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 14:00:58','','1970-01-01 00:00:01',250,'0'),
-(51,'workload','project','finance','项目测试工作最终总预计工时数','pgmTestLastEstHours','小时','CREATE FUNCTION `qc_pgmtestlastesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project,\'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_gettestlastesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划最后一个基线版本中所有测试相关任务最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 14:10:12','','1970-01-01 00:00:01',255,'0'),
-(52,'workload','project','finance','项目设计工作最终总预计工时数','pgmDesignLastEstHours','小时','CREATE FUNCTION `qc_pgmdesignlastesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project,\'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getdesignlastesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划最后一个基线版本中所有设计相关任务最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 14:33:00','','1970-01-01 00:00:01',260,'0'),
-(53,'workload','project','finance','项目任务最终总预计工时数','pgmLastEstHours','小时','CREATE FUNCTION `qc_pgmlastesthours`($project int) RETURNS float(10,2)\r\nBEGIN\r\n    declare estimate float(10,2) default 0__DELIMITER__\r\n    declare inited int default 0__DELIMITER__\r\n    select qc_cminited($project,\'PP\') into inited__DELIMITER__\r\n    IF inited = 1 THEN\r\n    select qc_getlastesthours($project) into estimate__DELIMITER__\r\n    return estimate__DELIMITER__\r\n    ELSE \r\n    return 0__DELIMITER__\r\n    END IF__DELIMITER__\r\nEND','{\"$project\":{\"showName\":\"\\u6240\\u5c5e\\u9879\\u76ee\",\"varName\":\"$project\",\"varType\":\"select\",\"options\":\"project\",\"defaultValue\":\"\"}}','项目计划最后一个基线版本中所有任务最初预计工时和','','crontab','{\"week\":\"1,2,3,4,5,6,0\",\"type\":\"week\"}','00:00','','admin','2020-07-23 14:54:42','','1970-01-01 00:00:01',265,'0');
-
 REPLACE INTO `zt_cron` (`m`, `h`, `dom`, `mon`, `dow`, `command`, `remark`, `type`, `buildin`, `status`) VALUES
 ('1','0','*','*','*','moduleName=weekly&methodName=computeWeekly','更新项目周报','zentao',0,'normal');
 
@@ -15406,8 +15388,11 @@ CREATE TABLE IF NOT EXISTS `zt_pivot`  (
   `group` varchar(255) NOT NULL DEFAULT '',
   `code` varchar(255) NOT NULL DEFAULT '',
   `driver` enum('mysql', 'duckdb') not NULL default 'mysql',
+  `mode` enum('text', 'builder') not NULL default 'builder',
   `name` text NULL,
   `desc` text NULL,
+  `acl` enum('open','private') NOT NULL DEFAULT 'open',
+  `whitelist` text NULL,
   `sql` mediumtext NULL,
   `fields` mediumtext NULL,
   `langs` mediumtext NULL,
@@ -15427,6 +15412,16 @@ CREATE TABLE IF NOT EXISTS `zt_pivot`  (
 ) ENGINE = InnoDB DEFAULT CHARSET=utf8;
 CREATE INDEX `dimension` ON `zt_pivot` (`dimension`);
 CREATE INDEX `group`     ON `zt_pivot` (`group`);
+
+-- DROP TABLE IF EXISTS `zt_sqlbuilder`;
+CREATE TABLE IF NOT EXISTS `zt_sqlbuilder` (
+  `id` mediumint(8) unsigned NOT NULL AUTO_INCREMENT,
+  `objectID`   mediumint(8)  NOT NULL,
+  `objectType` varchar(50)   NOT NULL,
+  `sql`        text          NULL,
+  `setting`    text          NULL,
+  PRIMARY KEY (`id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 
 -- DROP TABLE IF EXISTS `zt_pivotdrill`;
 CREATE TABLE `zt_pivotdrill` (
@@ -15602,442 +15597,6 @@ CREATE TABLE IF NOT EXISTS `zt_solution` (
   `updatedDate` datetime NULL,
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
-
-DROP FUNCTION IF EXISTS `get_monday`;
-CREATE FUNCTION `get_monday`(day date) RETURNS date READS SQL DATA
-  begin if date_format(day, '%w') = 0 then return subdate(day, date_format(day, '%w') - 6)__DELIMITER__
-  else  return subdate(day, date_format(day, '%w') -1)__DELIMITER__
-  end if__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `get_sunday`;
-CREATE FUNCTION `get_sunday`(day date) RETURNS date READS SQL DATA
-begin
-  if date_format(day, '%w') = 0 then return day__DELIMITER__
-  else return subdate(day, date_format(day, '%w') - 7)__DELIMITER__
-  end if__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_cminited`;
-CREATE FUNCTION qc_cminited($project int, $category varchar(30)) returns int READS SQL DATA
-begin
-    declare products int default 0__DELIMITER__
-    declare objects  int default 0__DELIMITER__
-    select COUNT(1) from zt_projectproduct where project = $project into products__DELIMITER__
-    select COUNT(DISTINCT product) from zt_object where project = $project and category = $category and type = 'taged' and product in (select product from zt_projectproduct where project = $project) into objects__DELIMITER__
-    IF products = objects THEN
-    return 1__DELIMITER__
-    ELSEIF products != objects THEN
-    return 0__DELIMITER__
-    END IF__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_initscale`;
-CREATE FUNCTION qc_initscale($project int, $category varchar(30), $estimateType varchar(30)) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    declare $estimate int default 0__DELIMITER__
-    declare $storyEst varchar(30) default 'storyEst'__DELIMITER__
-    declare $requestEst varchar(30) default 'requestEst'__DELIMITER__
-    if($estimateType = $storyEst) THEN SELECT sum(storyEst) as estimate FROM zt_object WHERE id in(SELECT MIN(id) FROM zt_object WHERE project = $project and category = $category and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-    end if__DELIMITER__
-    if($estimateType = $requestEst) THEN SELECT sum(requestEst) as estimate FROM zt_object WHERE id in(SELECT MIN(id) FROM zt_object WHERE project = $project and category = $category and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-    end if__DELIMITER__
-    RETURN @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmplanscale`;
-CREATE FUNCTION `qc_pgmplanscale`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-   declare programScale float (10,2) default 0__DELIMITER__
-   select `scale` from zt_workestimation where project = $project into @programScale__DELIMITER__
-   return @programScale__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmsrinitscale`;
-CREATE FUNCTION `qc_pgmsrinitscale`($project int) RETURNS float(10,2) READS SQL DATA
-begin
-    declare scale int default 0__DELIMITER__
-    declare inited int default 0__DELIMITER__
-    select qc_cminited($project, 'SRS') into inited__DELIMITER__
-    IF inited = 1 THEN
-    select qc_initscale($project, 'SRS', 'storyEst') into scale __DELIMITER__
-    return scale __DELIMITER__
-    ELSE
-    return 0__DELIMITER__
-    END IF__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmsrrealscale`;
-CREATE FUNCTION `qc_pgmsrrealscale`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-  declare totalEstimate float(10,2) default 0__DELIMITER__
-  select CAST(sum(estimate) as DECIMAL(10,2)) as estimate from zt_story where id in (select story from zt_projectstory where project=$project) and type='story' and deleted='0' and closedReason not in ('subdivided', 'duplicate', 'willnotdo', 'cancel', 'bydesign') into totalEstimate__DELIMITER__
-  return totalEstimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmurinitscale`;
-CREATE FUNCTION `qc_pgmurinitscale`($project int) RETURNS float(10,2) READS SQL DATA
-begin
-    declare scale int default 0__DELIMITER__
-    declare inited int default 0__DELIMITER__
-    select qc_cminited($project, 'URS') into inited__DELIMITER__
-    IF inited = 1 THEN
-    select qc_initscale($project, 'URS', 'requestEst') into scale__DELIMITER__
-    return scale__DELIMITER__
-    ELSE
-    return 0__DELIMITER__
-    END IF__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmurrealscale`;
-CREATE FUNCTION `qc_pgmurrealscale`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-  declare totalEstimate float(10,2) default 0__DELIMITER__
-  select CAST(sum(estimate) as DECIMAL(10,2)) as estimate from zt_story where project=$project and type='requirement' and deleted='0' and closedReason not in ('subdivided', 'duplicate', 'willnotdo', 'cancel', 'bydesign') into totalEstimate__DELIMITER__
-  return totalEstimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmallrequirementstage`;
-CREATE FUNCTION `qc_pgmallrequirementstage`($project int) RETURNS int(1) READS SQL DATA
-BEGIN
-    -- 获取项目产品总数
-    select COUNT(1) AS products from zt_projectproduct where project = $project into @totalproduct__DELIMITER__
-    -- 获取已经设置需求阶段的产品总数
-    select COUNT(1) AS product from (select product from zt_projectproduct where project in (select id from zt_project where project = $project and type = 'stage' and attribute = 'request' and deleted = '0') GROUP BY product) as product into @product__DELIMITER__
-    -- 让项目产品总数和已设置需求阶段产品总数比较,都设置返回1,否则返回0
-    if @totalproduct = @product then return 1__DELIMITER__
-    end if__DELIMITER__
-    RETURN 0__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdesigntplandays`;
-CREATE FUNCTION `qc_pgmdesigntplandays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeplanneddays($project,'design') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdesigntrealdays`;
-CREATE FUNCTION `qc_pgmdesigntrealdays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeactualdays($project,'design') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdevelplandays`;
-CREATE FUNCTION `qc_pgmdevelplandays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeplanneddays($project,'dev') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdevelrealdays`;
-CREATE FUNCTION `qc_pgmdevelrealdays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeactualdays($project,'dev') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmrequestplandays`;
-CREATE FUNCTION `qc_pgmrequestplandays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeplanneddays($project,'request') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmrequestrealdays`;
-CREATE FUNCTION `qc_pgmrequestrealdays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeactualdays($project,'request') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmspecifiedtypeactualdays`;
-CREATE FUNCTION `qc_pgmspecifiedtypeactualdays`($project int,$attribute varchar(50)) RETURNS int(11) READS SQL DATA
-BEGIN
-    -- 查询某类型的阶段总数
-    select COUNT(1) from zt_project where project = $project and attribute = $attribute and deleted = '0' and id not in (select parent from zt_project where project = $project and attribute = $attribute and grade = 2 group by parent) into @totalstory__DELIMITER__
-    -- 查询某类型已设置实际工期的阶段总数
-    select COUNT(1) from zt_project where project = $project and attribute = $attribute and deleted = '0' and realDuration > 0 and id not in (select parent from zt_project where project = $project and attribute = $attribute and grade = 2 group by parent) into @setstory__DELIMITER__
-    -- 查询项目下某类型阶段实际工期总数
-    select sum(realDuration) as realDuration from zt_project where project = $project and attribute = $attribute and deleted = '0' and realDuration > 0 and id not in (select parent from zt_project where project = $project and attribute = $attribute and grade = 2 group by parent) into @days__DELIMITER__
-    -- 判断项目下某类型的阶段是否都已设置实际工期
-    if @totalstory != @setstory then
-        set @days = 0__DELIMITER__
-    end if__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmspecifiedtypeplanneddays`;
-CREATE FUNCTION `qc_pgmspecifiedtypeplanneddays`($project int,$attribute varchar(50)) RETURNS int(11) READS SQL DATA
-BEGIN
-    select sum(planDuration) as planDuration from zt_project where project = $project and attribute = $attribute and deleted = '0' and id not in (select parent from zt_project where project = $project and attribute = $attribute and grade = 2 group by parent) into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmstageactualduration`;
-CREATE FUNCTION `qc_pgmstageactualduration`($product int, $attribute varchar(50)) RETURNS int(11) READS SQL DATA
-BEGIN
-    -- 查找某类型的阶段总数
-    select COUNT(1) AS totalduration from zt_project where id in (select project from zt_projectproduct where product = $product) and type = 'stage' and attribute = $attribute and deleted = '0' and id not in (select parent from zt_project where id in (select project from zt_projectproduct where product = $product) and attribute = $attribute and grade = 2 group by parent) into @totalduration__DELIMITER__
-    -- 查某类型阶段已设置实际工期的总数
-    select COUNT(1) AS setduration from zt_project where id in (select project from zt_projectproduct where product = $product) and type = 'stage' and attribute = $attribute and deleted = '0' and id not in (select parent from zt_project where id in (select project from zt_projectproduct where product = $product) and attribute = $attribute and grade = 2 group by parent) and realDuration > 0 into @setduration__DELIMITER__
-    -- 指定产品下某类型的阶段实际工期总和
-    select sum(realDuration) as duration from zt_project where id in (select project from zt_projectproduct where product = $product) and type = 'stage' and attribute = $attribute and deleted = '0' and id not in (select parent from zt_project where id in (select project from zt_projectproduct where product = $product) and attribute = $attribute and grade = 2 group by parent) and realDuration > 0 into @duration__DELIMITER__
-    -- 需要判断该类型阶段都已设置实际工期,否则不统计
-    if @totalduration != @setduration then
-        set @duration = 0__DELIMITER__
-    end if__DELIMITER__
-    return @duration__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmstageplannedduration`;
-CREATE FUNCTION `qc_pgmstageplannedduration`($product int, $attribute varchar(50)) RETURNS int(11) READS SQL DATA
-BEGIN
-    -- 查找某产品对应阶段
-    select sum(planDuration) as duration from zt_project where id in (select project from zt_projectproduct where product = $product) and attribute = $attribute and deleted = '0' and id not in (select parent from zt_project where id in (select project from zt_projectproduct where product = $product) and attribute = $attribute and grade = 2 group by parent) and planDuration > 0 into @duration__DELIMITER__
-    RETURN @duration__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmtestplandays`;
-CREATE FUNCTION `qc_pgmtestplandays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeplanneddays($project,'qa') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmtestrealdays`;
-CREATE FUNCTION `qc_pgmtestrealdays`($project int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmspecifiedtypeactualdays($project,'qa') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prddesigntplandays`;
-CREATE FUNCTION `qc_prddesigntplandays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageplannedduration($project, $product, 'design') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prddesigntrealdays`;
-CREATE FUNCTION `qc_prddesigntrealdays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageactualduration($project, $product, 'design') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prddevelplandays`;
-CREATE FUNCTION `qc_prddevelplandays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageplannedduration($project, $product, 'dev') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prddevelrealdays`;
-CREATE FUNCTION `qc_prddevelrealdays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageactualduration($project, $product, 'dev') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prdrequestplandays`;
-CREATE FUNCTION `qc_prdrequestplandays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageplannedduration($project, $product, 'request') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prdrequestrealdays`;
-CREATE FUNCTION `qc_prdrequestrealdays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageactualduration($project, $product, 'request') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prdtestplandays`;
-CREATE FUNCTION `qc_prdtestplandays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageplannedduration($project, $product, 'qa') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_prdtestrealdays`;
-CREATE FUNCTION `qc_prdtestrealdays`($project int, $product int) RETURNS int(11) READS SQL DATA
-BEGIN
-    select qc_pgmstageactualduration($project, $product, 'qa') as days into @days__DELIMITER__
-    return @days__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdesgignrealesthours`;
-CREATE FUNCTION `qc_pgmdesgignrealesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmesthoursbytype($project, 'design')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdesignrealhours`;
-CREATE FUNCTION `qc_pgmdesignrealhours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmrealhoursbytype($project, 'design')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdevelrealesthours`;
-CREATE FUNCTION `qc_pgmdevelrealesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmesthoursbytype($project, 'devel')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmdevelrealhours`;
-CREATE FUNCTION `qc_pgmdevelrealhours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmrealhoursbytype($project, 'devel')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmrealesthours`;
-CREATE FUNCTION `qc_pgmrealesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-  select CAST(sum(estimate) as DECIMAL(10,2)) as estimate from zt_task where project=$project and parent >= 0 and status != 'cancel' and deleted = '0' into @estimate__DELIMITER__
-  return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmesthoursbytype`;
-CREATE FUNCTION `qc_pgmesthoursbytype`($project int, $type char(30)) RETURNS float(10,2) READS SQL DATA
-BEGIN
-  select CAST(sum(estimate) as DECIMAL(10,2)) as estimate from zt_task where project=$project and type = $type and parent >= 0 and status != 'cancel' and deleted = '0' into @estimate__DELIMITER__
-  return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmrealhours`;
-CREATE FUNCTION `qc_pgmrealhours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-  select CAST(sum(consumed) as DECIMAL(10,2)) as consumed from zt_task where project=$project and parent >= 0 and status != 'cancel' and deleted = '0' into @consumed__DELIMITER__
-  return @consumed__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmrealhoursbytype`;
-CREATE FUNCTION `qc_pgmrealhoursbytype`($project int, $type char(30)) RETURNS float(10,2) READS SQL DATA
-BEGIN
-  select CAST(sum(consumed) as DECIMAL(10,2)) as consumed from zt_task where project=$project and type = $type and parent >= 0 and status != 'cancel' and deleted = '0' into @consumed__DELIMITER__
-  return @consumed__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmrequestrealesthours`;
-CREATE FUNCTION `qc_pgmrequestrealesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmesthoursbytype($project, 'request')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmrequestrealhours`;
-CREATE FUNCTION `qc_pgmrequestrealhours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmrealhoursbytype($project, 'request')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmtestrealesthours`;
-CREATE FUNCTION `qc_pgmtestrealesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmesthoursbytype($project, 'test')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmtestrealhours`;
-CREATE FUNCTION `qc_pgmtestrealhours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-return qc_pgmrealhoursbytype($project, 'test')__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getdevelfirstesthours`;
-CREATE FUNCTION `qc_getdevelfirstesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(devEst) as estimate FROM zt_object WHERE id in(SELECT MIN(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getdesignfirstesthours`;
-CREATE FUNCTION `qc_getdesignfirstesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(designEst) as estimate FROM zt_object WHERE id in(SELECT MIN(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getstoryfirstesthours`;
-CREATE FUNCTION `qc_getstoryfirstesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(requestEst) as estimate FROM zt_object WHERE id in(SELECT MIN(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_gettestfirstesthours`;
-CREATE FUNCTION `qc_gettestfirstesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(testEst) as estimate FROM zt_object WHERE id in(SELECT MIN(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getfirstesthours`;
-CREATE FUNCTION `qc_getfirstesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(taskEst) as estimate FROM zt_object WHERE id in(SELECT MIN(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getdevlastesthours`;
-CREATE FUNCTION `qc_getdevlastesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(devEst) as estimate FROM zt_object WHERE id in(SELECT MAX(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getrequestlastesthours`;
-CREATE FUNCTION `qc_getrequestlastesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(requestEst) as estimate FROM zt_object WHERE id in(SELECT MAX(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_gettestlastesthours`;
-CREATE FUNCTION `qc_gettestlastesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(testEst) as estimate FROM zt_object WHERE id in(SELECT MAX(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getdesignlastesthours`;
-CREATE FUNCTION `qc_getdesignlastesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(designEst) as estimate FROM zt_object WHERE id in(SELECT MAX(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_getlastesthours`;
-CREATE FUNCTION `qc_getlastesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    SELECT sum(taskEst) as estimate FROM zt_object WHERE id in(SELECT MAX(id) FROM zt_object WHERE project = $project and category = 'PP' and type = 'taged' and product in (select product from zt_projectproduct where project = $project) group by `product`) into @estimate__DELIMITER__
-
-    return @estimate__DELIMITER__
-END;
-
-DROP FUNCTION IF EXISTS `qc_pgmlastesthours`;
-CREATE FUNCTION `qc_pgmlastesthours`($project int) RETURNS float(10,2) READS SQL DATA
-BEGIN
-    declare estimate float(10,2) default 0__DELIMITER__
-    declare inited int default 0__DELIMITER__
-    select qc_cminited($project,'PP') into inited__DELIMITER__
-    IF inited = 1 THEN
-    select qc_getlastesthours($project) into estimate__DELIMITER__
-    return estimate__DELIMITER__
-    ELSE
-    return 0__DELIMITER__
-    END IF__DELIMITER__
-END;
 
 -- DROP TABLE IF EXISTS `zt_demandpool`;
 CREATE TABLE `zt_demandpool` (
@@ -16500,32 +16059,34 @@ CREATE TABLE IF NOT EXISTS `zt_metric` (
 
 -- DROP TABLE IF EXISTS `zt_metriclib`;
 CREATE TABLE IF NOT EXISTS `zt_metriclib` (
-  `id`         bigint unsigned NOT NULL AUTO_INCREMENT,
-  `metricID`   mediumint    NOT NULL DEFAULT 0,
+  `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+  `metricID` mediumint NOT NULL DEFAULT 0,
   `metricCode` varchar(100) NOT NULL DEFAULT '',
-  `system`     char(30)     NOT NULL DEFAULT '0',
-  `program`    char(30)     NOT NULL DEFAULT '',
-  `project`    char(30)     NOT NULL DEFAULT '',
-  `product`    char(30)     NOT NULL DEFAULT '',
-  `execution`  char(30)     NOT NULL DEFAULT '',
-  `code`       char(30)     NOT NULL DEFAULT '',
-  `pipeline`   char(30)     NOT NULL DEFAULT '',
-  `repo`       char(30)     NOT NULL DEFAULT '',
-  `user`       text,
-  `dept`       char(30)     NOT NULL DEFAULT '',
-  `year`       char(4)      NOT NULL DEFAULT '0',
-  `month`      char(2)      NOT NULL DEFAULT '0',
-  `week`       char(2)      NOT NULL DEFAULT '0',
-  `day`        char(2)      NOT NULL DEFAULT '0',
-  `value`      varchar(100) NOT NULL DEFAULT '0',
-  `calcType`   ENUM('cron', 'inference') NOT NULL DEFAULT 'cron',
+  `system` char(30) NOT NULL DEFAULT '0',
+  `program` char(30) NOT NULL DEFAULT '',
+  `project` char(30) NOT NULL DEFAULT '',
+  `product` char(30) NOT NULL DEFAULT '',
+  `execution` char(30) NOT NULL DEFAULT '',
+  `code` char(30) NOT NULL DEFAULT '',
+  `pipeline` char(30) NOT NULL DEFAULT '',
+  `repo` char(30) NOT NULL DEFAULT '',
+  `user` text,
+  `dept` char(30) NOT NULL DEFAULT '',
+  `year` char(4) NOT NULL DEFAULT '0',
+  `month` char(2) NOT NULL DEFAULT '0',
+  `week` char(2) NOT NULL DEFAULT '0',
+  `day` char(2) NOT NULL DEFAULT '0',
+  `value` varchar(100) NOT NULL DEFAULT '0',
+  `calcType` ENUM('cron', 'inference') NOT NULL DEFAULT 'cron',
   `calculatedBy` varchar(30) NOT NULL DEFAULT '',
-  `date`       datetime              DEFAULT NULL,
+  `date` datetime DEFAULT NULL,
+  `deleted` ENUM('0', '1') NOT NULL DEFAULT '0',
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8;
 CREATE INDEX `metricID` ON `zt_metriclib`(`metricID`);
 CREATE INDEX `metricCode` ON `zt_metriclib`(`metricCode`);
 CREATE INDEX `date` ON zt_metriclib (date);
+CREATE INDEX `deleted` ON `zt_metriclib` (`deleted`);
 
 -- DROP TABLE IF EXISTS `zt_duckdbqueue`;
 CREATE TABLE IF NOT EXISTS `zt_duckdbqueue` (
@@ -16550,3 +16111,7 @@ UPDATE `zt_pivot` SET `editedBy` = 'system' where `editedBy` = 'admin';
 INSERT INTO `zt_config` ( `vision`, `owner`, `module`, `section`, `key`, `value` ) VALUES ('', 'system', 'common', '', 'closedFeatures', 'otherOA');
 INSERT INTO `zt_config`(`vision`, `owner`, `module`, `section`, `key`, `value`) VALUES ('', 'system', 'common', 'global', 'installedDate', CURDATE());
 CREATE INDEX `idx_repo_deleted` ON `zt_job` (`repo`,`deleted`);
+
+INSERT INTO `zt_cron` (`m`, `h`, `dom`, `mon`, `dow`, `command`, `remark`, `type`, `buildin`, `status`, `lastTime`) VALUES
+('*/5', '*', '*', '*', '*', 'moduleName=program&methodName=refreshStats', '刷新项目集统计数据', 'zentao', 1, 'normal', NULL),
+('*/5', '*', '*', '*', '*', 'moduleName=product&methodName=refreshStats', '刷新产品统计数据',   'zentao', 1, 'normal', NULL);

@@ -892,7 +892,6 @@ class dom
         }
     }
 
-
     /**
      * Get element's coordinate on page.
      *
@@ -974,11 +973,13 @@ class dom
      * @access public
      * @return object
      */
-    public function picker($value)
+    public function picker($value, $selectNumber = 0)
     {
         $picker = $this->element->findElement(WebDriverBy::xpath('parent::div'));
         $picker->click();
         sleep(1);
+
+        $pickerID = substr($picker->getAttribute('id'), 5);
 
         $pickerList = array(
             'search' => '//*[@class="picker-search"]/input',
@@ -992,25 +993,33 @@ class dom
             {
                 $pickerInput = $picker->findElement(WebDriverBy::xpath($xpathValue));
                 $pickerInput->click();
-                $pickerInput->sendKeys(trim($value));
+                if(!is_numeric($value)) $pickerInput->sendKeys(trim($value));
                 sleep(1);
-
-                $pickerID = substr($picker->getAttribute('id'), 5);
 
                 if($xpath != 'form')
                 {
                     try
                     {
-                        $this->driver->findElement(WebDriverBy::xpath("//*[@id='pick-pop-$pickerID']//span[@class='is-match-keys']"))->click();
+                        if(is_numeric($value))
+                        {
+                            $selectXpath = "//*[@id='pick-pop-{$pickerID}']//li[{$value}]";
+                        }
+                        else
+                        {
+                            $selectXpath = "//*[@id='pick-pop-{$pickerID}']//li[not(contains(@class, 'is-not-match'))]";
+                        }
+
+                        if($selectNumber) $selectXpath .= "[{$selectNumber}]";
+                        $this->driver->findElement(WebDriverBy::xpath("{$selectXpath}//a"))->click();
                     }
                     catch(Exception $xpathException)
                     {
-                        $this->driver->findElement(WebDriverBy::xpath("//a[@title='$value']"))->click();
+                        $this->driver->findElement(WebDriverBy::xpath("//a[@title='{$value}']"))->click();
                     }
                 }
                 else
                 {
-                    $this->driver->findElement(WebDriverBy::xpath("//button[@data-pick-value=$value]"))->click();
+                    $this->driver->findElement(WebDriverBy::xpath("//button[@data-pick-value={$value}]"))->click();
                 }
                 break;
             }
@@ -1036,6 +1045,12 @@ class dom
         $picker->click();
         sleep(1);
 
+        $pickerID = substr($picker->getAttribute('id'), 5);
+        if(!$pickerID)
+        {
+            $pickerID = $picker->findElement(WebDriverBy::xpath('//div[contains(@class,"picker-select-multi")]'))->getAttribute('id');
+            $pickerID = substr($pickerID, 5);
+        }
         foreach($values as $value)
         {
             $pickerInput = $picker->findElement(WebDriverBy::xpath('//*[@class="picker-multi-selections"]//input'));
@@ -1043,7 +1058,6 @@ class dom
             $pickerInput->sendKeys(trim($value));
             sleep(1);
 
-            $pickerID = substr($picker->getAttribute('id'), 5);
             $this->driver->findElement(WebDriverBy::xpath("//*[@id='pick-pop-$pickerID']//span[@class='is-match-keys']"))->click();
             $pickerInput->clear();
         }
@@ -1089,12 +1103,12 @@ class dom
     {
         $this->waitElement('//button[@data-toggle="searchform"]')->getElement('//button[@data-toggle="searchform"]')->click();
 
-        $searchContainer  = '//div[contains(@class, "search-form-container")]';
-        $searchSquareBtn  = $searchContainer . '/div/div[2]/div//button[contains(@class, "square")]';
-        $leftSearchGroup  = $searchContainer . '/div/div/div/table/tbody';
-        $rightSearchGroup = $searchContainer . '/div/div/div[3]/table/tbody';
-        $searchBtn        = $searchContainer . '/div/div[2]/button';
-        $restBtn          = $searchContainer . '/div/div[2]/button[2]';
+        $searchContainer  = '//div[contains(@class, "search-form-container")]/form';
+        $searchSquareBtn  = $searchContainer . '/div[2]/div//button[contains(@class, "square")]';
+        $leftSearchGroup  = $searchContainer . '/div/div/table/tbody';
+        $rightSearchGroup = $searchContainer . '/div/div[3]/table/tbody';
+        $searchBtn        = $searchContainer . '/div[2]/button';
+        $restBtn          = $searchContainer . '/div[2]/button[2]';
 
         $this->waitElement($searchContainer);
         $this->waitElement($restBtn)->getElement($restBtn)->click();
@@ -1139,7 +1153,7 @@ class dom
             }
             else
             {
-                $this->getElement("$valueXpath/div")->picker($value);
+                $this->getElement("$valueXpath//input")->picker($value);
             }
         }
 
@@ -1161,5 +1175,32 @@ class dom
         if(strpos($name, '[') !== false) $name = '"' . $name . '"';
         $this->driver->executeScript("return $('[name={$name}]').zui('datePicker').$.setValue('$value')");
         return $this;
+    }
+
+    /**
+     * 获取picker控件的选项
+     * Get picker items.
+     *
+     * @param  string  $pickerName
+     * @access public
+     * @return void
+     */
+    public function getPickerItems($pickerName)
+    {
+        return $this->driver->executeScript('return $("[name=' . $pickerName . ']").zui("picker").options.items;');
+    }
+
+    /**
+     * 在Zeneditor中输入内容
+     * set value in Zeneditor.
+     *
+     * @param  string  $value
+     * @access public
+     * @return void
+     */
+    public function setValueInZenEditor($value)
+    {
+        $value = json_encode($value);
+        return $this->driver->executeScript("arguments[0].setHTML($value);", array($this->element));
     }
 }

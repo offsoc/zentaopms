@@ -36,6 +36,22 @@ class bi extends control
     }
 
     /**
+     * Init parquet.
+     *
+     * @access public
+     * @return void
+     */
+    public function initParquet()
+    {
+        $startTime = microtime(true);
+        $this->bi->initParquet();
+        $endTime   = microtime(true);
+        $runTime   = $endTime - $startTime;
+        echo "$runTime \n";
+        echo 'success';
+    }
+
+    /**
      * Ajax: get object options.
      *
      * @access public
@@ -78,5 +94,17 @@ class bi extends control
     {
         $check = $this->bi->checkDuckdbInstall();
         echo(json_encode($check));
+    }
+
+    /**
+     * AJAX: Get menu of table fields.
+     *
+     * @access public
+     * @return void
+     */
+    public function ajaxGetTableFieldsMenu()
+    {
+        $menu = $this->bi->getTableFieldsMenu();
+        echo json_encode($menu);
     }
 }

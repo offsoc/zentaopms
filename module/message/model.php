@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * The model file of message module of ZenTaoCMS.
+ * The model file of message module of ZenTaoPMS.
  *
  * @copyright   Copyright 2009-2023 禅道软件（青岛）有限公司(ZenTao Software (Qingdao) Co., Ltd. www.cnezsoft.com)
  * @license     ZPL(http://zpl.pub/page/zplv12.html) or AGPL(https://www.gnu.org/licenses/agpl-3.0.en.html)
@@ -42,7 +42,11 @@ class messageModel extends model
     {
         $this->loadModel('action');
         $objectTypes = array();
-        foreach($this->config->message->objectTypes as $objectType => $actions) $objectTypes[$objectType] = $this->lang->action->objectTypes[$objectType];
+        foreach($this->config->message->objectTypes as $objectType => $actions)
+        {
+            if(!isset($this->lang->action->objectTypes[$objectType])) continue;
+            $objectTypes[$objectType] = $this->lang->action->objectTypes[$objectType];
+        }
         return $objectTypes;
     }
 
@@ -58,7 +62,11 @@ class messageModel extends model
         $objectActions = array();
         foreach($this->config->message->objectTypes as $objectType => $actions)
         {
-            foreach($actions as $action) $objectActions[$objectType][$action] = $this->lang->message->label->{$action};
+            foreach($actions as $action)
+            {
+                if(!isset($this->lang->message->label->{$action})) continue;
+                $objectActions[$objectType][$action] = $this->lang->message->label->{$action};
+            }
         }
         return $objectActions;
     }
@@ -87,8 +95,8 @@ class messageModel extends model
         /* 如果是业需和用需，则使用它们的发信配置。*/
         if($objectType == 'story')
         {
-            $story      = $this->loadModel('story')->fetchByID($objectID);
-            $objectType = $story->type;
+            $story = $this->loadModel('story')->fetchByID($objectID);
+            if($story) $objectType = $story->type;
         }
 
         if(isset($messageSetting['mail']))
@@ -105,9 +113,9 @@ class messageModel extends model
                     include file_exists($configRoot . 'my.php') ? $configRoot . 'my.php' : $configRoot . 'config.php';
                 }
 
-                if($objectType == 'feedback')
+                if($objectType == 'feedback' || $objectType == 'ticket')
                 {
-                    $this->loadModel('feedback')->sendmail($objectID, $actionID);
+                    $this->loadModel($objectType)->sendmail($objectID, $actionID);
                 }
                 else
                 {
@@ -241,10 +249,10 @@ class messageModel extends model
         if(empty($toList) && $objectType == 'mr')          $toList = $object->createdBy . ',' . $object->assignee;
         if(empty($toList) and $objectType == 'demandpool') $toList = trim($object->owner, ',') . ',' . trim($object->reviewer, ',');
         if(empty($toList) and $objectType == 'feedback')   $toList = $object->openedBy;
-        if(empty($toList) && $objectType == 'release')
+        if(empty($toList) && in_array($objectType, array('release', 'doc')))
         {
             list($toList, $ccList) = $this->loadModel($objectType)->getToAndCcList($object);
-            $toList = $toList . $ccList;
+            $toList = $toList . ',' . $ccList;
         }
         if(empty($toList) && $objectType == 'task' && $object->mode == 'multi')
         {
@@ -260,7 +268,7 @@ class messageModel extends model
         {
             $action = $this->loadModel('action')->getById($actionID);
             list($toList, $ccList) = $this->loadModel($objectType)->getToAndCcList($object, $action->action);
-            $toList = $toList . $ccList;
+            $toList = $toList . ',' . $ccList;
         }
 
         if($objectType == 'testtask')
@@ -268,6 +276,13 @@ class messageModel extends model
             $toList = array_merge(explode(',', $toList), explode(',', $object->members));
             $toList = array_filter(array_unique($toList));
             $toList = implode(',', $toList);
+        }
+
+        if($objectType == 'ticket')
+        {
+            $action = $this->loadModel('action')->getById($actionID);
+            list($toList, $ccList) = $this->loadModel($objectType)->getToAndCcList($object, $action);
+            $toList = $toList . ',' . $ccList;
         }
 
         if(empty($toList) and $objectType == 'demand' and $this->config->edition == 'ipd')
@@ -280,6 +295,16 @@ class messageModel extends model
             $reviewers = array_keys($reviewers);
             if($reviewers) $toList .= ',' . implode(',', $reviewers);
             $toList = trim($toList, ',');
+        }
+
+        /* 非内置工作流使用工作流的toList。 */
+        if($this->config->edition != 'open')
+        {
+            $flow = $this->loadModel('workflow')->getByModule($objectType);
+            if($flow && !$flow->buildin)
+            {
+                $toList = $this->loadModel('flow')->getToList($flow, $object->id);
+            }
         }
 
         return trim($toList, ',');

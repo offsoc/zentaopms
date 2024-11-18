@@ -3,22 +3,44 @@ declare(strict_types=1);
 class pivotTao extends pivotModel
 {
     /**
+     * 获取透视表。
+     * Fetch pivot by id.
+     *
+     * @param int $id
+     * @access public
+     * @return object|bool
+     */
+    protected function fetchPivot(int $id): object|bool
+    {
+        return $this->dao->select('*')->from(TABLE_PIVOT)
+            ->where('id')->eq($id)
+            ->andWhere('deleted')->eq('0')
+            ->fetch();
+    }
+    /**
      * 获取产品列表。
      * Get product list.
      *
      * @param  string       $conditions
      * @param  array|string $IDList
+     * @param  array        $filters
      * @access public
      * @return array
      */
-    protected function getProductList(string $conditions, array|string $IDList = array()): array
+    protected function getProductList(string $conditions, array|string $idList = array(), array $filters = array()): array
     {
+        $productID     = isset($filters['productID'])     ? $filters['productID']     : 0;
+        $productStatus = isset($filters['productStatus']) ? $filters['productStatus'] : '';
+        $productType   = isset($filters['productType'])   ? $filters['productType']   : '';
+
         return $this->dao->select('t1.id, t1.code, t1.name, t1.PO')->from(TABLE_PRODUCT)->alias('t1')
             ->leftJoin(TABLE_PROGRAM)->alias('t2')->on('t1.program = t2.id')
             ->where('t1.deleted')->eq('0')
             ->andWhere('t1.shadow')->eq('0')
-            ->beginIF(strpos($conditions, 'closedProduct') === false)->andWhere('t1.status')->ne('closed')->fi()
-            ->beginIF(!empty($IDList))->andWhere('t1.id')->in($IDList)->fi()
+            ->beginIF(!empty($idList))->andWhere('t1.id')->in($idList)->fi()
+            ->beginIF($productID)->andWhere('t1.id')->eq($productID)->fi()
+            ->beginIF($productStatus)->andWhere('t1.status')->eq($productStatus)->fi()
+            ->beginIF($productType)->andWhere('t1.type')->eq($productType)->fi()
             ->orderBy('t2.order_asc, t1.line_desc, t1.order_asc')
             ->fetchAll('id');
     }
@@ -399,10 +421,12 @@ EOT)->from(TABLE_TASK)->alias('t1')
      */
     protected function getPivotID(int $groupID): int
     {
+        $viewableObjects = $this->bi->getViewableObject('pivot');
         return (int)$this->dao->select('id')->from(TABLE_PIVOT)
             ->where("FIND_IN_SET({$groupID}, `group`)")
             ->andWhere('stage')->ne('draft')
             ->andWhere('deleted')->eq('0')
+            ->andWhere('id')->in($viewableObjects)
             ->orderBy('id_desc')
             ->limit(1)
             ->fetch('id');
@@ -436,14 +460,20 @@ EOT)->from(TABLE_TASK)->alias('t1')
      * @access public
      * @return object|bool
      */
-    public function fetchPivotDrill(int $pivotID, string $field): object|bool
+    public function fetchPivotDrills(int $pivotID, string|array $fields): array
     {
-        $record = $this->dao->select('*')->from(TABLE_PIVOTDRILL)
+        if(is_string($fields)) $fields = array($fields);
+        $records = $this->dao->select('*')->from(TABLE_PIVOTDRILL)
             ->where('pivot')->eq($pivotID)
-            ->andWhere('field')->eq($field)
-            ->fetch();
+            ->andWhere('field')->in($fields)
+            ->fetchAll('field');
 
-        if($record) $record->condition = json_decode($record->condition, true);
-        return $record;
+        foreach($records as $field => $record)
+        {
+            $record->condition = json_decode($record->condition, true);
+            $records[$field] = $record;
+        }
+
+        return $records;
     }
 }

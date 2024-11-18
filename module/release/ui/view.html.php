@@ -166,7 +166,8 @@ if($canBeChanged)
                 set::text($lang->release->linkStory),
                 set::icon('link'),
                 set::type('primary'),
-                bind::click("window.showLink('story')")
+                set::className('linkStory-btn'),
+                bind::click('window.showLink', array('params' => array('story')))
             );
     }
 
@@ -177,7 +178,8 @@ if($canBeChanged)
                 set::text($lang->release->linkBug),
                 set::icon('bug'),
                 set::type('primary'),
-                bind::click("window.showLink('bug')")
+                set::className('linkBug-btn'),
+                bind::click('window.showLink', array('params' => array('bug')))
             );
 
         $linkLeftBtn = btn
@@ -185,7 +187,8 @@ if($canBeChanged)
                 set::text($lang->release->linkBug),
                 set::icon('bug'),
                 set::type('primary'),
-                bind::click("window.showLink('leftBug')")
+                set::className('leftBug-btn'),
+                bind::click('window.showLink', array('params' => array('leftBug')))
             );
     }
 }

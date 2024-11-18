@@ -38,6 +38,7 @@ else
     $settingText = '';
 }
 
+if($app->rawModule == 'doc' && $app->rawMethod == 'view') $objectID = $docID;
 sidebar
 (
     set::width(200),

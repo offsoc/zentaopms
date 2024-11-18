@@ -26,34 +26,32 @@ window.loadDBAuthUrl = function(dom)
     );
 }
 
-var timer             = null;
-const postData = new FormData();
-postData.append('idList[]', instanceID);
-window.afterPageUpdate = function()
+$(function()
 {
-    if(inQuickon)
-    {
-        if(timer) clearInterval(timer);
-        timer = setInterval(refreshStatus, 5000);
-    }
-}
+    if(typeof timer !== 'undefined') clearInterval(timer);
+    if(inQuickon && instanceType == 'store') timer = setInterval(refreshStatus, 5000);
+})
 
 window.onPageUnmount = function()
 {
-    if(timer) clearInterval(timer);
+    if(typeof timer !== 'undefined') clearInterval(timer);
 }
 
 function refreshStatus()
 {
+    const postData = new FormData();
+    postData.append('idList[]', instanceID);
+
     $.ajaxSubmit({
         url: $.createLink('instance', 'ajaxStatus'),
         method: 'POST',
-        data:postData,
+        data: postData,
         onComplete: function(res)
         {
             if(res.result === 'success')
             {
                 if(res.data.length == 0) return false;
+                if(res.data[0].status == $('#statusTD').data('status')) return false;
 
                 loadPage($.createLink('instance', 'view', `instanceID=${instanceID}`), '#setting,#statusTD,#dbStatusTD,#systemLoad,.float-toolbar');
             }

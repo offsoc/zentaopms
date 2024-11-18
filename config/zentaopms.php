@@ -239,6 +239,9 @@ $config->logonMethods[] = 'custom.index';
 $config->logonMethods[] = 'doc.createbasicinfo';
 $config->logonMethods[] = 'doc.selectlibtype';
 $config->logonMethods[] = 'doc.uploaddocs';
+$config->logonMethods[] = 'doc.setdocbasic';
+$config->logonMethods[] = 'doc.commoneditaction';
+$config->logonMethods[] = 'doc.commondeleteaction';
 $config->logonMethods[] = 'execution.browse';
 $config->logonMethods[] = 'feedback.mergeproductmodule';
 $config->logonMethods[] = 'file.buildoldform';
@@ -580,6 +583,7 @@ define('TABLE_TRAINRECORDS',           '`' . $config->db->prefix . 'trainrecords
 define('TABLE_TRIP',                   '`' . $config->db->prefix . 'trip`');
 define('TABLE_WORKESTIMATION',         '`' . $config->db->prefix . 'workestimation`');
 define('TABLE_WORKFLOW',               '`' . $config->db->prefix . 'workflow`');
+define('TABLE_WORKFLOWGROUP',          '`' . $config->db->prefix . 'workflowgroup`');
 define('TABLE_WORKFLOWACTION',         '`' . $config->db->prefix . 'workflowaction`');
 define('TABLE_WORKFLOWDATASOURCE',     '`' . $config->db->prefix . 'workflowdatasource`');
 define('TABLE_WORKFLOWFIELD',          '`' . $config->db->prefix . 'workflowfield`');
@@ -592,6 +596,7 @@ define('TABLE_WORKFLOWREPORT',         '`' . $config->db->prefix . 'workflowrepo
 define('TABLE_WORKFLOWRULE',           '`' . $config->db->prefix . 'workflowrule`');
 define('TABLE_WORKFLOWSQL',            '`' . $config->db->prefix . 'workflowsql`');
 define('TABLE_WORKFLOWVERSION',        '`' . $config->db->prefix . 'workflowversion`');
+define('TABLE_WORKFLOWUI',             '`' . $config->db->prefix . 'workflowui`');
 define('TABLE_ZOUTPUT',                '`' . $config->db->prefix . 'zoutput`');
 
 define('TABLE_METRIC',        '`' . $config->db->prefix . 'metric`');
@@ -613,6 +618,7 @@ define('TABLE_AI_MODEL',            '`' . $config->db->prefix . 'ai_model`');
 define('TABLE_AI_ASSISTANT',        '`' . $config->db->prefix . 'ai_assistant`');
 
 define('TABLE_SQLITE_QUEUE', '`' . $config->db->prefix . 'sqlite_queue`');
+define('TABLE_DUCKDBQUEUE', '`' . $config->db->prefix . 'duckdbqueue`');
 
 if(!defined('TABLE_ROADMAP'))        define('TABLE_ROADMAP',        '`' . $config->db->prefix . 'roadmap`');
 if(!defined('TABLE_ROADMAPSTORY'))   define('TABLE_ROADMAPSTORY',   '`' . $config->db->prefix . 'roadmapstory`');
@@ -712,6 +718,8 @@ $config->objectTables['market']         = TABLE_MARKET;
 $config->objectTables['marketreport']   = TABLE_MARKETREPORT;
 $config->objectTables['marketresearch'] = TABLE_PROJECT;
 $config->objectTables['researchstage']  = TABLE_PROJECT;
+$config->objectTables['workflowgroup']  = TABLE_WORKFLOWGROUP;
+$config->objectTables['productline']    = TABLE_MODULE;
 
 $config->newFeatures      = array('introduction', 'tutorial', 'youngBlueTheme', 'visions', 'aiPrompts', 'promptDesign', 'promptExec');
 $config->disabledFeatures = '';
@@ -749,14 +757,11 @@ $config->featureGroup->waterfallplus = array();
 $config->featureGroup->assetlib      = array();
 $config->featureGroup->other         = array('devops', 'kanban', 'setCode');
 
-$config->bi = new stdclass();
-$config->bi->pickerHeight = 150;
-
 $config->db->sqliteBlacklist  = array('sqlite_queue', 'cron');
 $config->hasDropmenuApps      = array('program', 'project', 'product', 'execution', 'qa', 'admin', 'bi', 'feedback', 'demandpool');
 $config->hasBranchMenuModules = array('product', 'story', 'release', 'bug', 'testcase', 'testtask', 'branch', 'tree');
 $config->excludeBranchMenu    = array('product-dashboard', 'product-view');
-$config->excludeDropmenuList  = array('program-browse', 'program-productview', 'program-kanban', 'product-all', 'product-index', 'product-kanban', 'project-kanban', 'execution-all', 'execution-executionkanban', 'project-browse', 'project-batchedit', 'product-batchedit', 'admin-index', 'product-create', 'project-create', 'execution-create', 'program-create', 'execution-batchedit', 'metric-preview', 'metric-browse', 'metric-view', 'metriclib-browse', 'qa-index', 'caselib-create', 'feedback-batchedit', 'feedback-batchclose', 'feedback-showimport', 'dimension-browse', 'dataview-browse', 'dataview-query', 'ticket-batchedit', 'ticket-batchfinish', 'ticket-batchactivate');
+$config->excludeDropmenuList  = array('program-browse', 'program-productview', 'program-kanban', 'product-all', 'product-index', 'product-kanban', 'project-kanban', 'execution-all', 'execution-executionkanban', 'project-browse', 'project-batchedit', 'product-batchedit', 'admin-index', 'product-create', 'project-create', 'execution-create', 'program-create', 'execution-batchedit', 'metric-preview', 'metric-browse', 'metric-view', 'metriclib-browse', 'qa-index', 'caselib-create', 'feedback-batchedit', 'feedback-batchclose', 'feedback-showimport', 'dimension-browse', 'dataview-browse', 'dataview-create', 'dataview-query', 'ticket-batchedit', 'ticket-batchfinish', 'ticket-batchactivate', 'file-download');
 $config->hasSwitcherModules   = array('design');
 $config->hasSwitcherMethods   = array('project-bug', 'project-testcase', 'execution-bug', 'execution-testcase', 'testtask-cases', 'testtask-view', 'testtask-report', 'testtask-groupcase', 'testtask-linkcase');
 $config->excludeSwitcherList  = array();

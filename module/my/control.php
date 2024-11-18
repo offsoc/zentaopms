@@ -727,7 +727,9 @@ class my extends control
         {
             if(!empty($project->PM) && !in_array($project->PM, $accounts)) $accounts[] = $project->PM;
         }
+
         $PMList = $this->user->getListByAccounts($accounts, 'account');
+        foreach($projects as $project) $project->PMUserID = isset($PMList[$project->PM]) ? (int)$PMList[$project->PM]->id : 0;
 
         $this->view->title       = $this->lang->my->common . $this->lang->hyphen . $this->lang->my->project;
         $this->view->users       = $this->user->getPairs('noletter');
@@ -1324,7 +1326,10 @@ class my extends control
             }
             if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
 
+            if(isonlybody()) return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true));
             if(isInModal()) return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'closeModal' => true, 'callback' => "renderContactList"));
+            if($this->app->tab == 'project') return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'load' => true));
+
             return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'load' => inlink('manageContacts', "listID={$listID}")));
         }
 
@@ -1343,7 +1348,7 @@ class my extends control
         }
 
         $userParams = empty($this->config->user->showDeleted) ? 'noletter|noempty|noclosed|noclosed|nodeleted' : 'noletter|noempty|noclosed|noclosed';
-        $users      = $this->user->getPairs($userParams, $mode == 'new' ? '' : $userList, $this->config->maxCount);
+        $users      = $this->user->getPairs($userParams, $mode == 'new' ? '' : $userList);
 
         $this->view->title = $this->lang->my->common . $this->lang->hyphen . $label;
         $this->view->lists = $this->user->getContactLists($this->app->user->account, 'list');
@@ -1377,11 +1382,12 @@ class my extends control
      * @access public
      * @return void
      */
-    public function buildContactLists(string $dropdownName = 'mailto', string $attr = '')
+    public function buildContactLists(string $dropdownName = 'mailto', string $attr = '', string $showManage = 'yes')
     {
         $this->view->contactLists = $this->user->getContactLists();
         $this->view->dropdownName = $dropdownName;
         $this->view->attr         = $attr;
+        $this->view->showManage   = $showManage;
         $this->display();
     }
 

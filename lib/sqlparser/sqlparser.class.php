@@ -75,7 +75,7 @@ class sqlparser
      */
     public $tables = array();
 
-    public function __construct($query)
+    public function __construct($query = '')
     {
         $query = $this->skipLineBreak($query);
         if(empty($query)) return;
@@ -115,6 +115,329 @@ class sqlparser
     }
 
     /**
+     * Create statement.
+     *
+     * @access public
+     * @return void
+     */
+    public function createStatement()
+    {
+        $this->statement = new PhpMyAdmin\SqlParser\Statements\SelectStatement();
+    }
+
+    /**
+     * Set from.
+     *
+     * @param  object $from
+     * @access public
+     * @return void
+     */
+    public function setFrom($from)
+    {
+        $this->statement->from = array($from);
+    }
+
+    /**
+     * Add select.
+     *
+     * @param  array|object $exprs
+     * @access public
+     * @return void
+     */
+    public function addSelect($exprs)
+    {
+        if(empty($exprs)) return;
+
+        if($exprs instanceof PhpMyAdmin\SqlParser\Components\Expression)
+        {
+            $this->statement->expr[] = $exprs;
+            return;
+        }
+
+        foreach($exprs as $expr) $this->addSelect($expr);
+    }
+
+    /**
+     * Add join.
+     *
+     * @param  array|object $joins
+     * @access public
+     * @return void
+     */
+    public function addJoin($joins)
+    {
+        if(empty($joins)) return;
+
+        if($joins instanceof PhpMyAdmin\SqlParser\Components\JoinKeyword)
+        {
+            $this->statement->join[] = $joins;
+            return;
+        }
+
+        foreach($joins as $join) $this->addJoin($join);
+    }
+
+    /**
+     * Add where.
+     *
+     * @param  array|object $wheres
+     * @access public
+     * @return void
+     */
+    public function addWhere($wheres)
+    {
+        if(empty($wheres)) return;
+
+        if($wheres instanceof PhpMyAdmin\SqlParser\Components\Condition)
+        {
+            $this->statement->where[] = $wheres;
+            return;
+        }
+
+        foreach($wheres as $where) $this->addWhere($where);
+    }
+
+    /**
+     * Add group.
+     *
+     * @param  array|object $groups
+     * @access public
+     * @return void
+     */
+    public function addGroup($groups)
+    {
+        if(empty($groups)) return;
+
+        if($groups instanceof PhpMyAdmin\SqlParser\Components\GroupKeyword)
+        {
+            $this->statement->group[] = $groups;
+            return;
+        }
+
+        foreach($groups as $group) $this->addGroup($group);
+    }
+
+    /**
+     * Get function.
+     *
+     * @param  string $name
+     * @param  mixed  $args
+     * @access public
+     * @return string
+     */
+    public function getFunction($name, ...$args)
+    {
+        $name = strtoupper($name);
+        $argStr = implode(', ', $args);
+        $argStr = str_replace(PHP_EOL, '', $argStr);
+        return "$name($argStr)";
+    }
+
+    /**
+     * Get expression.
+     *
+     * @param  string|array $table
+     * @param  string $column
+     * @param  string $alias
+     * @param  string $function
+     * @access public
+     * @return PhpMyAdmin\SqlParser\Components\Expression
+     */
+    public function getExpression($table = null, $column = null, $alias = null, $function = null)
+    {
+        if(is_array($table)) return call_user_func_array(array($this, 'getExpression'), $table);
+
+        $expression = new PhpMyAdmin\SqlParser\Components\Expression();
+
+        if(!empty($function))
+        {
+            $expression->function = $function;
+            $expression->expr     = $this->getFunction($function, $expression->build($this->getExpression($table, $column)));
+        }
+        else
+        {
+            if($column === '*')
+            {
+                $table = $this->trimExpr($table);
+                $expression->expr = empty($table) ? '*' : "`$table`.*";
+            }
+            else
+            {
+                $expression->table  = $table;
+                $expression->column = $column;
+            }
+        }
+
+        $expression->alias = $alias;
+
+        return $expression;
+    }
+
+    /**
+     * operatorCondition
+     *
+     * @param  string $type
+     * @access public
+     * @return void
+     */
+    public function operatorCondition($type)
+    {
+        $condition = new PhpMyAdmin\SqlParser\Components\Condition();
+        $condition->isOperator = true;
+        $condition->expr       = strtoupper($type);
+
+        return $condition;
+    }
+
+    /**
+     * Get condition.
+     *
+     * @param  mixed    $tableA
+     * @param  mixed    $columnA
+     * @param  string   $operator
+     * @param  mixed    $tableB
+     * @param  mixed    $columnB
+     * @param  mixed    $group
+     * @access public
+     * @return object
+     */
+    public function getCondition($tableA = null, $columnA = null, $operator = '', $tableB = null, $columnB = null, $group = 1)
+    {
+        if(is_array($tableA)) return call_user_func_array(array($this, 'getCondition'), $tableA);
+
+        $condition = new PhpMyAdmin\SqlParser\Components\Condition();
+
+        $tableA  = $this->trimExpr($tableA);
+        $columnA = $this->trimExpr($columnA);
+        $tableB  = $this->trimExpr($tableB);
+
+        $expr = '';
+        if(empty($operator))
+        {
+            $expr = $columnA;
+        }
+        else
+        {
+            /* 如果tableB不为空，那么columnB就是字段，需要trim('`')。*/
+            if(!empty($tableB)) $columnB = $this->trimExpr($columnB);
+            /* 如果tableB为空，那么columnB是值，需要trim("'")。*/
+            if(empty($tableB)) $columnB = $this->trimExpr($columnB, "'");
+
+            $exprA = empty($tableA) ? "`$columnA`" : "`$tableA`.`$columnA`";
+            $exprB = empty($tableB) ? "'$columnB'" : "`$tableB`.`$columnB`";
+
+            $operator = strtoupper($operator);
+            $expr = "$exprA $operator $exprB";
+        }
+
+        $condition->expr  = $expr;
+        $condition->group = $group;
+
+        return $condition;
+    }
+
+    /**
+     * Get conditions from array.
+     *
+     * @param  array  $conditions
+     * @access public
+     * @return array
+     */
+    public function getConditionsFromArray($conditions)
+    {
+        if(is_string($conditions)) return $this->operatorCondition($conditions);
+
+        $first = current($conditions);
+        if(!is_array($first) && !in_array($first, array('and', 'or'))) return $this->getCondition($conditions);
+
+        $conditionExprs = array();
+        foreach($conditions as $condition) $conditionExprs[] = $this->getConditionsFromArray($condition);
+
+        return $conditionExprs;
+    }
+
+    /**
+     * Get left join.
+     *
+     * @param  string  $table
+     * @param  string  $alias
+     * @param  array   $on
+     * @access public
+     * @return object
+     */
+    public function getLeftJoin($table, $alias, $on)
+    {
+        $left = new PhpMyAdmin\SqlParser\Components\JoinKeyword();
+
+        $left->type = 'LEFT';
+        $left->expr = $this->getExpression($table, null, $alias);
+        $left->on   = $this->combineConditions($on);
+
+        return $left;
+    }
+
+    /**
+     * Get group.
+     *
+     * @param  object $expr
+     * @access public
+     * @return void
+     */
+    public function getGroup($expr)
+    {
+        $group = new PhpMyAdmin\SqlParser\Components\GroupKeyword();
+        $group->expr = $expr;
+
+        return $group;
+    }
+
+    /**
+     * Combine conditions.
+     *
+     * @param  array|object $conditions
+     * @access public
+     * @return array
+     */
+    public function combineConditions($conditions, $quote = false)
+    {
+        if(empty($conditions)) return array();
+
+        if($conditions instanceof PhpMyAdmin\SqlParser\Components\Condition === true) return $conditions;
+
+        $first = reset($conditions);
+        $last  = end($conditions);
+
+        if($quote)
+        {
+            $first = $this->addQuote($first, 'left');
+            $last  = $this->addQuote($last, 'right');
+        }
+
+        $quote = true;
+        if(is_array($first)) $first = $this->combineConditions($first, $quote);
+        if(is_array($last))  $last  = $this->combineConditions($last, $quote);
+
+        $conditions[0] = $first;
+        $conditions[count($conditions) - 1] = $last;
+        return $conditions;
+    }
+
+    public function addQuote($conditions, $side)
+    {
+        if($conditions instanceof PhpMyAdmin\SqlParser\Components\Condition === true)
+        {
+            $expr  = $conditions->expr;
+            $conditions->expr = $side == 'left' ? '(' . $expr : $expr . ')';
+            return $conditions;
+        }
+
+        $condition = $side == 'left' ? current($conditions) : end($conditions);
+        $index     = $side == 'left' ? 0 : count($conditions) - 1;
+        $conditions[$index] = $this->addQuote($condition, $side);
+        return $conditions;
+    }
+
+    /**
      * Match columns with table.
      *
      * @access public
@@ -126,6 +449,19 @@ class sqlparser
 
         if(count($this->tables) == 1) return $this->combineSingleTable();
         return $this->combineMultipleTable();
+    }
+
+    /**
+     * Trim expr.
+     *
+     * @param  string    $expr
+     * @access private
+     * @return string
+     */
+    private function trimExpr($expr, $char = '`')
+    {
+        if(empty($expr)) return $expr;
+        return trim(trim($expr), $char);
     }
 
     /**
@@ -328,6 +664,8 @@ class sqlparser
      */
     private function skipLineBreak($sql)
     {
+        if(empty($sql)) return $sql;
+
         $sql = str_replace("\n\t", " ", $sql);
         $sql = str_replace("\t\n", " ", $sql);
         $sql = str_replace("\n\r", " ", $sql);

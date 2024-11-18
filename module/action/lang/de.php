@@ -149,7 +149,7 @@ $lang->action->objectTypes['gitea']            = 'Gitea Server';
 $lang->action->objectTypes['gogs']             = 'Gogs Server';
 $lang->action->objectTypes['jenkins']          = 'Jenkins';
 $lang->action->objectTypes['nexus']            = 'Nexus';
-$lang->action->objectTypes['mr']               = 'Merge Request';
+$lang->action->objectTypes['mr']               = 'Merge Requests';
 $lang->action->objectTypes['gitlabproject']    = 'GitLab Project';
 $lang->action->objectTypes['gitlabuser']       = 'GitLab User';
 $lang->action->objectTypes['gitlabgroup']      = 'GitLab Group';
@@ -187,6 +187,7 @@ $lang->action->objectTypes['metric']           = 'Metric';
 $lang->action->objectTypes['projectbuild']     = 'Build';
 $lang->action->objectTypes['board']            = 'Board';
 $lang->action->objectTypes['boardspace']       = 'Board Space';
+$lang->action->objectTypes['productline']      = 'Product Line';
 
 /* Used to describe operation history. */
 $lang->action->desc = new stdclass();
@@ -284,12 +285,13 @@ $lang->action->desc->unlinkrepobranch     = '$date, <strong>$actor</strong> unli
 $lang->action->desc->changedprogram       = '$date, <strong>$actor</strong> adjust the program <strong>$extra</strong>.' . "\n";
 
 /* Used to describe the history of operations related to parent-child tasks. */
-$lang->action->desc->createchildren     = '$date, <strong>$actor</strong> created a child task <strong>$extra</strong>。' . "\n";
-$lang->action->desc->linkchildtask      = '$date, <strong>$actor</strong> linked a child task <strong>$extra</strong>。' . "\n";
-$lang->action->desc->unlinkchildrentask = '$date, <strong>$actor</strong> unlinked a child task <strong>$extra</strong>。' . "\n";
-$lang->action->desc->linkparenttask     = '$date, <strong>$actor</strong> linked to a parent task <strong>$extra</strong>。' . "\n";
-$lang->action->desc->unlinkparenttask   = '$date, <strong>$actor</strong> unlinked a parent task <strong>$extra</strong>。' . "\n";
-$lang->action->desc->deletechildrentask = '$date, <strong>$actor</strong> deleted a child task <strong>$extra</strong>。' . "\n";
+$lang->action->desc->createchildren        = '$date, <strong>$actor</strong> created a child task <strong>$extra</strong>。' . "\n";
+$lang->action->desc->linkchildtask         = '$date, <strong>$actor</strong> linked a child task <strong>$extra</strong>。' . "\n";
+$lang->action->desc->unlinkchildrentask    = '$date, <strong>$actor</strong> unlinked a child task <strong>$extra</strong>。' . "\n";
+$lang->action->desc->linkparenttask        = '$date, <strong>$actor</strong> linked to a parent task <strong>$extra</strong>。' . "\n";
+$lang->action->desc->unlinkparenttask      = '$date, <strong>$actor</strong> unlinked a parent task <strong>$extra</strong>。' . "\n";
+$lang->action->desc->deletechildrentask    = '$date, <strong>$actor</strong> deleted a child task <strong>$extra</strong>。' . "\n";
+$lang->action->desc->syncstorybyparenttask = "\$date, as the parent task updates its {$lang->SRCommon}, the child tasks are updated simultaneously.\n";
 
 /* Used to describe the history of operations related to parent-child requirements. */
 $lang->action->desc->createchildrenstory = '$date, <strong>$actor</strong> created a child story <strong>$extra</strong>。' . "\n";
@@ -477,9 +479,9 @@ $lang->action->label->syncexecution           = 'start';
 $lang->action->label->syncexecutionbychild    = 'start';
 $lang->action->label->syncmultipleproject     = 'start';
 $lang->action->label->startProgram            = '(The start of the project sets the status of the program as Ongoing)';
-$lang->action->label->createmr                = 'Merge Request Linked';
-$lang->action->label->deletemr                = 'Merge Request Unlinked';
-$lang->action->label->mergedmr                = 'Merge Request Merged';
+$lang->action->label->createmr                = 'Linked';
+$lang->action->label->deletemr                = 'Unlinked';
+$lang->action->label->mergedmr                = 'Merged';
 $lang->action->label->compilepass             = 'Compile Success';
 $lang->action->label->compilefail             = 'Compile Fail';
 $lang->action->label->reopen                  = 'Reopen';
@@ -1100,3 +1102,12 @@ $lang->action->desc->approve                      = '$date, <strong>$actor</stro
 $lang->action->desc->reject                       = '$date, <strong>$actor</strong> rejected.';
 $lang->action->desc->linkedrepo                   = '$date, <strong>$actor</strong> linked repo $extra';
 $lang->action->desc->unlinkedrepo                 = '$date, <strong>$actor</strong> unlinked repo $extra';
+
+$lang->action->reviewStatusList['wait']      = 'Pending approval';
+$lang->action->reviewStatusList['doing']     = 'Reviewing';
+$lang->action->reviewStatusList['pass']      = 'Pass';
+$lang->action->reviewStatusList['reject']    = 'Reject';
+$lang->action->reviewStatusList['reverting'] = 'Reverting';
+
+$lang->action->reviewResultList['pass']   = 'Pass';
+$lang->action->reviewResultList['reject'] = 'Reject';

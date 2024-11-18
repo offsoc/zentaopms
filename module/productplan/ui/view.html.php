@@ -92,6 +92,7 @@ unset($lang->story->reviewResultList[''], $lang->story->reviewResultList['revert
 unset($lang->story->reasonList[''], $lang->story->reasonList['subdivided'], $lang->story->reasonList['duplicate']);
 unset($plans[''], $lang->story->stageList[''], $users['']);
 
+$planItems = $moduleItems = $branchItems = $reviewRejectItems = $stageItems = $assignItems = $reviewResultItems = array();
 foreach($lang->story->reviewResultList as $key => $result) $reviewResultItems[$key] = array('text' => $result,     'class' => 'batch-btn', 'data-type' => 'story', 'data-url' => $this->createLink('story', 'batchReview', "result=$key"));
 foreach($lang->story->reasonList as $key => $reason)       $reviewRejectItems[]     = array('text' => $reason,     'class' => 'batch-btn', 'data-type' => 'story', 'data-url' => $this->createLink('story', 'batchReview', "result=reject&reason=$key"));
 foreach($branchTagOption as $branchID => $branchName)      $branchItems[]           = array('text' => $branchName, 'class' => 'batch-btn', 'data-type' => 'story', 'data-url' => $this->createLink('story', 'batchChangeBranch', "branchID=$branchID"));
@@ -259,7 +260,8 @@ detailBody
                         set::type('primary'),
                         set::icon('link'),
                         set::text($lang->productplan->linkStory),
-                        bind::click("window.showLink('story')")
+                        set::className('linkStory-btn'),
+                        bind::click('window.showLink', array('params' => array('story')))
                     ) : null
                 ) : null,
                 dtable
@@ -306,7 +308,8 @@ detailBody
                         set::type('primary'),
                         set::icon('link'),
                         set::text($lang->productplan->linkBug),
-                        bind::click("window.showLink('bug')")
+                        set::className('linkBug-btn'),
+                        bind::click('window.showLink', array('params' => array('bug')))
                     )
                 ) : null,
                 dtable
@@ -353,7 +356,7 @@ detailBody
                 ),
                 html($this->printExtendFields($plan, 'html', 'position=all', false)),
                 h::hr(setClass('mt-4')),
-                history(set::objectID($plan->id), set::commentBtn(false))
+                history(set::objectID($plan->id), set::commentBtn(false), set::objectType('productplan'))
             )
         )
     )

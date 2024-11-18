@@ -320,7 +320,7 @@ $config->projectGroup->dtable->fieldList['actions']['name']     = 'actions';
 $config->projectGroup->dtable->fieldList['actions']['title']    = $lang->actions;
 $config->projectGroup->dtable->fieldList['actions']['type']     = 'actions';
 $config->projectGroup->dtable->fieldList['actions']['width']    = '140';
-$config->projectGroup->dtable->fieldList['actions']['menu']     = array('managePriv', 'manageMember', 'edit', 'copy', 'delete');
+$config->projectGroup->dtable->fieldList['actions']['menu']     = array('managePriv', 'manageGroupMember', 'edit', 'copyGroup', 'delete');
 $config->projectGroup->dtable->fieldList['actions']['sortType'] = false;
 $config->projectGroup->dtable->fieldList['actions']['fixed']    = 'right';
 
@@ -329,12 +329,12 @@ $config->projectGroup->dtable->fieldList['actions']['list']['managePriv']['text'
 $config->projectGroup->dtable->fieldList['actions']['list']['managePriv']['hint'] = $lang->group->managePriv;
 $config->projectGroup->dtable->fieldList['actions']['list']['managePriv']['url']  = helper::createLink('project', 'managePriv', "projectID={project}&groupID={id}");
 
-$config->projectGroup->dtable->fieldList['actions']['list']['manageMember']['icon']        = 'persons';
-$config->projectGroup->dtable->fieldList['actions']['list']['manageMember']['text']        = $lang->group->manageMember;
-$config->projectGroup->dtable->fieldList['actions']['list']['manageMember']['hint']        = $lang->group->manageMember;
-$config->projectGroup->dtable->fieldList['actions']['list']['manageMember']['url']         = helper::createLink('project', 'manageGroupMember', "groupID={id}");
-$config->projectGroup->dtable->fieldList['actions']['list']['manageMember']['data-toggle'] = 'modal';
-$config->projectGroup->dtable->fieldList['actions']['list']['manageMember']['data-size']   = 'lg';
+$config->projectGroup->dtable->fieldList['actions']['list']['manageGroupMember']['icon']        = 'persons';
+$config->projectGroup->dtable->fieldList['actions']['list']['manageGroupMember']['text']        = $lang->group->manageMember;
+$config->projectGroup->dtable->fieldList['actions']['list']['manageGroupMember']['hint']        = $lang->group->manageMember;
+$config->projectGroup->dtable->fieldList['actions']['list']['manageGroupMember']['url']         = helper::createLink('project', 'manageGroupMember', "groupID={id}");
+$config->projectGroup->dtable->fieldList['actions']['list']['manageGroupMember']['data-toggle'] = 'modal';
+$config->projectGroup->dtable->fieldList['actions']['list']['manageGroupMember']['data-size']   = 'lg';
 
 $config->projectGroup->dtable->fieldList['actions']['list']['edit']['icon']        = 'edit';
 $config->projectGroup->dtable->fieldList['actions']['list']['edit']['text']        = $lang->group->edit;
@@ -343,12 +343,12 @@ $config->projectGroup->dtable->fieldList['actions']['list']['edit']['url']      
 $config->projectGroup->dtable->fieldList['actions']['list']['edit']['data-toggle'] = 'modal';
 $config->projectGroup->dtable->fieldList['actions']['list']['edit']['data-size']   = 'sm';
 
-$config->projectGroup->dtable->fieldList['actions']['list']['copy']['icon']        = 'copy';
-$config->projectGroup->dtable->fieldList['actions']['list']['copy']['text']        = $lang->group->copy;
-$config->projectGroup->dtable->fieldList['actions']['list']['copy']['hint']        = $lang->group->copy;
-$config->projectGroup->dtable->fieldList['actions']['list']['copy']['url']         = helper::createLink('project', 'copyGroup', "groupID={id}");
-$config->projectGroup->dtable->fieldList['actions']['list']['copy']['data-toggle'] = 'modal';
-$config->projectGroup->dtable->fieldList['actions']['list']['copy']['data-size']   = 'sm';
+$config->projectGroup->dtable->fieldList['actions']['list']['copyGroup']['icon']        = 'copy';
+$config->projectGroup->dtable->fieldList['actions']['list']['copyGroup']['text']        = $lang->group->copy;
+$config->projectGroup->dtable->fieldList['actions']['list']['copyGroup']['hint']        = $lang->group->copy;
+$config->projectGroup->dtable->fieldList['actions']['list']['copyGroup']['url']         = helper::createLink('project', 'copyGroup', "groupID={id}");
+$config->projectGroup->dtable->fieldList['actions']['list']['copyGroup']['data-toggle'] = 'modal';
+$config->projectGroup->dtable->fieldList['actions']['list']['copyGroup']['data-size']   = 'sm';
 
 $config->projectGroup->dtable->fieldList['actions']['list']['delete']['icon'] = 'trash';
 $config->projectGroup->dtable->fieldList['actions']['list']['delete']['text'] = $lang->group->delete;
@@ -389,6 +389,7 @@ $config->project->dtable->team->fieldList['limited']['map']      = $lang->team->
 $config->project->dtable->team->fieldList['limited']['sortType'] = false;
 
 $config->project->dtable->team->fieldList['actions']['type']       = 'actions';
+$config->project->dtable->team->fieldList['actions']['title']      = $lang->actions;
 $config->project->dtable->team->fieldList['actions']['minWidth']   = 60;
 $config->project->dtable->team->fieldList['actions']['actionsMap'] = $config->project->team->actionList;
 
@@ -416,6 +417,11 @@ $config->project->dtable->testtask->fieldList['title']['group']    = '2';
 $config->project->dtable->testtask->fieldList['title']['fixed']    = false;
 $config->project->dtable->testtask->fieldList['title']['width']    = '356';
 $config->project->dtable->testtask->fieldList['title']['data-app'] = 'project';
+
+$config->project->dtable->testtask->fieldList['pri']['name']  = 'pri';
+$config->project->dtable->testtask->fieldList['pri']['title'] = $lang->priAB;
+$config->project->dtable->testtask->fieldList['pri']['type']  = 'pri';
+$config->project->dtable->testtask->fieldList['pri']['show']  = true;
 
 $config->project->dtable->testtask->fieldList['build']['name']  = 'buildName';
 $config->project->dtable->testtask->fieldList['build']['title'] = $lang->testtask->build;

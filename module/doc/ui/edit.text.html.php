@@ -10,6 +10,8 @@ declare(strict_types=1);
  */
 namespace zin;
 
+jsVar('isTutorialMode', common::isTutorialMode());
+
 include 'lefttree.html.php';
 
 $headingActions = array('class' => 'gap-3 pr-1', 'items' => array());
@@ -140,6 +142,11 @@ $handleSubmitForm = <<<'JS'
             return false;
         }
         $(e.target).removeClass('has-changed').find('input[name=status]').val(isDraft ? 'draft' : 'normal');
+
+        const pageEditor = $('#docEditor').zui('pageEditor');
+        if (pageEditor) {
+            return pageEditor.syncData().then(() => true);
+        }
     }
     JS;
 
@@ -169,7 +176,15 @@ formBase
         set::headingActions($headingActions),
         set::headingClass('py-3'),
         set::bodyClass('p-0 border-t'),
-        editor
+        $doc->contentType === 'doc' ? pageEditor
+        (
+            set::_id('docEditor'),
+            set::name('content'),
+            set::size('auto'),
+            set::resizable(false),
+            set::placeholder($lang->noticePasteImg),
+            set::value($doc->content)
+        ) : editor
         (
             set::name('content'),
             set::size('full'),

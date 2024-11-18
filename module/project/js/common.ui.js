@@ -15,7 +15,8 @@ const ignoreTips = {
  */
 function changeType()
 {
-    if($(this).val() == 0)
+    const hasProduct = $(this).val();
+    if(hasProduct == 0)
     {
         if(!$('[name=charter]').length || ($('[name=charter]').length && !parseInt($('[name=charter]').val()))) $('.productsBox').addClass('hidden');
         $('.stageByBox').addClass('hidden');
@@ -23,6 +24,20 @@ function changeType()
     else
     {
         $('.productsBox').removeClass('hidden');
+    }
+
+    if(hasProduct !== '')
+    {
+        const link = $.createLink('project', 'ajaxGetWorkflowGroups', `model=${model}&hasProduct=${hasProduct}`);
+        $.getJSON(link, function(data)
+        {
+            if(data.items)
+            {
+                const $workflowGroup = $('[name=workflowGroup]').zui('picker');
+                $workflowGroup.render({items: data.items});
+                $workflowGroup.$.setValue(data.defaultValue);
+            }
+        })
     }
 }
 
@@ -76,7 +91,7 @@ function computeDaysDelta(date1, date2)
  * @access public
  * @return void
  */
-function computeWorkDays()
+window.computeWorkDays = function()
 {
     const begin = $('input[name=begin]').val();
     const end   = $('input[name=end]').val();
@@ -203,7 +218,7 @@ function checkBudget()
     checkProjectInfo();
 }
 
-function checkProjectInfo()
+window.checkProjectInfo = function()
 {
     const programID = $('[name=parent]').val();
     if(programID == 0)
@@ -222,8 +237,9 @@ function checkProjectInfo()
     $.getJSON($.createLink('project', 'ajaxGetProjectFormInfo', 'objectType=project&objectID=' + currentProject + "&selectedProgramID=" + programID), function(data)
     {
         let dateTip = '';
+        let projectEnd = $('[name=longTime]').prop('checked') ? LONG_TIME : $('[name=end]').val();
         if(typeof(data.selectedProgramBegin) != 'undefined' && $('[name=begin]').val() != '' && $('[name=begin]').val() < data.selectedProgramBegin) dateTip += beginLessThanParent.replace('%s', data.selectedProgramBegin);
-        if(typeof(data.selectedProgramEnd) != 'undefined' && $('[name=end]').val() != '' && $('[name=end]').val() > data.selectedProgramEnd) dateTip += endGreatThanParent.replace('%s', data.selectedProgramEnd);
+        if(typeof(data.selectedProgramEnd) != 'undefined' && projectEnd != '' && projectEnd > data.selectedProgramEnd) dateTip += endGreatThanParent.replace('%s', data.selectedProgramEnd);
         if(dateTip != '')
         {
             $('#dateTip').html(dateTip);

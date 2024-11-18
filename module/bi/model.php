@@ -2,6 +2,69 @@
 
 class biModel extends model
 {
+
+    /**
+     * 获得可查看的对象ID列表。
+     * Get viewable object idlist.
+     *
+     * @param  string $objectType dimension|screen|pivot|chart
+     * @access public
+     * @return array
+     */
+    public function getViewableObject($objectType)
+    {
+        if(!in_array($objectType, array('dimension', 'screen', 'pivot', 'chart'))) return array();
+
+        $table = array(
+            'dimension' => TABLE_DIMENSION,
+            'screen'    => TABLE_SCREEN,
+            'pivot'     => TABLE_PIVOT,
+            'chart'     => TABLE_CHART
+        );
+
+        $objects = $this->dao->select('id,createdBy,acl,whitelist')->from($table[$objectType])
+            ->where('deleted')->eq('0')
+            ->fetchAll('id');
+
+        /* IF table have not acl or whitelist field */
+        $object = reset($objects);
+        if(!isset($object->acl) || !isset($object->whitelist))
+        {
+            $objects = $this->dao->select('id')->from($table[$objectType])
+                ->where('deleted')->eq('0')
+                ->fetchAll('id');
+
+            return array_keys($objects);
+        }
+
+        /* IF table have acl and whitelist field */
+        if($this->app->user->admin) return array_keys($objects);
+
+        $objectIDList = array();
+        $account      = $this->app->user->account;
+        foreach($objects as $objectID => $object)
+        {
+            if($object->createdBy == $account)
+            {
+                $objectIDList[] = $objectID;
+            }
+            else
+            {
+                if($object->acl == 'open')
+                {
+                    $objectIDList[] = $objectID;
+                }
+                else
+                {
+                    $whitelist = explode(',', $object->whitelist);
+                    if(in_array($account, $whitelist)) $objectIDList[] = $objectID;
+                }
+            }
+        }
+
+        return $objectIDList;
+    }
+
     /**
      * 解析sql语句。
      * Parse sql to statement.
@@ -307,42 +370,6 @@ class biModel extends model
     }
 
     /**
-     * Try to explain sql.
-     *
-     * @param  string     $sql
-     * @param  string     $limitSql
-     * @param  string     $driver mysql|duckdb
-     * @access public
-     * @return array
-     */
-    public function querySQL($sql, $limitSql, $driver = 'mysql')
-    {
-        $dbh = $this->app->loadDriver($driver);
-
-        try
-        {
-            $stmt = $dbh->query($limitSql);
-            if($stmt === false) return array('result' => 'fail', 'message' => 'Sql error.');
-
-            $rows     = $stmt->fetchAll();
-            $querySQL = "SELECT FOUND_ROWS() as count";
-            if($driver == 'duckdb') $querySQL = "SELECT COUNT(1) as count FROM ( $sql )";
-            if($driver == 'dm')     $querySQL = "SELECT COUNT(1) as count";
-
-            $count     = $dbh->query($querySQL)->fetch();
-            $rowsCount = $count->count;
-        }
-        catch(Exception $e)
-        {
-            $message = preg_replace("/\r|\n|\t/", "", $e->getMessage());
-            $message = strip_tags($message);
-            return array('result' => 'fail', 'message' => $message);
-        }
-
-        return array('result' => 'success', 'rows' => $rows, 'rowsCount' => $rowsCount);
-    }
-
-    /**
      * Get sql result columns.
      *
      * @param  string     $sql
@@ -438,9 +465,19 @@ class biModel extends model
             case 'dept':
                 $options = $this->loadModel('dept')->getOptionMenu(0);
                 break;
-            case 'project.status':
-                $this->app->loadLang('project');
-                $options = $this->lang->project->statusList;
+            case strpos($type, '.') !== false:
+                $params = explode('.', $type);
+                if(empty(array_filter($params)))
+                {
+                    $options = array();
+                }
+                else
+                {
+                    $module   = $params[0];
+                    $typeList = $params[1] . 'List';
+                    $this->app->loadLang($module);
+                    $options = $this->lang->$module->$typeList;
+                }
                 break;
         }
 
@@ -503,6 +540,8 @@ class biModel extends model
 
             $useField = in_array($useField, $fieldList) ? $useField : 'id';
             $options = $this->dao->select("id, {$useField}")->from($table)->fetchPairs();
+            // htmlspecialchars values
+            foreach($options as $key => $value) $options[$key] = str_replace('"', '', htmlspecialchars_decode($value));
         }
 
         return $options;
@@ -667,6 +706,66 @@ class biModel extends model
     }
 
     /**
+     * Get all tables with their fields.
+     *
+     * @access public
+     * @return array
+     */
+    public function getTableFields()
+    {
+        $this->loadModel('dev');
+        $tables = $this->dev->getTables();
+
+        $tableFields = array();
+        foreach($tables as $groupTables)
+        {
+            foreach($groupTables as $table)
+            {
+                $tableObj = substr($table, strpos($table, '_') + 1);
+                if(!isset($this->lang->dev->tableList[$tableObj])) continue;
+
+                $tableFields[$table] = $this->dev->getFields($table);
+            }
+        }
+
+        return $tableFields;
+    }
+
+    /**
+     * Get menu of all tables with their fields.
+     *
+     * @access public
+     * @return array
+     */
+    public function getTableFieldsMenu()
+    {
+        $tableFields = $this->getTableFields();
+
+        $menu = array();
+        foreach($tableFields as $table => $fields)
+        {
+            $tableItem = array();
+            $tableItem['key']   = $table;
+            $tableItem['text']  = $table . '(table)';
+            $tableItem['items'] = array();
+
+            foreach($fields as $field => $fieldInfo)
+            {
+                $fieldItem = array();
+                $fieldItem['key']  = $field;
+                $fieldItem['text'] = $field . '(' . $fieldInfo['type'] . ')';
+
+                $tableItem['items'][] = $fieldItem;
+
+            }
+
+            $menu[] = $tableItem;
+        }
+
+        return $menu;
+    }
+
+    /**
      * Process rows.
      *
      * @param  array  $rows
@@ -725,6 +824,7 @@ class biModel extends model
         {
             $currentOperate = $operate;
             $chart = (object)$chart;
+            $chart->mode = 'text';
             if(isset($chart->settings)) $chart->settings = $this->jsonEncode($chart->settings);
             if(isset($chart->filters))  $chart->filters  = $this->jsonEncode($chart->filters);
             if(isset($chart->fields))   $chart->fields   = $this->jsonEncode($chart->fields);
@@ -775,6 +875,7 @@ class biModel extends model
             $currentOperate = $operate;
             $pivot = (object)$pivot;
             $pivot->name     = $this->jsonEncode($pivot->name);
+            $pivot->mode     = 'text';
             if(isset($pivot->desc))     $pivot->desc     = $this->jsonEncode($pivot->desc);
             if(isset($pivot->settings)) $pivot->settings = $this->jsonEncode($pivot->settings);
             if(isset($pivot->filters))  $pivot->filters  = $this->jsonEncode($pivot->filters);
@@ -1028,6 +1129,86 @@ class biModel extends model
     }
 
     /**
+     * Get sql by month.
+     *
+     * @param  string $month
+     * @access public
+     * @return array
+     */
+    public function getSqlByMonth($year = 'Y', $month = 'm')
+    {
+        $sqls   = array();
+        $prefix = $this->config->db->prefix;
+        $year   = date($year);
+        $month  = date($month);
+
+        $begin  = date("{$year}-{$month}-01 00:00:00");
+        $end    = date("{$year}-{$month}-t 23:59:59", strtotime("$year-$month-01"));
+        $sqls[$prefix . "action_{$year}_{$month}"] = "select * from zt_action where date >= TIMESTAMP '$begin' and date <= TIMESTAMP '$end'";
+
+        return $sqls;
+    }
+
+    /**
+     * Get action sync sql.
+     *
+     * @param  string $range
+     * @access public
+     * @return array
+     */
+    public function getActionSyncSql($range = 'current')
+    {
+        if($range == 'current') return $this->getSqlByMonth();
+
+        $actionDate = $this->biTao->fetchActionDate();
+        $begin      = new DateTime($actionDate->minDate);
+        $end        = new DateTime($actionDate->maxDate);
+
+        $sqls = array();
+        while($begin <= $end)
+        {
+            $year  = $begin->format('Y');
+            $month = $begin->format('m');
+            $sqls  += $this->getSqlByMonth($year, $month);
+            $begin->modify('+1 month');
+        }
+
+        return $sqls;
+    }
+
+    /**
+     * Init parquet.
+     *
+     * @access public
+     * @return void
+     */
+    public function initParquet()
+    {
+        $duckdb = $this->getDuckDBPath();
+        if(!$duckdb) return $this->lang->bi->binNotExists;
+
+        $duckdbTmpPath = $this->getDuckDBTmpDir();
+        if(!$duckdbTmpPath) return sprintf($this->lang->bi->tmpPermissionDenied, $this->getDuckDBTmpDir(true), $this->getDuckDBTmpDir(true));
+
+        $tables = $this->biTao->fetchAllTables();
+        $copySQLs = array();
+        foreach($tables as $table) $copySQLs[] = "copy (select * from {$table}) to '{$duckdbTmpPath}{$table}.parquet'";
+
+        $date = date("Y-m-01 00:00:00");
+        $prefix = $this->config->db->prefix;
+
+        $copySQLs[] = "copy (select * from {$prefix}action where date < TIMESTAMP '$date') to '{$duckdbTmpPath}{$prefix}action_" . date('Y_m', strtotime('-1 month')) . ".parquet'";
+
+        $copySQL = implode(';', $copySQLs);
+        if(empty($copySQL)) return true;
+
+        $command = $this->prepareSyncCommand($duckdb->bin, $duckdb->extension, $copySQL);
+        $output  = shell_exec($command);
+        $this->saveLogs("Sync command: $command");
+        return $output;
+    }
+
+    /**
      * 准备同步数据库所需的复制SQL。
      * Prepare copy SQL for sync.
      *
@@ -1037,32 +1218,19 @@ class biModel extends model
      */
     public function prepareCopySQL($duckdbTmpPath)
     {
-        $tables    = $this->config->bi->duckdb->tables;
-        $ztvtables = $this->config->bi->duckdb->ztvtables;
+        $tables = $this->biTao->fetchTableQueue();
+
         if(empty($tables)) return '';
 
-        $tablePrefix = $this->config->db->prefix;
-        $ztvPrefix   = 'ztv_';
+        $copySQLs  = array();
+        foreach($tables as $table) $copySQLs[] = "copy (select * from {$table}) to '{$duckdbTmpPath}{$table}.parquet'";
 
-        $copySQL  = '';
-        foreach($tables as $table => $sql)
-        {
-            $table = $tablePrefix . $table;
-            $sql   = str_replace('zt_', $tablePrefix, $sql);
+        $actions = $this->getActionSyncSql();
+        foreach($actions as $table => $sql) $copySQLs[] = "copy ({$sql}) to '{$duckdbTmpPath}{$table}.parquet'";
 
-            $tablePath = $duckdbTmpPath . $table;
-            $copySQL .= "COPY ($sql) TO '$tablePath.parquet';";
-        }
+        $this->biTao->updateSyncTime($tables);
 
-        foreach($ztvtables as $table => $sql)
-        {
-            $table = $ztvPrefix . $table;
-
-            $tablePath = $duckdbTmpPath . $table;
-            $copySQL .= "COPY ($sql) TO '$tablePath.parquet';";
-        }
-
-        return $copySQL;
+        return implode(';', $copySQLs);
     }
 
     /**
@@ -1115,17 +1283,91 @@ class biModel extends model
         if(!$duckdbTmpPath) return sprintf($this->lang->bi->tmpPermissionDenied, $this->getDuckDBTmpDir(true), $this->getDuckDBTmpDir(true));
 
         $copySQL = $this->prepareCopySQL($duckdbTmpPath);
+        if(empty($copySQL)) return true;
+
         $command = $this->prepareSyncCommand($duckdb->bin, $duckdb->extension, $copySQL);
         $output  = shell_exec($command);
+        $this->saveLogs("Sync command: $command");
         if(!empty($output)) return $output;
 
         return true;
     }
 
     /**
+     * 获取日志文件路径。
+     * Get log file.
+     *
+     * @access public
+     * @return string
+     */
+    public function getLogFile(): string
+    {
+        return $this->app->getTmpRoot() . 'log/syncparquet.' . date('Ymd') . '.log.php';
+    }
+
+    /**
+     * 存储日志。
+     * Save logs.
+     *
+     * @param  string $log
+     * @access public
+     * @return void
+     */
+    public function saveLogs(string $log): void
+    {
+        $logFile = $this->getLogFile();
+        $log     = date('Y-m-d H:i:s') . ' ' . trim($log) . "\n";
+        if(!file_exists($logFile)) $log = "<?php\ndie();\n?" . ">\n" . $log;
+
+        file_put_contents($logFile, $log, FILE_APPEND);
+    }
+
+    /**
+     * 在sql中将变量解析为空字符串。
+     * Parse variables to null string in sql.
+     *
+     * @param  string $sql
+     * @param  array  $filters
+     * @access public
+     * @return string
+     */
+    public function parseSqlVars(string $sql, array $filters): string
+    {
+        if($filters)
+        {
+            foreach($filters as $filter)
+            {
+                if(!isset($filter['default']) || !isset($filter['from']) || $filter['from'] !== 'query') continue;
+                $default = $filter['default'];
+                if($filter['type'] == 'multipleselect' && is_array($default)) $default = implode("','", $default);
+
+                if(strpos($sql, $filter['field'] . 'Condition') === false)
+                {
+                    $sql = str_replace('$' . $filter['field'], "'{$default}'", $sql);
+                }
+                else
+                {
+                    $relatedField = $filter['relatedField'];
+                    $sql = str_replace('$' . $filter['field'] . 'Condition', "{$relatedField}='{$default}'", $sql);
+                }
+            }
+        }
+
+        $matchRule = "[\$]+[a-zA-Z0-9]+_[0-9]";
+        if(strpos($sql, 'Condition') !== false && strpos($sql, 'Variale_') !== false) $matchRule .= "+Condition";
+
+        if(preg_match_all("/{$matchRule}/", $sql, $out))
+        {
+            foreach($out[0] as $match) $sql = str_replace($match, "''", $sql);
+        }
+
+        return $sql;
+    }
+
+    /**
      * Process filter variables in sql.
      *
-     * @param  string    $sql
+     * @param  string $sql
      * @param  array  $filters
      * @access public
      * @return string
@@ -1137,12 +1379,13 @@ class biModel extends model
             if(empty($filter['default'])) continue;
             if(!isset($filter['from']) || $filter['from'] != 'query') continue;
 
-            $filters[$index]['default'] = $this->loadModel('pivot')->processDateVar($filter['default']);
-            if($filters[$index]['type'] == 'datetime') $filters[$index]['default'] .= ':00.000000000';
+            if($filter['type'] == 'date' || $filter['type'] == 'datetime') $filters[$index]['default'] = $this->loadModel('pivot')->processDateVar($filter['default']);
+            if($filter['type'] == 'datetime') $filters[$index]['default'] .= ':00.000000000';
+            if($filter['type'] == 'multipleselect' && is_array($filter['default'])) $filters[$index]['default'] = implode("','", $filter['default']);
 
             if($emptyValue) $filters[$index]['default'] = '';
         }
-        $sql = $this->loadModel('chart')->parseSqlVars($sql, $filters);
+        $sql = $this->parseSqlVars($sql, $filters);
         $sql = trim($sql, ';');
 
         return $sql;
@@ -1155,12 +1398,16 @@ class biModel extends model
      * @access public
      * @return object
      */
-    public function sql2Statement($sql)
+    public function sql2Statement($sql, $mode = 'text')
     {
         $this->app->loadClass('sqlparser', true);
         $parser = new sqlparser($sql);
 
-        if($parser->statementsCount == 0) return $this->lang->dataview->empty;
+        if($parser->statementsCount == 0)
+        {
+            if($mode == 'builder') return $this->lang->dataview->emptyBuilder;
+            return $this->lang->dataview->empty;
+        }
         if($parser->statementsCount > 1)  return $this->lang->dataview->onlyOne;
 
         if(!$parser->isSelect) return $this->lang->dataview->allowSelect;
@@ -1183,6 +1430,85 @@ class biModel extends model
         $parser->parseStatement();
 
         return $parser->matchColumnsWithTable();
+    }
+
+    /**
+     * Get expression.
+     *
+     * @param  mixed  $table
+     * @param  mixed  $column
+     * @param  mixed  $alias
+     * @param  mixed  $function
+     * @access public
+     * @return object
+     */
+    public function getExpression(mixed $table = null, mixed $column = null, mixed $alias = null, mixed $function = null): object
+    {
+        $this->app->loadClass('sqlparser', true);
+        $parser = new sqlparser(null);
+
+        return $parser->getExpression($table, $column, $alias, $function);
+    }
+
+    /**
+     * Get condition.
+     *
+     * @param  mixed  $tableA
+     * @param  mixed  $columnA
+     * @param  string $operator
+     * @param  mixed  $tableB
+     * @param  mixed  $columnB
+     * @param  int    $group
+     * @access public
+     * @return object
+     */
+    public function getCondition(mixed $tableA = null, mixed $columnA = null, string $operator = '', mixed $tableB = null, mixed $columnB = null, int $group = 1): object
+    {
+        $this->app->loadClass('sqlparser', true);
+        $parser = new sqlparser(null);
+
+        return $parser->getCondition($tableA, $columnA, $operator, $tableB, $columnB, $group);
+    }
+
+    /**
+     * buildSQL
+     *
+     * @param  array $selects
+     * @param  array $from
+     * @param  array $joins
+     * @param  array $functions
+     * @param  array $wheres
+     * @param  array $querys
+     * @param  array $groups
+     * @access public
+     * @return object
+     */
+    public function buildSQL(array $selects, array $from, array $joins = array(), array $functions = array(), array $wheres = array(), array $querys = array(), array $groups = array()): object
+    {
+        $this->app->loadClass('sqlparser', true);
+        $parser = new sqlparser(null);
+
+        $parser->createStatement();
+
+        foreach($selects as $select) $parser->addSelect($parser->getExpression($select));
+
+        if(!empty($functions)) foreach($functions as $function) $parser->addSelect($parser->getExpression($function));
+
+        $parser->setFrom($parser->getExpression($from));
+
+        foreach($joins as $join)
+        {
+            list($table, $alias, $ons) = $join;
+            $onExprs      = $parser->getConditionsFromArray($ons);
+            $leftJoinExpr = $parser->getLeftJoin($table, $alias, $onExprs);
+            $parser->addJoin($leftJoinExpr);
+        }
+
+        if(!empty($wheres)) $parser->addWhere($parser->combineConditions($parser->getConditionsFromArray($wheres)));
+        if(!empty($querys)) $parser->addWhere($parser->combineConditions($parser->getConditionsFromArray($querys)));
+        if(!empty($groups)) foreach($groups as $group) $parser->addGroup($parser->getGroup($parser->getExpression($group)));
+
+        return $parser->statement;
     }
 
     /**
@@ -1307,11 +1633,67 @@ class biModel extends model
 
         foreach($fieldPairs as $field => $name)
         {
-            // 只保留中文、英文和下划线的字符
-            $fieldPairs[$field] = preg_replace('/[^\x{4e00}-\x{9fa5}a-zA-Z_]/u', '', $name);
+            // 只保留数字、中文、英文和下划线的字符
+            $fieldPairs[$field] = preg_replace('/[^\x{4e00}-\x{9fa5}0-9a-zA-Z_]/u', '', $name);
         }
 
         return array($moduleNames, $aliasNames, $fieldPairs, $relatedObjects);
+    }
+
+    /**
+     * Get SQL.
+     *
+     * @param  string $sql
+     * @param  string $driver
+     * @param  int    $recPerPage
+     * @param  int    $pageID
+     * @access public
+     * @return array
+     */
+    public function getSQL($sql, $driver = 'mysql', $recPerPage = 10, $pageID = 1)
+    {
+        $statement = $this->sql2Statement($sql);
+        $limitSql  = $this->prepareSqlPager($statement, $recPerPage, $pageID, $driver);
+
+        $countSql = "SELECT FOUND_ROWS() AS count";
+        if($driver == 'duckdb') $countSql = "SELECT COUNT(1) AS count FROM ($sql)";
+        if($driver == 'dm')     $countSql = "SELECT COUNT(1) as count";
+
+        return array($limitSql, $countSql);
+    }
+
+    /**
+     * Query sql.
+     *
+     * @param  string     $sql
+     * @param  string     $limitSql
+     * @param  string     $driver mysql|duckdb
+     * @access public
+     * @return array
+     */
+    public function querySQL($sql, $limitSql, $driver = 'mysql')
+    {
+        $dbh = $this->app->loadDriver($driver);
+
+        try
+        {
+            $stmt = $dbh->query($limitSql);
+            if($stmt === false) return array('result' => 'fail', 'message' => 'Sql error.');
+
+            $rows     = $stmt->fetchAll();
+            $countSql = $this->getSQL($sql, $driver)[1];
+
+            $count     = $dbh->query($countSql)->fetch();
+            $rowsCount = $count->count;
+        }
+        catch(Exception $e)
+        {
+            $message = preg_replace("/\r|\n|\t/", "", $e->getMessage());
+            $message = strip_tags($message);
+            return array('result' => 'fail', 'message' => $message);
+        }
+
+        return array('result' => 'success', 'rows' => $rows, 'rowsCount' => $rowsCount);
     }
 
     /**
@@ -1323,33 +1705,30 @@ class biModel extends model
      * @access public
      * @return object
      */
-    public function query($stateObj, $driver = 'mysql')
+    public function query($stateObj, $driver = 'mysql', $useFilter = true)
     {
         $dbh = $this->app->loadDriver($driver);
-        $sql = $this->processVars($stateObj->sql, $stateObj->getFilters(), true);
+        $sql = $stateObj->sql;
+        if($useFilter) $sql = $this->processVars($sql, $stateObj->getFilters(), true);
 
         $stateObj->beforeQuerySql();
 
-        $statement = $this->sql2Statement($sql);
+        $statement = $this->sql2Statement($sql, $stateObj->mode);
         if(is_string($statement)) return $stateObj->setError($statement);
 
         $checked = $this->validateSql($sql, $driver);
         if($checked !== true) return $stateObj->setError($checked);
 
-        $sql       = $this->processVars($stateObj->sql, $stateObj->getFilters());
-        $statement = $this->sql2Statement($sql);
+        if($useFilter) $sql = $this->processVars($stateObj->sql, $stateObj->getFilters());
 
         $recPerPage = $stateObj->pager['recPerPage'];
         $pageID     = $stateObj->pager['pageID'];
-        $limitSql   = $this->prepareSqlPager($statement, $recPerPage, $pageID, $driver);
-
-        $mysqlCountSql  = "SELECT FOUND_ROWS() AS count";
-        $duckdbCountSql = "SELECT COUNT(1) AS count FROM ($sql)";
+        list($limitSql, $countSql) = $this->getSql($sql, $driver, $recPerPage, $pageID);
 
         try
         {
             $stateObj->queryData = $dbh->query($limitSql)->fetchAll();
-            $total               = $dbh->query($driver == 'mysql' ? $mysqlCountSql : $duckdbCountSql)->fetch()->count;
+            $total               = $dbh->query($countSql)->fetch()->count;
 
             list($columns, $relatedObject) = $this->prepareColumns($limitSql, $statement, $driver);
 
@@ -1370,6 +1749,61 @@ class biModel extends model
         }
 
         return $stateObj;
+    }
+
+    /**
+     * Get table list.
+     *
+     * @param  bool    $hasDataview
+     * @param  bool    $withPrefix
+     * @access public
+     * @return array
+     */
+    public function getTableList($hasDataview = true, $withPrefix = true)
+    {
+        $originTableTreeMenu = $this->loadModel('dataview')->getOriginTreeMenu();
+        $dataviewTreeMenu    = $this->loadModel('tree')->getGroupTree(0, 'dataview');
+
+        $originTablePrefix = $withPrefix ? $this->config->db->prefix : '';
+
+        $tableList = array();
+        foreach($originTableTreeMenu as $menu)
+        {
+            if(empty($menu->items)) continue;
+
+            foreach($menu->items as $item)
+            {
+                if(!is_array($item))
+                {
+                    $text = $item->key == 'story' ? $this->lang->story->common : $item->text;
+                    $tableList[$originTablePrefix . $item->key] = $text;
+                    continue;
+                }
+
+                foreach($item->items as $subItem) $tableList[$originTablePrefix . $subItem->key] = $subItem->text;
+            }
+        }
+
+        if(!$hasDataview) return $tableList;
+
+        $dataviewPrefix = $withPrefix ? 'ztv_' : '';
+        foreach($dataviewTreeMenu as $menu)
+        {
+            if(empty($menu->items)) continue;
+
+            foreach($menu->items as $item)
+            {
+                if(!is_array($item))
+                {
+                    $tableList[$dataviewPrefix . $item->key] = $item->text;
+                    continue;
+                }
+
+                foreach($item->items as $subItem) $tableList[$dataviewPrefix . $subItem->key] = $subItem->text;
+            }
+        }
+
+        return $tableList;
     }
 
     /**
@@ -1581,16 +2015,12 @@ class biModel extends model
 
             $columnMaxLen[$field] = mb_strlen($column->label);
 
-            if(isset($column->colspan) && $column->isSlice) $columns[$field]['colspan'] = $column->colspan;
+            if(isset($column->colspan) && $column->colspan > 1) $columns[$field]['colspan'] = $column->colspan;
 
             // if(isset($data->groups[$index])) $columns[$field]['fixed'] = 'left';
 
             $index++;
         }
-
-        $lastRow        = count($data->array) - 1;
-        $hasGroup       = isset($data->groups);
-        $hasColumnTotal = !empty($data->columnTotal) && $data->columnTotal != 'noShow';
 
         $drills = !empty($data->drills) ? array_values($data->drills) : array();
         foreach($data->array as $rowKey => $rowData)
@@ -1600,6 +2030,11 @@ class biModel extends model
             $rowData         = array_values($rowData);
             $drillConditions = array();
             $isDrill         = array();
+
+            $totalLang    = $this->lang->pivot->total;
+            $totalColspan = 0;
+
+            foreach($rowData as $value) if($value === $totalLang) $totalColspan++;
 
             for($i = 0; $i < count($rowData); $i++)
             {
@@ -1613,7 +2048,6 @@ class biModel extends model
                     $value   = array_slice($rowData, $i, $colspan);
 
                     $i += $colspan - 1;
-                    $columnKey = $columnKeys[$i];
                 }
 
                 /* 定义数据表格的行数据。*/
@@ -1621,7 +2055,7 @@ class biModel extends model
                 $rows[$rowKey][$field]   = $value;
                 $drillFields             = $this->getDrillFields($rowKey, $columnKey, $drills);
                 $drillConditions[$field] = $this->processDrills($field, $drillFields, $columns);
-                $isDrill[$field]         = isset($columns[$field]['link']);
+                $isDrill[$field]         = isset($columns[$field]['link']) && $totalColspan === 0;
 
                 if(is_string($value)) $columnMaxLen[$field] = max($columnMaxLen[$field], mb_strlen($value));
 
@@ -1633,11 +2067,9 @@ class biModel extends model
                     $cellSpan[$field]['rowspan'] = $field . '_rowspan';
                 }
 
-                $isFirstColumnAndLastRow = $i === 0 && $rowKey === $lastRow;
-
-                if($isFirstColumnAndLastRow && $hasGroup && $hasColumnTotal)
+                if($value == $totalLang)
                 {
-                    $rows[$rowKey][$field . '_colspan'] = count($data->groups);
+                    $rows[$rowKey][$field . '_colspan'] = $totalColspan;
                     $cellSpan[$field]['colspan'] = $field . '_colspan';
                 }
 
@@ -1646,6 +2078,7 @@ class biModel extends model
 
             $rows[$rowKey]['conditions'] = $drillConditions;
             $rows[$rowKey]['isDrill']    = $isDrill;
+            $rows[$rowKey]['isTotal']    = $totalColspan > 0;
             $rows[$rowKey]['ROW_ID']     = $rowKey;
         }
 

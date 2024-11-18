@@ -414,6 +414,41 @@ class helper extends baseHelper
     {
         return extension_loaded('apcu') && ini_get('apc.enabled') == '1';
     }
+
+    /**
+     * 检查条件是否成立。
+     *
+     * @param  mixed  $value1
+     * @param  mixed  $value2
+     * @param  string $operator
+     * @static
+     * @access public
+     * @return bool
+     */
+    public static function checkCondition($value1, $value2, $operator): bool
+    {
+        $operatorList = array('=' => 'equal', '==' => 'equal', '!=' => 'notequal', '>' => 'gt', '>=' => 'ge', '<' => 'lt', '<=' => 'le');
+        if(!isset($operatorList[$operator]) && !in_array($operator, $operatorList)) return false;
+
+        $operator  = isset($operatorList[$operator]) ? zget($operatorList, $operator) : $operator;
+        $checkFunc = 'check' . $operator;
+        return validater::$checkFunc($value1, $value2);
+    }
+
+    /**
+     * 将科学计数法转化为两位小数。
+     * Convert scientific notation to two decimal places.
+     *
+     * @param  int|float|string $hours
+     * @param  string           $characters
+     * @static
+     * @access public
+     * @return float
+     */
+    public static function formatHours($hours, $characters = '.0'): float
+    {
+        return (float)rtrim(number_format((float)$hours, 2, '.', ''), $characters);
+    }
 }
 
 /**
@@ -544,7 +579,7 @@ function initTableData(array $items, array &$fieldList, object $model = null, st
         }
     }
 
-    global $app;
+    global $app, $lang;
     if(empty($model))
     {
         $module = $app->getModuleName();
@@ -613,7 +648,11 @@ function initTableData(array $items, array &$fieldList, object $model = null, st
         if(count($item->actions) > $maxActionCount) $maxActionCount = count($item->actions);
     }
 
-    if(isset($fieldList['actions'])) $fieldList['actions']['minWidth'] = $maxActionCount * 24 + 24;
+    if(isset($fieldList['actions']))
+    {
+        $fieldList['actions']['minWidth'] = $maxActionCount * 24 + 24;
+        if(empty($fieldList['actions']['title'])) $fieldList['actions']['title'] = $lang->actions;
+    }
     if($fieldList['actions']['minWidth'] < 48) $fieldList['actions']['minWidth'] = 48;
 
     return array_values($items);
@@ -756,7 +795,8 @@ function initItemActions(object &$item, string $actionMenu, array $actionList, o
     /* Check flow conditions for this object. */
     if($model->config->edition != 'open')
     {
-        $flowActions = $model->loadModel('workflowaction')->getList($module);
+        static $flowActions = [];
+        if(empty($flowActions)) $flowActions = $model->loadModel('workflowaction')->getList($module);
 
         $model->loadModel('flow');
         foreach($flowActions as $flowAction)

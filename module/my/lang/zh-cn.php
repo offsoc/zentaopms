@@ -50,6 +50,7 @@ $lang->my->pri             = '优先级';
 $lang->my->alert           = '后续您可以点击右上方的头像，选择“个性化设置”修改信息。';
 $lang->my->assignedToMe    = '指派给我';
 $lang->my->byQuery         = '搜索';
+$lang->my->contactHolder   = '联系人';
 $lang->my->contactList     = '联系人列表';
 $lang->my->myContact       = '我的联系人';
 $lang->my->publicContact   = '公共联系人';
@@ -193,6 +194,7 @@ $lang->my->featureBar['work']['bug']   = $lang->my->featureBar['work']['task'];
 
 $lang->my->featureBar['contribute']['task']['openedBy']   = '由我创建';
 $lang->my->featureBar['contribute']['task']['finishedBy'] = '由我完成';
+$lang->my->featureBar['contribute']['task']['myInvolved'] = '由我参与';
 $lang->my->featureBar['contribute']['task']['closedBy']   = '由我关闭';
 $lang->my->featureBar['contribute']['task']['canceledBy'] = '由我取消';
 $lang->my->featureBar['contribute']['task']['assignedBy'] = '由我指派';

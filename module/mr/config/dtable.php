@@ -1,5 +1,6 @@
 <?php
 global $lang, $app;
+if(empty($app->rawModule)) $app->rawModule = 'mr';
 
 $config->mr->dtable = new stdclass();
 
@@ -11,7 +12,7 @@ $config->mr->dtable->fieldList['title']['name']     = 'title';
 $config->mr->dtable->fieldList['title']['title']    = $lang->mr->title;
 $config->mr->dtable->fieldList['title']['type']     = 'title';
 $config->mr->dtable->fieldList['title']['data-app'] = $app->tab;
-$config->mr->dtable->fieldList['title']['link']     = helper::createLink('mr', 'view', "MRID={id}");
+$config->mr->dtable->fieldList['title']['link']     = helper::createLink($app->rawModule, 'view', "MRID={id}");
 $config->mr->dtable->fieldList['title']['sortType'] = true;
 $config->mr->dtable->fieldList['title']['width']    = 0.3;
 
@@ -79,7 +80,7 @@ $config->mr->taskDtable->fieldList['pri']['type']     = 'pri';
 $config->mr->taskDtable->fieldList['pri']['sortType'] = true;
 $config->mr->taskDtable->fieldList['pri']['show']     = true;
 
-$config->mr->taskDtable->fieldList['assignedTo']['type']        = 'desc';
+$config->mr->taskDtable->fieldList['assignedTo']['type']        = 'user';
 $config->mr->taskDtable->fieldList['assignedTo']['title']       = $lang->task->assignedTo;
 $config->mr->taskDtable->fieldList['assignedTo']['currentUser'] = '';
 $config->mr->taskDtable->fieldList['assignedTo']['sortType']    = true;

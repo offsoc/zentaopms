@@ -14,9 +14,10 @@ class searchTao extends searchModel
     protected function processBuildinFields(string $module, array $searchConfig): array
     {
         $flowModule = $module;
-        if($module == 'projectStory' || $module == 'executionStory') $flowModule = 'story';
+        if($module == 'projectStory' || $module == 'executionStory' || $module == 'projectstory') $flowModule = 'story';
         if($module == 'projectBuild' || $module == 'executionBuild') $flowModule = 'build';
         if($module == 'projectBug') $flowModule = 'bug';
+        if($module == 'executionCase') $flowModule = 'testcase';
 
         $buildin = false;
         $this->app->loadLang('workflow');
@@ -35,7 +36,8 @@ class searchTao extends searchModel
 
         if(!$buildin) return $searchConfig;
 
-        $fields   = $this->loadModel('workflowfield')->getList($flowModule, 'searchOrder, `order`, id');
+        $groupID  = $this->loadModel('workflowgroup')->getGroupIDBySession();
+        $fields   = $this->loadModel('workflowfield')->getList($flowModule, 'searchOrder, `order`, id', $groupID);
         $maxCount = $this->config->maxCount;
         $this->config->maxCount = 0;
 
@@ -178,11 +180,15 @@ class searchTao extends searchModel
      * @param  string    $field
      * @param  string    $operator
      * @param  string    $value
+     * @param  string    $control
      * @access protected
      * @return string
      */
-    protected function setCondition(string $field, string $operator, string|int $value): string
+    protected function setCondition(string $field, string $operator, string|int $value, string $control = ''): string
     {
+        /* 替换特殊字符。 */
+        if(is_string($value)) $value = htmlspecialchars($value, ENT_QUOTES);
+
         $condition = '';
         if($operator == 'include')
         {
@@ -193,7 +199,7 @@ class searchTao extends searchModel
             }
             else
             {
-                $condition = ' LIKE ' . $this->dbh->quote("%$value%");
+                $condition = $control == 'select' ? " LIKE CONCAT('%,', '{$value}', ',%')" : ' LIKE ' . $this->dbh->quote("%$value%");
             }
         }
         elseif($operator == "notinclude")
@@ -209,7 +215,7 @@ class searchTao extends searchModel
             }
             else
             {
-                $condition = ' NOT LIKE ' . $this->dbh->quote("%$value%");
+                $condition = $control == 'select' ? " NOT LIKE CONCAT('%,', '{$value}', ',%')" : ' NOT LIKE ' . $this->dbh->quote("%$value%");
             }
         }
         elseif($operator == 'belong')
@@ -261,12 +267,13 @@ class searchTao extends searchModel
      * @param  string $operator
      * @param  string $value
      * @param  string $andOr
+     * @param  string $control
      * @access public
      * @return string
      */
-    public function setWhere(string $where, string $field, string $operator, string $value, string $andOr): string
+    public function setWhere(string $where, string $field, string $operator, string $value, string $andOr, string $control = ''): string
     {
-        $condition = $this->setCondition($field, $operator, $value);
+        $condition = $this->setCondition($field, $operator, $value, $control);
         if($operator == '=' && preg_match('/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/', $value))
         {
             $condition  = '`' . $field . "` >= '$value' AND `" . $field . "` <= '$value 23:59:59'";
@@ -284,6 +291,10 @@ class searchTao extends searchModel
         elseif($operator == '>' and preg_match('/^[0-9]{4}-[0-9]{1,2}-[0-9]{1,2}$/', $value))
         {
             $where .= " $andOr " . '`' . $field . "` > '$value 23:59:59'";
+        }
+        elseif(in_array($operator, array('include', 'notinclude')) && $control == 'select')
+        {
+            $where .= " $andOr CONCAT(',', `{$field}`, ',') {$condition}";
         }
         elseif($condition)
         {
@@ -364,7 +375,7 @@ class searchTao extends searchModel
         $users = $products = $executions = array();
         if($hasUser)
         {
-            $users = $this->loadModel('user')->getPairs('realname|noclosed', $appendUsers, $this->config->maxCount);
+            $users = $this->loadModel('user')->getPairs('realname|noclosed', $appendUsers);
             $users['$@me'] = $this->lang->search->me;
         }
 
@@ -393,16 +404,14 @@ class searchTao extends searchModel
         {
             /* 将 utf-8 字符串拆分为单词，为每个单词计算 unicode. */
             $splitedWords = $spliter->utf8Split($word);
-            $trimmedWord   = trim($splitedWords['words']);
+            $trimmedWord  = trim($splitedWords['words']);
             $against     .= '"' . $trimmedWord . '" ';
             $againstCond .= '(+"' . $trimmedWord . '") ';
 
             if(is_numeric($word) && strpos($word, '.') === false && strlen($word) == 5) $againstCond .= "(-\" $word \") ";
         }
 
-        $likeCondition = '';
-        /* Assisted lookup by like condition when only one word. */
-        if(count($words) == 1 && strpos($words[0], ' ') === false && !is_numeric($words[0])) $likeCondition = "OR title like '%{$trimmedWord}%' OR content like '%{$trimmedWord}%'";
+        $likeCondition = trim($keywords) ? "OR title like '%{$keywords}%' OR content like '%{$keywords}%'" : '';
 
         $words = str_replace('"', '', $against);
         $words = str_pad($words, 5, '_');

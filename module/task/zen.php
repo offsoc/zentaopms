@@ -138,7 +138,7 @@ class taskZen extends task
         }
         $this->view->testStories     = $testStories;
         $this->view->testStoryIdList = $testStoryIdList;
-        $this->view->stories         = $stories;
+        $this->view->stories         = $this->story->addGradeLabel($stories);
     }
 
     /**
@@ -201,7 +201,12 @@ class taskZen extends task
 
         /* Check if the request data size exceeds the PHP limit. */
         $tasks = $this->task->getByIdList($this->post->taskIdList);
-        foreach($tasks as $taskID => $task) $tasks[$taskID]->consumed = 0;
+        $parentTaskIdList = array();
+        foreach($tasks as $taskID => $task)
+        {
+            $tasks[$taskID]->consumed = 0;
+            $parentTaskIdList[$task->parent] = $task->parent;
+        }
         $countInputVars  = count($tasks) * (count(explode(',', $this->config->task->custom->batchEditFields)) + 3);
         $showSuhosinInfo = common::judgeSuhosinSetting($countInputVars);
         if($showSuhosinInfo) $this->view->suhosinInfo = extension_loaded('suhosin') ? sprintf($this->lang->suhosinInfo, $countInputVars) : sprintf($this->lang->maxVarsInfo, $countInputVars);
@@ -231,13 +236,27 @@ class taskZen extends task
             }
         }
 
+        list($childTasks, $nonStoryChildTasks) = $this->task->getChildTasksByList(array_keys($tasks));
+        $storyPairs = $this->story->getExecutionStoryPairs($executionID, 0, 'all', '', 'full', 'active', 'story', false);;
+        $storyList  = $this->story->getByList(array_keys($storyPairs));
+        $stories    = array();
+        foreach($storyList as $story)
+        {
+            $stories[0][] = array('value' => $story->id, 'text' => $storyPairs[$story->id]);
+            if($story->module) $stories[$story->module][] = array('value' => $story->id, 'text' => $storyPairs[$story->id]);
+        }
+
         /* Assign. */
-        $this->view->executionID    = $executionID;
-        $this->view->tasks          = $tasks;
-        $this->view->teams          = $this->task->getTeamMembersByIdList($this->post->taskIdList);
-        $this->view->executionTeams = $executionTeams;
-        $this->view->users          = $this->loadModel('user')->getPairs('nodeleted');
-        $this->view->moduleGroup    = $moduleGroup;
+        $this->view->executionID        = $executionID;
+        $this->view->tasks              = $tasks;
+        $this->view->teams              = $this->task->getTeamMembersByIdList($this->post->taskIdList);
+        $this->view->executionTeams     = $executionTeams;
+        $this->view->users              = $this->loadModel('user')->getPairs('nodeleted');
+        $this->view->moduleGroup        = $moduleGroup;
+        $this->view->childTasks         = $childTasks;
+        $this->view->nonStoryChildTasks = $nonStoryChildTasks;
+        $this->view->stories            = $stories;
+        $this->view->parentTasks        = $this->task->getByIdList($parentTaskIdList);
 
         $this->display();
     }
@@ -252,7 +271,7 @@ class taskZen extends task
      */
     protected function buildEditForm(int $taskID): void
     {
-        $task  = $this->view->task;
+        $task = $this->view->task;
 
         /* Get the task parent id,name pairs. */
         $tasks = $this->task->getParentTaskPairs($this->view->execution->id, strVal($task->parent));
@@ -280,14 +299,34 @@ class taskZen extends task
             $taskMembers = $this->view->members;
         }
 
+        /* Get execution stories. */
+        $moduleID = $task->module;
+        if($moduleID)
+        {
+            $moduleID = $this->loadModel('tree')->getStoryModule($moduleID);
+            $moduleID = $this->tree->getAllChildID($moduleID);
+        }
+        $stories = $this->story->getExecutionStoryPairs($this->view->execution->id, 0, 'all', $moduleID, 'full', 'active', 'story', false);
+
+        $syncChildren = array();
+        if(!empty($task->children))
+        {
+            foreach($task->children as $child)
+            {
+                if(empty($child->story)) $syncChildren[] = $child->id;
+            }
+        }
+
         $this->view->title         = $this->lang->task->edit . 'TASK' . $this->lang->hyphen . $this->view->task->name;
-        $this->view->stories       = $this->story->getExecutionStoryPairs($this->view->execution->id, 0, 'all', '', 'full', 'active', 'story', false);
+        $this->view->stories       = $this->story->addGradeLabel($stories);
         $this->view->tasks         = $tasks;
         $this->view->taskMembers   = $taskMembers;
         $this->view->users         = $this->loadModel('user')->getPairs('nodeleted|noclosed', "{$task->openedBy},{$task->canceledBy},{$task->closedBy}");
         $this->view->showAllModule = isset($this->config->execution->task->allModule) ? $this->config->execution->task->allModule : '';
         $this->view->modules       = $this->tree->getTaskOptionMenu($task->execution, 0, $this->view->showAllModule ? 'allModule' : '');
         $this->view->executions    = $executions;
+        $this->view->syncChildren  = $syncChildren;
+        $this->view->parentTask    = !empty($task->parent) ? $this->task->getById($task->parent) : null;
         $this->display();
     }
 
@@ -345,6 +384,7 @@ class taskZen extends task
             $task = $this->dao->findById($taskID)->from(TABLE_TASK)->fetch();
             $this->view->parentTitle  = $task->name;
             $this->view->parentPri    = $task->pri;
+            $this->view->parentTask   = $task;
         }
 
         /* 获取模块和需求下拉数据。 Get module and story dropdown data. */
@@ -358,6 +398,8 @@ class taskZen extends task
 
         $showFields = $this->config->task->custom->batchCreateFields;
         if(strpos(",$showFields,", ',story,') !== false) $showFields .= ',preview,copyStory';
+
+        $this->config->task->batchcreate->requiredFields = $this->config->task->create->requiredFields;
 
         $this->view->title         = $this->lang->task->batchCreate;
         $this->view->execution     = $execution;
@@ -480,6 +522,13 @@ class taskZen extends task
             ->stripTags($this->config->task->editor->edit['id'], $this->config->allowedTags)
             ->get();
 
+        $team = $this->post->team ? array_filter($this->post->team) : array();
+        if($task->mode && empty($team))
+        {
+            dao::$errors['assignedTo'] = $this->lang->task->teamNotEmpty;
+            return false;
+        }
+
         return $this->loadModel('file')->processImgURL($task, $this->config->task->editor->edit['id'], (string)$this->post->uid);
     }
 
@@ -545,8 +594,11 @@ class taskZen extends task
             $task->execution    = $execution->id;
             $task->left         = $task->estimate;
             $task->parent       = $taskID;
-            $task->lane         = empty($task->lane) && !empty($output['laneID']) ? (int)$output['laneID'] : $task->lane;
+            $task->lane         = !empty($task->lane)   ? $task->lane   : zget($output, 'laneID',   0);
+            $task->column       = !empty($task->column) ? $task->column : zget($output, 'columnID', 0);
             $task->storyVersion = $task->story ? $this->story->getVersion($task->story) : 1;
+
+            if($task->assignedTo) $task->assignedDate = helper::now();
         }
 
         /* Remove data with the same task name. */
@@ -599,7 +651,7 @@ class taskZen extends task
         $task = $this->loadModel('file')->processImgURL($task, $this->config->task->editor->create['id'], (string)$this->post->uid);
 
         /* Check if the input post data meets the requirements. */
-        $this->checkCreateTask($task);
+        $this->checkCreateTask($task, $team);
         return $task;
     }
 
@@ -913,15 +965,22 @@ class taskZen extends task
      * Check if the input post meets the requirements.
      *
      * @param  object    $task
+     * @param  array     $team
      * @access protected
      * @return bool
      */
-    protected function checkCreateTask(object $task): bool
+    protected function checkCreateTask(object $task, array $team): bool
     {
         /* Check if the estimate is positive. */
         if($task->estimate < 0)
         {
             dao::$errors['estimate'] = $this->lang->task->error->recordMinus;
+            return false;
+        }
+
+        if($this->post->multiple && empty($team))
+        {
+            dao::$errors['assignedTo'] = $this->lang->task->teamNotEmpty;
             return false;
         }
 
@@ -1330,9 +1389,10 @@ class taskZen extends task
     protected function processExportData(array $tasks, int $projectID): array
     {
         /* Get users and executions. */
-        $users      = $this->loadModel('user')->getPairs('noletter');
-        $projects   = $this->loadModel('project')->getPairs();
-        $executions = $this->loadModel('execution')->fetchPairs(0, 'all', true, true);
+        $users         = $this->loadModel('user')->getPairs('noletter');
+        $projects      = $this->loadModel('project')->getPairs();
+        $executions    = $this->loadModel('execution')->fetchPairs(0, 'all', true, true);
+        $allExecutions = $this->loadModel('execution')->fetchPairs(0, 'all', false, true);
 
         /* Get related objects id lists. */
         $relatedStoryIdList = array();
@@ -1355,6 +1415,7 @@ class taskZen extends task
             $task->fromBug = empty($task->fromBug) ? '' : "#$task->fromBug " . $bugs[$task->fromBug]->title;
 
             if(isset($relatedModules[$task->module])) $task->module = $relatedModules[$task->module] . "(#$task->module)";
+            if(isset($allExecutions[$task->execution]) && !isset($executions[$task->execution])) $task->execution = '';
 
             /* Convert username to real name. */
             if(!empty($task->mailto))
@@ -1482,7 +1543,7 @@ class taskZen extends task
         case 'closed':
             $task->closedBy   = $oldTask->status == 'closed' ? $oldTask->closedBy : $currentAccount;
             $task->closedDate = $oldTask->status == 'closed' ? $oldTask->closedDate : $now;
-            if($task->closedReason == 'cancel' and helper::isZeroDate($task->finishedDate)) $task->finishedDate = null;
+            if(isset($task->closedReason) && $task->closedReason == 'cancel' && helper::isZeroDate($task->finishedDate)) $task->finishedDate = null;
             break;
         case 'wait':
             if($task->consumed > 0 and $task->left > 0) $task->status = 'doing';
@@ -1750,9 +1811,8 @@ class taskZen extends task
         {
             $skipTasks  = implode(',', $skipTasks);
             $confirmURL = $this->createLink('task', 'batchClose', "confirm=yes");
-            $cancelURL  = $this->server->HTTP_REFERER;
             $this->session->set('batchCloseTaskIDList', $skipTasks, 'task');
-            return array('result' => 'success', 'load' => array('confirm' => sprintf($this->lang->task->error->skipClose, $skipTasks), 'confirmed' => $confirmURL, 'canceled' => $cancelURL));
+            return array('result' => 'success', 'load' => array('confirm' => sprintf($this->lang->task->error->skipClose, $skipTasks), 'confirmed' => $confirmURL));
         }
 
         if(!empty($parentTasks))
@@ -1883,6 +1943,7 @@ class taskZen extends task
         {
             $bug = $this->loadModel('bug')->getById($bugID);
             $task->name       = $bug->title;
+            $task->story      = $bug->story;
             $task->pri        = !empty($bug->pri) ? $bug->pri : $this->config->task->default->pri;
             $task->assignedTo = array($bug->assignedTo);
         }

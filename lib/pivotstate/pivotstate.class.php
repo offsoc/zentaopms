@@ -42,6 +42,14 @@ class pivotState
     public $driver;
 
     /**
+     * Pivot state mode.
+     *
+     * @var string
+     * @access public
+     */
+    public $mode;
+
+    /**
      * Pivot state name.
      *
      * @var string
@@ -163,6 +171,30 @@ class pivotState
     public $stage;
 
     /**
+     * Pivot state acl.
+     *
+     * @var string
+     * @access public
+     */
+    public $acl;
+
+    /**
+     * Pivot state used.
+     *
+     * @var string
+     * @access public
+     */
+    public $used;
+
+    /**
+     * Pivot state whitelist.
+     *
+     * @var string
+     * @access public
+     */
+    public $whitelist;
+
+    /**
      * Pivot stage action.
      *
      * @var string
@@ -243,6 +275,14 @@ class pivotState
     public $pager;
 
     /**
+     * sqlChanged
+     *
+     * @var bool
+     * @access public
+     */
+    public $sqlChanged = false;
+
+    /**
      * filterChanged.
      *
      * @var bool
@@ -290,6 +330,12 @@ class pivotState
      */
     public $checkStepDesign = false;
 
+    public $triggerQuery = false;
+
+    public $canChangeMode = true;
+
+    public $sqlbuilder = array();
+
     /**
      * __construct method.
      *
@@ -299,13 +345,14 @@ class pivotState
      * @access public
      * @return void
      */
-    public function __construct($pivot, $drills = array(), $clientLang = 'zh-cn')
+    public function __construct($pivot, $drills = array(), $clientLang = 'zh-cn', $sqlbuilder = array())
     {
         $this->id        = $pivot->id;
         $this->dimension = $pivot->dimension;
         $this->group     = $pivot->group;
         $this->code      = $pivot->code;
         $this->driver    = $pivot->driver;
+        $this->mode      = $pivot->mode;
         $this->name      = $pivot->name;
         $this->desc      = $pivot->desc;
         $this->names     = $pivot->names;
@@ -313,9 +360,13 @@ class pivotState
         $this->sql       = $pivot->sql;
         $this->step      = 'query';
         $this->stage     = $pivot->stage;
+        $this->acl       = $pivot->acl;
+        $this->whitelist = $pivot->whitelist;
 
         $this->drills       = $drills;
         $this->defaultDrill = $this->initDrill();
+
+        $this->sqlbuilder = $sqlbuilder;
 
         $this->fields    = $this->json2Array($pivot->fieldSettings);
         $this->langs     = $this->json2Array($pivot->langs);
@@ -332,6 +383,61 @@ class pivotState
     }
 
     /**
+     * Process query filters.
+     *
+     * @access public
+     * @return void
+     */
+    public function processQueryFilters()
+    {
+        if($this->mode == 'text') return;
+
+        $querys = $this->sqlbuilder->querys;
+        $this->clearFilters();
+        if(empty($querys)) return;
+
+        if($this->sqlbuilder->checkQuerys() !== true) return;
+
+        foreach($querys as $index => $query)
+        {
+            $filter = $this->getDefaultQueryFilter();
+            $field  = "var$index";
+            foreach(array_keys($filter) as $key)
+            {
+                if($key == 'field') $filter[$key] = $field;
+                elseif(isset($query[$key])) $filter[$key] = $query[$key];
+            }
+            $filter['from'] = 'query';
+            $this->filters[] = $filter;
+        }
+    }
+
+    /**
+     * Match field setting from builder.
+     *
+     * @param  string $key
+     * @param  array  $setting
+     * @access public
+     * @return array
+     */
+    public function matchFieldSettingFromBuilder($key, $setting)
+    {
+        if($this->mode == 'text') return $setting;
+        $selects = array_merge($this->sqlbuilder->getSelects(), $this->sqlbuilder->getFuncSelects());
+        foreach($selects as $select)
+        {
+            list($table, $field, $alias) = $select;
+            if($key != $alias) continue;
+
+            $fieldList = $this->sqlbuilder->getTableDescList($table);
+            $name = zget($fieldList, $field, $field);
+            $setting[$this->clientLang] = $name;
+            $setting['field']           = $field;
+        }
+        return $setting;
+    }
+
+    /**
      * Clear fieldSettings.
      *
      * @access public
@@ -342,6 +448,7 @@ class pivotState
         $this->fields        = array();
         $this->langs         = array();
         $this->fieldSettings = array();
+        $this->relatedObject = array();
     }
 
     /**
@@ -657,8 +764,9 @@ class pivotState
         $settings = $this->settings;
         if(!isset($settings['summary']) || $settings['summary'] !== 'notuse') $this->settings['summary'] = 'use';
         if(!isset($settings['group1']))  $this->settings['group1'] = '';
-        if(!isset($settings['columns'])) $this->addColumn();
+        if(!isset($settings['columns']) || empty($settings['columns'])) $this->addColumn();
         if(!isset($settings['columnTotal'])) $this->settings['columnTotal'] = 'noShow';
+        if(!isset($settings['columnPosition'])) $this->settings['columnPosition'] = 'bottom';
 
         foreach($this->settings['columns'] as $index => $column)
         {
@@ -810,7 +918,7 @@ class pivotState
      */
     public function getDefaultQueryFilter()
     {
-        return array('field' => '', 'name' => '', 'type' => 'input', 'typeOption' => '', 'default' => '');
+        return array('field' => '', 'name' => '', 'type' => 'input', 'typeOption' => '', 'default' => '', 'items' => array());
     }
 
     /**
@@ -833,6 +941,21 @@ class pivotState
         $this->formatSettingColumns();
         $this->processFieldSettingsLang();
         $this->completeFiltersDefault();
+        $this->canChangeMode = $this->setCanChangeMode();
+    }
+
+    /**
+     * Set can change mode.
+     *
+     * @access public
+     * @return bool
+     */
+    public function setCanChangeMode()
+    {
+        if($this->mode == 'builder') return true;
+        if($this->mode == 'text' && empty($this->sql)) return true;
+
+        return false;
     }
 
     /**
@@ -854,6 +977,7 @@ class pivotState
         $this->formatSettingColumns();
         $this->processFieldSettingsLang();
         $this->completeFiltersDefault();
+        $this->canChangeMode = $this->setCanChangeMode();
     }
 
     /**
@@ -916,7 +1040,8 @@ class pivotState
             }
             else
             {
-                $newFieldSettings[$field] = $setting;
+                // $newFieldSettings[$field] = $setting;
+                $newFieldSettings[$field] = $this->matchFieldSettingFromBuilder($field, $setting);
             }
         }
 
@@ -1107,6 +1232,24 @@ class pivotState
     }
 
     /**
+     * Get filters.
+     *
+     * @param  string $type
+     * @access public
+     * @return object|string
+     */
+    public function getFiltersForSave($type = 'object')
+    {
+        $filters = $this->filters;
+        foreach($filters as $index => $filter)
+        {
+            if(isset($filter['items'])) unset($filters[$index]['items']);
+        }
+        if($type == 'object') return $filters;
+        return json_encode($filters);
+    }
+
+    /**
      * Judge is queried.
      *
      * @access public
@@ -1115,6 +1258,74 @@ class pivotState
     public function isQueried()
     {
         return !empty($this->sql) && !$this->isError() && !empty($this->queryCols);
+    }
+
+    /**
+     * Check fields with setting.
+     *
+     * @param  bool    $removeUnused
+     * @access public
+     * @return bool
+     */
+    public function checkFieldsWithSetting($removeUnused = false)
+    {
+        $settings = $this->settings;
+        $fields   = $this->fieldSettings;
+
+        $isChanged = false;
+        foreach($settings as $key => $value)
+        {
+            if(strpos($key, 'group') === 0 && !isset($fields[$value]))
+            {
+                $isChanged = true;
+                if($removeUnused) unset($this->settings[$key]);
+            }
+            if($key === 'columns')
+            {
+                foreach($value as $index => $column)
+                {
+                    if(!isset($fields[$column['field']]) || !isset($fields[$column['slice']]))
+                    {
+                        $isChanged = true;
+                        if($removeUnused) unset($this->settings['columns'][$index]);
+                    }
+                }
+            }
+        }
+
+        $filters = $this->filters;
+        foreach($filters as $index => $filter)
+        {
+            $from = zget($filter, 'from', 'result');
+            if($from == 'query') continue;
+            if(!isset($fields[$filter['field']]))
+            {
+                $isChanged = true;
+                if($removeUnused) unset($this->filters[$index]);
+            }
+        }
+
+        $drills = $this->drills;
+        foreach($drills as $index => $drill)
+        {
+            if(!isset($fields[$drill['field']]))
+            {
+                $isChanged = true;
+                if($removeUnused) unset($this->drills[$index]);
+            }
+            foreach($drill['condition'] as $conditionIndex => $condition)
+            {
+                if(!isset($fields[$condition['queryField']]))
+                {
+                    $isChanged = true;
+                    if($removeUnused) unset($this->drills[$index]['condition'][$conditionIndex]);
+                }
+            }
+        }
+
+        if($removeUnused) $this->completeSettings();
+
+        return $isChanged;
     }
 
     /**

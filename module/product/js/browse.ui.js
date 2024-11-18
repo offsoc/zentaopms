@@ -110,6 +110,10 @@ window.renderCell = function(result, info)
         if(showGrade) gradeLabel = gradeMap[story.grade];
         if(gradeLabel) html += "<span class='label gray-pale rounded-xl clip'>" + gradeLabel + "</span> ";
         if(story.color) result[0].props.style = 'color: ' + story.color;
+
+        if((story.type == 'story' && !storyViewPriv) ||
+           (story.type == 'requirement' && !requirementViewPriv) ||
+           (story.type == 'epic' && !epicViewPriv)) result[0] = result[0].props.children;
         if(html) result.unshift({html});
     }
     if(info.col.name == 'status' && result)
@@ -159,7 +163,7 @@ window.setStatistics = function(element, checkedIdList, pageSummary)
         }
     })
 
-    if(rateCount) rate = Math.round(hasCase / rateCount * 10000 / 100) + '' + '%';
+    if(rateCount) rate = Math.round(hasCase / rateCount * 10000) / 100 + '' + '%';
 
     return {html: checkedSummary.replace('%total%', total).replace('%estimate%', estimate).replace('%rate%', rate)};
 };

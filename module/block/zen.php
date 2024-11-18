@@ -405,35 +405,12 @@ class blockZen extends block
         $welcomeType = '19:00';
         foreach($this->lang->block->welcomeList as $type => $name) $welcomeType = $time >= $type ? $type : $welcomeType;
 
-        /* 获取禅道陪伴当前用户总天数。 */
-        if(!empty($this->config->installedDate))
-        {
-            $firstUseDate = $this->config->global->installedDate;
-        }
-        else
-        {
-            $firstUseDate = $this->dao->select('date')->from(TABLE_ACTION)
-                ->where('date')->gt('1971-01-01')
-                ->andWhere('actor')->eq($this->app->user->account)
-                ->orderBy('date_asc')
-                ->limit('1')
-                ->fetch('date');
-        }
-
-        if($firstUseDate)
-        {
-            $usageDays     = '';
-            $usageDateInfo = helper::getDateInterval($firstUseDate);
-            if(!empty($usageDateInfo->year))  $usageDays .= $usageDateInfo->year . ' ' . $this->lang->year . ' ';
-            if(!empty($usageDateInfo->month)) $usageDays .= $usageDateInfo->month . ' ' . $this->lang->month . ' ';
-            if(!empty($usageDateInfo->day))   $usageDays .= $usageDateInfo->day . ' ' . $this->lang->day . ' ';
-
-            if(!$usageDays) $usageDays .= "0 {$this->lang->day}";
-        }
-        else
-        {
-            $usageDays = ' 1 ' . $this->lang->day; // 最小陪伴天数是一天。
-        }
+        $usageDays = '';
+        $dateUsed  = $this->loadModel('admin')->genDateUsed();
+        if(!empty($dateUsed->year))  $usageDays .= $dateUsed->year  . ' ' . $this->lang->year  . ' ';
+        if(!empty($dateUsed->month)) $usageDays .= $dateUsed->month . ' ' . $this->lang->month . ' ';
+        if(!empty($dateUsed->day))   $usageDays .= $dateUsed->day   . ' ' . $this->lang->day   . ' ';
+        if(!$usageDays) $usageDays = "0 {$this->lang->day}";
         if(strpos($this->app->getClientLang(), 'zh') !== false) $usageDays = str_replace(' ', '', $usageDays);
 
         $yesterday = strtotime("-1 day");
@@ -469,6 +446,7 @@ class blockZen extends block
         {
             $type = 'assignedTo';
             if($field == 'testcase') $type = 'assigntome';
+            if($field == 'ticket')   $type = 'assignedtome';
 
             /* 根据不同的模块生成不同的度量项查询码。 */
             $code = "assigned_{$field}";
@@ -760,7 +738,7 @@ class blockZen extends block
         $monthRelease = $this->loadModel('metric')->getResultByCodeWithArray('count_of_monthly_created_release', array('year' => join(',', $years), 'month' => join(',', $months)), 'cron');
 
         /* 获取各个产品的年度(今年)发布次数。 */
-        $products      = $this->loadModel('product')->getOrderedProducts('all');
+        $products      = $this->loadModel('product')->getOrderedProducts('all', 0, 0, 'all');
         $productIdList = array_keys($products);
         $releaseGroup  = $this->metric->getResultByCodeWithArray('count_of_annual_created_release_in_product', array('product' => join(',', $productIdList), 'year' => date('Y')), 'cron');
 
@@ -990,7 +968,7 @@ class blockZen extends block
         /* Obtain a list of products that require statistics. */
         $status         = isset($block->params->type)  ? $block->params->type  : '';
         $count          = isset($block->params->count) ? $block->params->count : '';
-        $products       = $this->loadModel('product')->getOrderedProducts($status, (int)$count);
+        $products       = $this->loadModel('product')->getOrderedProducts($status, (int)$count, 0, 'all');
         $productIdList  = array_keys($products);
 
         $this->loadModel('metric');
@@ -1206,7 +1184,7 @@ class blockZen extends block
     protected function printWaterfallReportBlock(): void
     {
         $this->app->loadLang('programplan');
-        $project = $this->loadModel('project')->getByID($this->session->project);
+        $project = $this->loadModel('project')->getByID(common::isTutorialMode() ? 2 : $this->session->project);
 
         /* Get metric data. */
         $data    = $this->getProjectsStatisticData(array($project->id));
@@ -1264,13 +1242,14 @@ class blockZen extends block
         $plans         = $this->loadModel('programplan')->getStage($this->session->project, $productID, 'all', 'order');
         $plans         = $this->programplan->initGanttPlans($plans);
         $plansProgress = $this->loadModel('metric')->getResultByCodeWithArray('progress_of_task_in_execution', array('execution' => implode(',', $plans['planIdList'])), 'cron'); // Get plan progress by metric.
-        $plans         = $plans['datas']['data'];
+        $plans         = $plans['datas'] ? $plans['datas']['data'] : array();
+
         /* Set progress from metric. */
         foreach($plansProgress as $metric)
         {
             if(isset($plans[$metric['execution']])) $plans[$metric['execution']]->taskProgress = ($metric['value'] * 100) . '%';
         }
-        $project = $this->loadModel('project')->fetchByID($this->session->project);
+        $project = $this->loadModel('project')->getByID(common::isTutorialMode() ? 2 : $this->session->project);
 
         $this->view->plans     = $plans ? $plans : array();
         $this->view->products  = $project->hasProduct ? $products : array();
@@ -1374,7 +1353,7 @@ class blockZen extends block
         $data          = $this->getProjectsStatisticData($projectIdList);
 
         /* Get base project. */
-        $project = $this->loadModel('project')->fetchById($projectID);
+        $project = $this->loadModel('project')->getByID(common::isTutorialMode() ? 2 : $projectID);
 
         /* Build project statistic data. */
         $this->app->loadClass('pager', true);
@@ -1608,7 +1587,7 @@ class blockZen extends block
         $count  = isset($block->params->count) ? (int)$block->params->count : 0;
 
         /* 测试统计是按产品分组统计的。 */
-        $products      = $this->loadModel('product')->getOrderedProducts($status, $count);
+        $products      = $this->loadModel('product')->getOrderedProducts($status, $count, 0, 'all');
         $productIdList = array_keys($products);
 
         /* 计算昨日和今日可能包含的日期情况。 */
@@ -2027,9 +2006,10 @@ class blockZen extends block
         $hasMeeting  = helper::hasFeature('meeting');
         $hasViewPriv = array();
 
-        $count      = array();
-        $params     = $block->params;
-        $limitCount = zget($params, 'count', $this->config->block->params['assigntome']->count['default']);
+        $count          = array();
+        $params         = $block->params;
+        $limitCount     = zget($params, 'count', $this->config->block->params['assigntome']->count['default']);
+        $shadowProducts = $this->dao->select('id')->from(TABLE_PRODUCT)->where('deleted')->eq('0')->andWhere('shadow')->eq(1)->fetchPairs();
 
         $this->app->loadClass('pager', true);
         $pager   = new pager(0, $limitCount, 1);
@@ -2038,7 +2018,13 @@ class blockZen extends block
         {
             $hasViewPriv['review'] = true;
             $count['review']       = count($reviews);
-            $this->view->reviews   = $reviews;
+
+            foreach($reviews as $review)
+            {
+                if($review->type == 'story') $review->isShadowProduct = isset($shadowProducts[$review->product]) ? 1 : 0;
+            }
+
+            $this->view->reviews = $reviews;
             if($this->config->edition == 'max' or $this->config->edition == 'ipd')
             {
                 $this->app->loadLang('approval');
@@ -2140,6 +2126,15 @@ class blockZen extends block
                 if($limitCount > 0) $objects = array_slice($objects, 0, $limitCount);
             }
 
+            if($objectType == 'story')
+            {
+                foreach($objects as $key => $story)
+                {
+                    $story->isShadowProduct = isset($shadowProducts[$story->product]) ? 1 : 0;
+                    $story->storyType       = $story->type;
+                }
+            }
+
             if($objectType == 'bug')   $this->app->loadLang('bug');
             if($objectType == 'risk')  $this->app->loadLang('risk');
             if($objectType == 'issue') $this->app->loadLang('issue');
@@ -2163,7 +2158,7 @@ class blockZen extends block
             $today = helper::today();
             $now   = date('H:i:s', strtotime(helper::now()));
 
-            $meetings = $this->dao->select('*')->from(TABLE_MEETING)->alias('t1')
+            $meetings = $this->dao->select('t1.*')->from(TABLE_MEETING)->alias('t1')
                 ->leftJoin(TABLE_PROJECT)->alias('t2')->on('t1.project = t2.id')
                 ->where('t1.deleted')->eq('0')
                 ->andWhere('t2.deleted')->eq('0')
@@ -2410,8 +2405,8 @@ class blockZen extends block
 
         /* Set project status and count. */
         $count         = isset($block->params->count) ? (int)$block->params->count : 15;
-        $products      = $this->loadModel('product')->getOrderedProducts('all');
-        $involveds     = $this->product->getOrderedProducts('involved');
+        $products      = $this->loadModel('product')->getOrderedProducts('all', 0, 0, 'all');
+        $involveds     = $this->product->getOrderedProducts('involved', 0, 0, 'all');
         $productIdList = array_merge(array_keys($products), array_keys($involveds));
 
         $stmt = $this->dao->select('id,product,lib,title,type,addedBy,addedDate,editedDate,status,acl,`groups`,users,deleted')->from(TABLE_DOC)->alias('t1')
@@ -2697,7 +2692,7 @@ class blockZen extends block
         /* Obtain a list of products that require statistics. */
         $status     = isset($block->params->type)  ? $block->params->type  : '';
         $count      = isset($block->params->count) ? $block->params->count : '';
-        $products   = $this->loadModel('product')->getOrderedProducts($status, (int)$count);
+        $products   = $this->loadModel('product')->getOrderedProducts($status, (int)$count, 0, 'all');
         $productID  = !empty($params['active']) ? $params['active'] : key($products);
         if(empty($productID)) $productID = 0;
 
@@ -3340,6 +3335,24 @@ class blockZen extends block
         $getScrum     = in_array($modelType, array('all', 'scrum'));
         $getWaterfall = in_array($modelType, array('all', 'waterfall'));
 
+        $investedGroup      = array();
+        $consumeTaskGroup   = array();
+        $leftTaskGroup      = array();
+        $countStoryGroup    = array();
+        $finishedStoryGroup = array();
+        $unclosedStoryGroup = array();
+        $countTaskGroup     = array();
+        $waitTaskGroup      = array();
+        $doingTaskGroup     = array();
+        $countBugGroup      = array();
+        $closedBugGroup     = array();
+        $activatedBugGroup  = array();
+        $SVGroup            = array();
+        $PVGroup            = array();
+        $EVGroup            = array();
+        $CVGroup            = array();
+        $ACGroup            = array();
+        $taskProgressGroup  = array();
         if($getScrum)
         {
             /* 敏捷项目的统计信息。 */

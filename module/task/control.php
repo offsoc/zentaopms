@@ -232,6 +232,7 @@ class task extends control
             $this->locate($url);
         }
 
+        $this->taskZen->setMenu($executionID);
         $this->taskZen->assignBatchEditVars($executionID);
     }
 
@@ -393,6 +394,7 @@ class task extends control
         $this->view->modulePath   = $this->tree->getParents($task->module);
         $this->view->linkMRTitles = $this->loadModel('mr')->getLinkedMRPairs($taskID, 'task');
         $this->view->linkCommits  = $this->loadModel('repo')->getCommitsByObject($taskID, 'task');
+        $this->view->linkedBugs   = $this->loadModel('bug')->getLinkedBugsByTaskID($taskID);
         $this->view->hasGitRepo   = $this->taskZen->checkGitRepo($execution->id);
         $this->display();
     }
@@ -568,7 +570,7 @@ class task extends control
         $this->action->logHistory($actionID, $changes);
 
         /* Delete task burn. */
-        if($this->edition != 'open')
+        if($this->config->edition != 'open')
         {
             $this->dao->update(TABLE_BURN)
                  ->set("`consumed` = `consumed` - {$effort->consumed}")
@@ -626,7 +628,6 @@ class task extends control
         }
 
         $task         = $this->view->task;
-        $members      = $task->team ? $this->task->getMemberPairs($task) : $this->loadModel('user')->getTeamMemberPairs($task->execution, 'execution', 'nodeleted');
         $task->nextBy = $task->openedBy;
 
         if(!empty($task->team))
@@ -635,9 +636,9 @@ class task extends control
             $task->myConsumed = zget($currentTeam, 'consumed', 0);
         }
 
+        $this->taskZen->buildUsersAndMembersToFrom($task->execution, $taskID);
+
         $this->view->title           = $this->view->execution->name . $this->lang->hyphen .$this->lang->task->finish;
-        $this->view->members         = $members;
-        $this->view->users           = $this->loadModel('user')->getPairs('noletter');
         $this->view->canRecordEffort = $this->task->canOperateEffort($task);
         $this->display();
     }

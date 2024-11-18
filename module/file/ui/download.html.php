@@ -23,6 +23,7 @@ if(!empty($error))
 else
 {
     $fileContent = trim(file_get_contents($file->realPath));
+    $fromOld     = strpos($_SERVER['HTTP_REFERER'], 'ajaxIframeModal') !== false;
     if($charset != $config->charset)
     {
         $fileContent = helper::convertEncoding($fileContent, $charset . "//IGNORE", $config->charset);
@@ -55,13 +56,12 @@ else
         ) : null
     );
 
-    $fileContent = null;
     if($fileType == 'image')
     {
         $fileContent = div
         (
             setID('imageFile'),
-            h::img(set::src($this->createLink('file', 'read', "fileID={$file->id}")))
+            h::img(set::src($this->createLink('file', 'read', "fileID={$file->id}")), set::style(array('width' => '100%', 'max-height' => !$fromOld ? 'calc(100vh - 180px)' : '100%', 'object-fit' => 'contain')))
         );
     }
     elseif($fileType == 'video')
@@ -69,7 +69,7 @@ else
         $fileContent = div
         (
             setID('videoFile'),
-            h::video(set::src($file->webPath), set::controls(true), set::autoplay(true), set::controlsList('nodownload'), set::onerror('showError()'), set::onloadedmetadata('loadedmetadata()'), set::style(array('width' => '100%'))),
+            h::video(set::src($file->webPath), set::controls(true), set::autoplay(true), set::controlsList('nodownload'), set::onerror('showError()'), set::onloadedmetadata('loadedmetadata()'), set::style(array('width' => '100%', 'max-height' => !$fromOld ? 'calc(100vh - 180px)' : '100%'))),
             div
             (
                 setClass('playfailed hidden'),
@@ -86,7 +86,7 @@ else
         );
     }
 
-    div(setClass('panel-form'), $fileContent);
+    div(setClass('panel-form'), set::style(array('margin-left' => 'auto', 'margin-right' => 'auto')), $fileContent);
 
 $isInModal = isInModal();
 h::js

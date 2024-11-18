@@ -58,8 +58,15 @@ class testreport extends control
             }
             else
             {
-                $objectID = $this->session->{$tab};
-                $products = $this->product->getProducts($objectID, 'all', '', false);
+                if(common::isTutorialMode())
+                {
+                    $products = $this->loadModel('tutorial')->getProductStats();
+                }
+                else
+                {
+                    $objectID = $this->session->{$tab};
+                    $products = $this->product->getProducts($objectID, 'all', '', false);
+                }
             }
             if(empty($products) && !isInModal() && (helper::isAjaxRequest('zin') || helper::isAjaxRequest('fetch'))) $this->locate($this->createLink('product', 'showErrorNone', "moduleName={$tab}&activeMenu=testreport&objectID=$objectID"));
         }
@@ -173,7 +180,7 @@ class testreport extends control
 
             $reportData = $this->testreportZen->assignProjectReportDataForCreate($objectID, $objectType, $extra, $begin, $end, $executionID);
 
-            if(count($reportData['productIdList']) > 1) return $this->send(array('result' => 'fail', 'load' => array('confirm' => $this->lang->testreport->moreProduct, 'confirmed' => inlink('browse', "proudctID={$productID}"), 'canceled' => inlink('browse', "proudctID=$productID"))));
+            if(count($reportData['productIdList']) > 1) return $this->send(array('result' => 'fail', 'load' => array('confirm' => $this->lang->testreport->moreProduct, 'confirmed' => $this->createLink('project', 'testtask', "objectID={$objectID}"), 'canceled' => $this->createLink('project', 'testtask', "objectID={$objectID}"))));
         }
 
         $this->testreportZen->assignReportData($reportData, 'create');

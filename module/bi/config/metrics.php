@@ -2714,7 +2714,7 @@ $config->bi->builtin->metrics[] = array
     'unit'       => 'count',
     'dateType'   => 'month',
     'desc'       => '按产品统计的月度解决Bug数是指每天在产品开发过程中被解决并关闭的Bug的数量。该度量项可以帮助我们了解开发团队解决Bug的速度和效率。',
-    'definition' => "产品中创建时间在某年某月的Bug个数求和\n过滤已删除的Bug\n过滤已删除的产品"
+    'definition' => "产品中Bug个数求和\n解决日期为某年某月\n过滤已删除的Bug\n过滤已删除的产品"
 );
 
 $config->bi->builtin->metrics[] = array
@@ -2728,7 +2728,7 @@ $config->bi->builtin->metrics[] = array
     'unit'       => 'count',
     'dateType'   => 'month',
     'desc'       => '按产品统计的月度关闭Bug数是指在某月度关闭的Bug数量。这个度量项反映了产品开发过程中每月被确认并关闭的Bug的数量。该度量项可以帮助我们了解开发团队对Bug进行确认与关闭的速度和效率。',
-    'definition' => "产品中创建时间在某年某月的Bug个数求和\n过滤已删除的Bug\n过滤已删除的产品"
+    'definition' => "产品中关闭时间在某年某月的Bug个数求和\n过滤已删除的Bug\n过滤已删除的产品"
 );
 
 $config->bi->builtin->metrics[] = array
@@ -4493,4 +4493,214 @@ $config->bi->builtin->metrics[] = array
     'dateType'   => 'nodate',
     'desc'       => '按执行统计的执行开发效率是指执行交付研发需求规模数与执行所有任务消耗工时的比率。该度量项反映了执行的开发速度，可以帮助团队识别潜在问题并采取改进措施提高研发效率。',
     'definition' => "复用：按执行统计的任务消耗工时数、按执行统计的执行关闭时已交付的研发需求规模数；\n公式：按执行统计的执行关闭时已交付的研发需求规模数/按执行统计的任务消耗工时数"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的有效Bug数',
+    'alias'      => '有效Bug数',
+    'code'       => 'count_of_effective_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'nodate',
+    'desc'       => '按项目统计的有效Bug数是指项目中真正具有影响和价值的Bug数量。有效Bug通常是指导致项目不正常运行或影响用户体验的Bug。统计有效Bug数可以帮助评估项目的稳定性和质量，也可以评估测试人员之间的协作或对项目的了解程度。',
+    'definition' => "项目中所有Bug个数求和,解决方案为已解决、延期处理或状态为激活;\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的已修复Bug数',
+    'alias'      => '已修复Bug数',
+    'code'       => 'count_of_fixed_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'nodate',
+    'desc'       => '按项目统计的已修复Bug数是指解决方案为已解决并且状态为已关闭的Bug数量。这个度量项反映了项目解决的问题数量。已修复Bug数的可以评估开发团队在Bug解决方面的工作效率。',
+    'definition' => "项目中Bug的个数求和\n 解决方案为已解决\n 状态为已关闭\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的每日新增Bug数',
+    'alias'      => '新增Bug数',
+    'code'       => 'count_of_daily_created_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'day',
+    'desc'       => '按项目统计的每日新增Bug数是指在每天的项目开发过程中新发现并记录的Bug数量。该度量项可以体现项目开发过程中Bug的发现速度和趋势，较高的新增Bug数可能意味着存在较多的问题需要解决，同时也可以帮助识别项目开发过程中的瓶颈和潜在的质量风险。',
+    'definition' => "项目中Bug数求和\n 创建时间为某日\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的每日解决Bug数',
+    'alias'      => '解决Bug数',
+    'code'       => 'count_of_daily_resolved_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'day',
+    'desc'       => '按项目统计的每日解决Bug数是指项目每日解决的Bug的数量。该度量项可以帮助我们了解开发团队解决Bug的速度和效率。',
+    'definition' => "项目中Bug数求和\n 解决日期为某日\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的每日关闭Bug数',
+    'alias'      => '关闭Bug数',
+    'code'       => 'count_of_daily_closed_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'day',
+    'desc'       => '按项目统计的每日关闭Bug数是指每天在项目中每日关闭的Bug的数量。该度量项可以帮助我们了解开发团队对已解决的Bug进行确认与关闭的速度和效率，通过对比不同时间段的关闭Bug数，可以评估开发团队的协作和问题处理能力。',
+    'definition' => "项目中Bug数求和\n 关闭时间为某日\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的Bug修复率',
+    'alias'      => 'Bug修复率',
+    'code'       => 'rate_of_fixed_bug_in_project',
+    'purpose'    => 'rate',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'percentage',
+    'dateType'   => 'nodate',
+    'desc'       => '按项目统计的Bug修复率是指按项目统计的修复Bug数相对于按项目统计的有效Bug数的比例。该度量项可以帮助我们了解开发团队对Bug修复的效率和质量，高的修复率可能说明Bug得到及时解决，项目质量得到有效保障。',
+    'definition' => "复用：按项目统计的修复Bug数、按项目统计的有效Bug数\n 公式：按项目统计的Bug修复率=按项目统计的修复Bug数/按项目统计的有效Bug数\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的严重程度为1级的Bug数',
+    'alias'      => '严重程度为1级的Bug数',
+    'code'       => 'count_of_severity_1_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'nodate',
+    'desc'       => '按项目统计的严重程度为1级的Bug数是指在项目开发过程中发现的、对项目功能或性能产生重大影响的Bug数量。这些Bug可能会导致系统崩溃、功能无法正常运行、数据丢失等严重问题。统计这些Bug的数量可以帮助评估项目的稳定性和可靠性。',
+    'definition' => "项目中Bug的个数求和\n 严重程度为1级\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的严重程度为2级的Bug数',
+    'alias'      => '严重程度为2级的Bug数',
+    'code'       => 'count_of_severity_2_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'nodate',
+    'desc'       => '按项目统计的严重程度为2级的Bug数是指在项目开发过程中发现的、对项目功能或性能产生重大影响的Bug数量。这些Bug可能会导致系统崩溃、功能无法正常运行、数据丢失等严重问题。统计这些Bug的数量可以帮助评估项目的稳定性和可靠性。',
+    'definition' => "项目中Bug的个数求和\n 严重程度为2级\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的严重程度为1、2级的Bug数',
+    'alias'      => '严重程度为1、2级的Bug数',
+    'code'       => 'count_of_severe_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'nodate',
+    'desc'       => '按项目统计的严重程度为1、2级的Bug数是指在项目开发过程中发现的严重程度为1级和2级的Bug数量的总和。统计这些Bug的数量可以评估项目开发过程的质量和稳定性，同时也关注影响用户体验和功能完整性的问题',
+    'definition' => "复用： 按项目统计的严重程度为1级的Bug数、按项目统计的严重程度为2级的Bug数。公式： 按项目统计的严重程度为1、2级的Bug数=按项目统计的严重程度为1级的Bug数+按项目统计的严重程度为2级的Bug数\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的年度新增Bug数',
+    'alias'      => '新增Bug数',
+    'code'       => 'count_of_annual_created_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'year',
+    'desc'       => '按项目统计的年度新增Bug数是指项目在某年度新发现的Bug数量。这个度量项反映了项目在某年度出现的新问题数量。年度新增Bug数越多可能意味着质量控制存在问题，需要及时进行处理和改进。',
+    'definition' => "项目中Bug的个数求和\n 创建时间为某年\n 过滤已删除的Bug\n 过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的月度新增Bug数',
+    'alias'      => '新增Bug数',
+    'code'       => 'count_of_monthly_created_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'month',
+    'desc'       => '按项目统计的月度新增Bug数是指在某年度新发现的Bug数量。这个度量项反映了系统或项目在某月度出现的新问题数量。月度新增Bug数的增加可能意味着质量控制存在问题，需要及时进行处理和改进。',
+    'definition' => "项目中创建时间在某年某月的Bug个数求和\n过滤已删除的Bug\n过滤已删除的项目\n"
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的月度关闭Bug数',
+    'alias'      => '关闭Bug数',
+    'code'       => 'count_of_monthly_closed_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'month',
+    'desc'       => '按项目统计的月度关闭Bug数是指在某月度关闭的Bug数量。这个度量项反映了产品开发过程中每月被确认并关闭的Bug的数量。该度量项可以帮助我们了解开发团队对Bug进行确认与关闭的速度和效率。',
+    'definition' => "项目中关闭时间在某年某月的Bug个数求和，过滤已删除的Bug，过滤已删除的项目。",
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的月度修复Bug数',
+    'alias'      => '解决Bug数',
+    'code'       => 'count_of_monthly_fixed_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'month',
+    'desc'       => '按项目统计的月度修复Bug数是指每月在项目开发过程中被解决并关闭的Bug的数量。该度量项可以帮助我们了解开发团队解决Bug的速度和效率。',
+    'definition' => "项目中Bug的个数求和\n关闭时间为某年某月\n解决方案为已解决\n过滤已删除的Bug\n过滤已删除的项目\n",
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的年度修复Bug数',
+    'alias'      => '修复Bug数',
+    'code'       => 'count_of_annual_fixed_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'year',
+    'desc'       => '按项目统计的年度修复Bug数是指在某年度解决并关闭的Bug数量。这个度量项反映了项目在某年度解决的问题数量。年度修复Bug数越多可能说明开发团队在Bug解决方面的工作效率较高。',
+    'definition' => "项目中Bug的个数求和\n关闭时间为某年\n解决方案为已解决\n过滤已删除的Bug\n过滤已删除的项目\n",
+);
+
+$config->bi->builtin->metrics[] = array
+(
+    'name'       => '按项目统计的年度新增有效Bug数',
+    'alias'      => '新增有效Bug数',
+    'code'       => 'count_of_annual_created_effective_bug_in_project',
+    'purpose'    => 'scale',
+    'scope'      => 'project',
+    'object'     => 'bug',
+    'unit'       => 'count',
+    'dateType'   => 'year',
+    'desc'       => '按项目统计的年度新增有效Bug数是指项目在某年度新发现的真正具有影响和价值的Bug数量。有效Bug通常是指导致项目不正常运行或影响用户体验的Bug。统计有效Bug数可以帮助评估项目的稳定性和质量也可以评估测试人员之前的协作或对项目的了解程度。',
+    'definition' => "项目中Bug个数求和\n创建时间为某年\n解决方案为已解决和延期处理或者状态为激活\n过滤已删除的Bug\n过滤已删除的项目\n",
 );

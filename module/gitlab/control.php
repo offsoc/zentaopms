@@ -1044,11 +1044,9 @@ class gitlab extends control
             }
         }
 
-        $products = $this->loadModel("product")->getPairs();
-
         $this->view->title           = $this->lang->gitlab->common . $this->lang->hyphen . $this->lang->gitlab->importIssue;
         $this->view->importable      = empty($gitlabIssues) ? false : true;
-        $this->view->products        = $products;
+        $this->view->products        = $this->loadModel('product')->getPairs('', 0, '', 'all');
         $this->view->gitlabID        = $gitlabID;
         $this->view->gitlabProjectID = $projectID;
         $this->view->objectTypes     = $this->config->gitlab->objectTypes;
@@ -1126,23 +1124,23 @@ class gitlab extends control
                 }
             }
 
-            $gitlabCurrentMembers = $this->gitlab->apiGetProjectMembers($repo->gitService, $repo->project);
+            $gitlabCurrentMembers = $this->gitlab->apiGetProjectMembers($repo->gitService, (int)$repo->serviceProject);
 
             list($addedMembers, $deletedMembers, $updatedMembers) = $this->gitlabZen->getProjectMemberData($gitlabCurrentMembers, $newGitlabMembers, $bindedUsers, $accounts, !empty($repo->acl->users) ? $repo->acl->users : array());
 
             foreach($addedMembers as $addedMember)
             {
-                $this->gitlab->apiCreateProjectMember($repo->gitService, $repo->project, $addedMember);
+                $this->gitlab->apiCreateProjectMember($repo->gitService, (int)$repo->serviceProject, $addedMember);
             }
 
             foreach($updatedMembers as $updatedMember)
             {
-                $this->gitlab->apiUpdateProjectMember($repo->gitService, $repo->project, $updatedMember);
+                $this->gitlab->apiUpdateProjectMember($repo->gitService, (int)$repo->serviceProject, $updatedMember);
             }
 
             foreach($deletedMembers as $deletedMemberID)
             {
-                $this->gitlab->apiDeleteProjectMember($repo->gitService, $repo->project, (int)$deletedMemberID);
+                $this->gitlab->apiDeleteProjectMember($repo->gitService, (int)$repo->serviceProject, (int)$deletedMemberID);
             }
 
             $repo->acl->users = array_values($accounts);
@@ -1152,7 +1150,7 @@ class gitlab extends control
 
         $repo           = $this->loadModel('repo')->getByID($repoID);
         $users          = $this->loadModel('user')->getPairs('noletter|noempty|nodeleted|noclosed');
-        $projectMembers = $this->gitlab->apiGetProjectMembers($repo->gitService, $repo->project);
+        $projectMembers = $this->gitlab->apiGetProjectMembers($repo->gitService, (int)$repo->serviceProject);
         if(!is_array($projectMembers)) $projectMembers = array();
 
         /* Get users accesslevel. */

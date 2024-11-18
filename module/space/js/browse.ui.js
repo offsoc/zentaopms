@@ -34,28 +34,30 @@ window.renderInstanceList = function (result, {col, row, value})
     return result;
 }
 
-var refreshTime = 0;
-var timer       = null;
-const postData  = new FormData();
-if(idList.length > 0)
+$(function()
 {
-    idList.forEach(function(id){postData.append('idList[]', id)});
-}
-window.afterPageUpdate = function()
-{
+    if(typeof timer !== 'undefined') clearInterval(timer);
     if(idList.length === 0) return;
-    refreshStatus();
+    if(inQuickon) timer = setInterval(refreshStatus, 5000);
+});
+
+window.onPageUnmount = function()
+{
+    if(typeof timer !== 'undefined') clearInterval(timer);
 }
 
 function refreshStatus()
 {
-    if(new Date().getTime() - refreshTime < 4000) return;
-    refreshTime = new Date().getTime();
+    const postData  = new FormData();
+    if(idList.length > 0)
+    {
+        idList.forEach(function(id){postData.append('idList[]', id)});
+    }
 
     $.ajaxSubmit({
         url: $.createLink('instance', 'ajaxStatus'),
         method: 'POST',
-        data:postData,
+        data: postData,
         onComplete: function(res)
         {
             if(res.result === 'success')
@@ -70,16 +72,8 @@ function refreshStatus()
                     }
                 });
             }
-
-            timer = setTimeout(() => {refreshStatus()}, 5000);
         }
     });
-}
-
-window.onPageUnmount = function()
-{
-    if(!timer) return;
-    clearTimeout(timer);
 }
 
 window.bindUser = function(externalID, appName)

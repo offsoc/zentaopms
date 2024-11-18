@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 /**
- * The model file of extension module of ZenTaoCMS.
+ * The model file of extension module of ZenTaoPMS.
  *
  * @copyright   Copyright 2009-2023 禅道软件（青岛）有限公司(ZenTao Software (Qingdao) Co., Ltd. www.cnezsoft.com)
  * @license     ZPL(http://zpl.pub/page/zplv12.html) or AGPL(https://www.gnu.org/licenses/agpl-3.0.en.html)
@@ -465,21 +465,6 @@ class extensionModel extends model
     }
 
     /**
-     * Get hook file for install or uninstall.
-     *
-     * @param  string       $extension
-     * @param  string       $hook      preinstall|postinstall|preuninstall|postuninstall
-     * @access public
-     * @return string|false
-     */
-    public function getHookFile(string $extension, string $hook): string|false
-    {
-        $hookFile = "ext/$extension/hook/$hook.php";
-        if(file_exists($hookFile)) return $hookFile;
-        return false;
-    }
-
-    /**
      * 删除安装的插件文件并返回错误提示。
      * Remove an extension.
      *
@@ -575,7 +560,7 @@ class extensionModel extends model
             catch(PDOException $e)
             {
                 $errorInfo = $e->errorInfo;
-                $errorCode = $errorInfo[1];
+                $errorCode = $errorInfo ? $errorInfo[1] : '';
                 if(strpos($ignoreCode, "|$errorCode|") === false) $result->error .= '<p>' . $e->getMessage() . "<br />THE SQL IS: $sql</p>";
             }
         }
@@ -693,7 +678,7 @@ class extensionModel extends model
                 if(!file_exists($file)) continue;
 
                 /* 如果没有权限或者删除失败则返回提示信息。 */
-                $parentDir = mb_substr($file, 0, strripos($file, '/'));
+                $parentDir = dirname($file);
                 if(!is_writable($file) || !is_writable($parentDir))
                 {
                     $commandTips[] = PHP_OS == 'Linux' ? "sudo rm -fr $file" : "del $file";
@@ -734,7 +719,7 @@ class extensionModel extends model
                 if(!is_dir($path)) continue;
 
                 /* 如果没有权限或者删除失败则返回提示信息。*/
-                $parentDir = mb_substr($path, 0, strripos($path, '/'));
+                $parentDir = dirname($path);
                 if(!is_writable($path) || !is_writable($parentDir))
                 {
                     $commandTips[] = PHP_OS == 'Linux' ? "sudo rm -fr $appRoot$dir" : "rmdir $appRoot$dir /s /q";

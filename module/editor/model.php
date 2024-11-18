@@ -1,6 +1,6 @@
 <?php
 /**
- * The model file of editor module of ZenTaoCMS.
+ * The model file of editor module of ZenTaoPMS.
  *
  * @copyright   Copyright 2009-2023 禅道软件（青岛）有限公司(ZenTao Software (Qingdao) Co., Ltd. www.cnezsoft.com)
  * @license     ZPL (http://zpl.pub/page/zplv12.html)
@@ -206,7 +206,6 @@ class editorModel extends model
         $tree        = new stdclass();
         $fileName    = basename($filePath);
         $tree->id    = md5($filePath);
-        $tree->title = $fileName;
         $tree->actions['items'] = array();
         if(isset($this->lang->editor->translate[$fileName]))
         {

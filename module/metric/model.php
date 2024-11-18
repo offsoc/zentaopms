@@ -281,17 +281,15 @@ class metricModel extends model
      */
     public function getScopePairs($all = true)
     {
+        $metrics = $all ? array() : $this->metricTao->fetchMetricsByScope($this->config->metric->scopeList);
         $scopePairs = array();
-        foreach($this->config->metric->scopeList as $scope)
+        foreach($this->lang->metric->scopeList as $scope => $name)
         {
-            if(!$all)
-            {
-                $metrics = $this->metricTao->fetchMetricsByScope($scope, 1);
-                if(empty($metrics)) continue;
-            }
+            if(!$all && !isset($metrics[$scope])) continue;
+
             $scopePair = new stdclass();
             $scopePair->value = $scope;
-            $scopePair->label = $this->lang->metric->scopeList[$scope];
+            $scopePair->label = $name;
 
             $scopePairs[] = $scopePair;
         }
@@ -490,8 +488,11 @@ class metricModel extends model
      */
     public function getByCode(string $code, string|array $fieldList = '*')
     {
+        static $metricsWithCode;
         if(is_array($fieldList)) $fieldList = implode(',', $fieldList);
-        return $this->dao->select($fieldList)->from(TABLE_METRIC)->where('code')->eq($code)->fetch();
+        if(!isset($metricsWithCode[$code . $fieldList])) $metricsWithCode[$code . $fieldList] = $this->fetchMetricByCode($code, $fieldList);
+
+        return $metricsWithCode[$code . $fieldList];
     }
 
     /**
@@ -505,6 +506,7 @@ class metricModel extends model
      */
     public function getByID(int $metricID, string|array $fieldList = '*')
     {
+        if($metricID === 0) return false;
         if(is_array($fieldList)) $fieldList = implode(',', $fieldList);
         $metric = $this->dao->select($fieldList)->from(TABLE_METRIC)->where('id')->eq($metricID)->fetch();
 
@@ -678,7 +680,7 @@ class metricModel extends model
      */
     public function calculateMetricByCode($code)
     {
-        $metric = $this->metricTao->fetchMetricByCode($code);
+        $metric = $this->getByCode($code);
         if(!$metric) return false;
 
         $calculator = $this->getCalculator($metric->scope, $metric->purpose, $metric->code);
@@ -710,7 +712,7 @@ class metricModel extends model
      */
     public function getResultByCodeWithArray($code, $options = array(), $type = 'realtime', $pager = null, $vision = 'rnd')
     {
-        $metric = $this->metricTao->fetchMetricByCode($code);
+        $metric = $this->getByCode($code);
         if(!$metric) return array();
         $dataFields = $this->getMetricRecordDateField($metric);
 
@@ -792,14 +794,18 @@ class metricModel extends model
     {
         if($type == 'cron')
         {
-            $metric     = $this->metricTao->fetchMetricByCode($code);
-            $dataFields = $this->getMetricRecordDateField($metric);
-            $options    = $this->setDefaultOptions($options, $dataFields);
+            $metric = $this->getByCode($code);
+            if(!empty($metric))
+            {
+                $dataFields = $this->getMetricRecordDateField($metric);
+                $options    = $this->setDefaultOptions($options, $dataFields);
 
-            return $this->metricTao->fetchMetricRecords($code, $dataFields, $options, $pager);
+                return $this->metricTao->fetchMetricRecords($code, $dataFields, $options, $pager);
+            }
+
         }
 
-        $metric = $this->metricTao->fetchMetricByCode($code);
+        $metric = $this->getByCode($code);
         if(!$metric) return false;
 
         $calculator = $this->getCalculator($metric->scope, $metric->purpose, $metric->code);
@@ -932,7 +938,7 @@ class metricModel extends model
      */
     public function getLatestResultByCode($code, $options = array(), $pager = null, $vision = 'rnd')
     {
-        $metric     = $this->metricTao->fetchMetricByCode($code);
+        $metric     = $this->getByCode($code);
         $dataFields = $this->getMetricRecordDateField($metric);
         $options    = $this->setDefaultOptions($options, $dataFields);
 
@@ -991,12 +997,40 @@ class metricModel extends model
 
         if(empty($fields)) return false;
 
-        $this->metricTao->createDistinctTempTable();
-        $this->metricTao->insertDistinctId2TempTable($code, $fields);
-        $this->metricTao->deleteDuplicationRecord($code);
-        $this->metricTao->dropDistinctTempTable();
+        $this->metricTao->setDeleted($code, 1);
+        $this->metricTao->keepLatestRecords($code, $fields);
+        $this->metricTao->executeDelete($code);
 
         return dao::isError();
+    }
+
+    /**
+     * 获取日志文件路径。
+     * Get log file.
+     *
+     * @access public
+     * @return string
+     */
+    public function getLogFile(): string
+    {
+        return $this->app->getTmpRoot() . 'log/metriclib.' . date('Ymd') . '.log.php';
+    }
+
+    /**
+     * 存储日志。
+     * Save logs.
+     *
+     * @param  string $log
+     * @access public
+     * @return void
+     */
+    public function saveLogs(string $log): void
+    {
+        $logFile = $this->getLogFile();
+        $log     = date('Y-m-d H:i:s') . ' ' . trim($log) . "\n";
+        if(!file_exists($logFile)) $log = "<?php\ndie();\n?" . ">\n" . $log;
+
+        file_put_contents($logFile, $log, FILE_APPEND);
     }
 
     /**
@@ -1009,7 +1043,7 @@ class metricModel extends model
      */
     public function getRecordFields(string $code): array|false
     {
-        $metric   = $this->metricTao->fetchMetricByCode($code);
+        $metric   = $this->getByCode($code);
         $dateType = $this->getDateTypeByCode($code);
         $fields   = array($metric->scope);
 
@@ -1565,13 +1599,12 @@ class metricModel extends model
      */
     public function processScopeList($stage = 'all')
     {
+        $metrics = $this->metricTao->fetchMetricsByScope($this->config->metric->scopeList);
         foreach($this->lang->metric->scopeList as $scope => $name)
         {
-            $metrics = $this->metricTao->fetchMetricsByScope($scope, 1);
-            if(empty($metrics))
+            if(!isset($metrics[$scope]))
             {
                 unset($this->lang->metric->scopeList[$scope]);
-
                 unset($this->lang->metric->featureBar['preview'][$scope]);
             }
         }
@@ -2478,15 +2511,20 @@ class metricModel extends model
      */
     public function getDateTypeByCode(string $code)
     {
-        /* Get dateType form db first. */
-        $metric = $this->getByCode($code, 'dateType');
-        if(!empty($metric->dateType)) return $metric->dateType;
+        static $dateTypes = array();
+        if(!isset($dateTypes[$code]))
+        {
+            /* Get dateType form db first. */
+            $metric = $this->getByCode($code, 'dateType');
 
-        /* Get dateType from config second. */
-        if(isset($this->config->metric->dateType[$code])) return $this->config->metric->dateType[$code];
+            if(!empty($metric->dateType)) $dateTypes[$code] = $metric->dateType;
+            /* Get dateType from config second. */
+            elseif(isset($this->config->metric->dateType[$code])) $dateTypes[$code] = $this->config->metric->dateType[$code];
+            /* Return nodate if no matches. */
+            else $dateTypes[$code] = 'nodate';
+        }
 
-        /* Return nodate if no matches. */
-        return 'nodate';
+        return $dateTypes[$code];
     }
 
     /**

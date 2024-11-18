@@ -25,6 +25,8 @@ class releaseModel extends model
      */
     public function getByID(int $releaseID, bool $setImgSize = false): object|false
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getRelease();
+
         $release = $this->dao->select('t1.*, t2.name as productName, t2.type as productType')
             ->from(TABLE_RELEASE)->alias('t1')
             ->leftJoin(TABLE_PRODUCT)->alias('t2')->on('t1.product = t2.id')
@@ -69,6 +71,8 @@ class releaseModel extends model
      */
     public function getList(int $productID, string|int $branch = 'all', string $type = 'all', string $orderBy = 't1.date_desc', string $releaseQuery = '', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getReleases();
+
         $releases = $this->dao->select('t1.*, t2.name as productName, t2.type as productType')->from(TABLE_RELEASE)->alias('t1')
             ->leftJoin(TABLE_PRODUCT)->alias('t2')->on('t1.product = t2.id')
             ->where('t1.deleted')->eq(0)
@@ -231,7 +235,7 @@ class releaseModel extends model
             $shadowBuild = new stdclass();
             $shadowBuild->product      = $release->product;
             $shadowBuild->branch       = $release->branch;
-            $shadowBuild->project      = (int)$release->project;
+            $shadowBuild->project      = isset($release->project) ? (int)$release->project : 0;
             $shadowBuild->builds       = $release->build;
             $shadowBuild->name         = $release->name;
             $shadowBuild->date         = $release->date;
@@ -1081,6 +1085,7 @@ class releaseModel extends model
 
         if(!empty($pager))
         {
+            $pager->recTotal = count($stories);
             $stories = array_chunk($stories, $pager->recPerPage);
             $stories = empty($stories) ? $stories : $stories[$pager->pageID - 1];
         }
@@ -1101,10 +1106,11 @@ class releaseModel extends model
      * @param  string $bugIdList
      * @param  string $orderBy
      * @param  object $pager
+     * @param  string $type      linked|left
      * @access public
      * @return array
      */
-    public function getBugList(string $bugIdList,  string $orderBy = '', object $pager = null): array
+    public function getBugList(string $bugIdList,  string $orderBy = '', object $pager = null, string $type = 'linked'): array
     {
         $bugs = array();
 
@@ -1117,7 +1123,7 @@ class releaseModel extends model
                 ->page($pager)
                 ->fetchAll();
 
-            $this->loadModel('common')->saveQueryCondition($this->dao->get(), 'leftBugs');
+            $this->loadModel('common')->saveQueryCondition($this->dao->get(), $type == 'linked' ? 'linkedBug' : 'leftBugs');
         }
 
         return $bugs;

@@ -97,6 +97,29 @@ class fileModel extends model
     }
 
     /**
+     * Get file by object.
+     *
+     * @param  string    $objectType
+     * @param  int       $objectID
+     * @param  string    $title
+     * @param  string    $extra
+     * @access public
+     * @return object|false
+     */
+    public function query(string $objectType, int $objectID = 0, string $title = '', string $extra = ''): object|false
+    {
+        $file = $this->dao->select('*')->from(TABLE_FILE)
+            ->where('objectType')->eq($objectType)
+            ->beginIF($objectID)->andWhere('objectID')->eq($objectID)->fi()
+            ->beginIF($title)->andWhere('title')->eq($title)->fi()
+            ->beginIF($extra)->andWhere('extra')->eq($extra)->fi()
+            ->fetch();
+        if(empty($file)) return false;
+
+        return $file;
+    }
+
+    /**
      * Get files by ID list.
      *
      * @param  string|array $fileIdList
@@ -165,7 +188,6 @@ class fileModel extends model
     {
         $now = helper::today();
 
-        if($file['size'] == 0) return false;
         if(!move_uploaded_file($file['tmpname'], $this->savePath . $this->getSaveName($file['pathname']))) return false;
 
         $file = $this->compressImage($file);
@@ -441,7 +463,8 @@ class fileModel extends model
      */
     public function setSavePath(): void
     {
-        $savePath = $this->app->getAppRoot() . "www/data/upload/{$this->app->company->id}/" . date('Ym/', $this->now);
+        $companyID = isset($this->app->company->id) ? $this->app->company->id : 1;
+        $savePath  = $this->app->getAppRoot() . "www/data/upload/{$companyID}/" . date('Ym/', $this->now);
         if(!file_exists($savePath))
         {
             mkdir($savePath, 0777, true);
@@ -458,7 +481,8 @@ class fileModel extends model
      */
     public function setWebPath(): void
     {
-        $this->webPath = $this->app->getWebRoot() . "data/upload/{$this->app->company->id}/";
+        $companyID     = isset($this->app->company->id) ? $this->app->company->id : 1;
+        $this->webPath = $this->app->getWebRoot() . "data/upload/{$companyID}/";
     }
 
     /**
@@ -575,7 +599,7 @@ class fileModel extends model
 
         $objectType = $file->objectType;
         $objectID   = $file->objectID;
-        $table      = $this->config->objectTables[$objectType];
+        $table      = zget($this->config->objectTables, $objectType, '');
 
         if(!$table) return true;
 
@@ -675,7 +699,7 @@ class fileModel extends model
                 $file['title']     = str_replace(".$extension", '', basename($file['pathname']));
 
                 $imagePath = $this->savePath . $this->getSaveName($file['pathname']);
-                if(is_writable($imagePath)) file_put_contents($imagePath, $imageData);
+                if(is_writable(dirname($imagePath))) file_put_contents($imagePath, $imageData);
                 $this->dao->insert(TABLE_FILE)->data($file)->exec();
                 $fileID = $this->dao->lastInsertID();
                 if($uid) $_SESSION['album'][$uid][] = $fileID;
@@ -853,23 +877,30 @@ class fileModel extends model
     /**
      * Update objectID.
      *
-     * @param  string $uid
-     * @param  int    $objectID
-     * @param  string $objectType
+     * @param  array|string|bool $uid
+     * @param  int               $objectID
+     * @param  string            $objectType
      * @access public
      * @return bool
      */
-    public function updateObjectID(string|bool $uid, int $objectID, string $objectType): bool
+    public function updateObjectID(array|string|bool $uid, int $objectID, string $objectType): bool
     {
         if(empty($uid)) return true;
-        if(empty($_SESSION['album']['used'][$uid])) return true;
 
-        $data = new stdclass();
-        $data->objectID   = $objectID;
-        $data->objectType = $objectType;
-        if(!defined('RUN_MODE') || RUN_MODE != 'api') $data->extra = 'editor';
+        if(is_string($uid)) $uid = array($uid);
+        if(!is_array($uid)) return true;
 
-        $this->dao->update(TABLE_FILE)->data($data)->where('id')->in($_SESSION['album']['used'][$uid])->exec();
+        foreach($uid as $value)
+        {
+            if(empty($_SESSION['album']['used'][$value])) continue;
+
+            $data = new stdclass();
+            $data->objectID   = $objectID;
+            $data->objectType = $objectType;
+            if(!defined('RUN_MODE') || RUN_MODE != 'api') $data->extra = 'editor';
+
+            $this->dao->update(TABLE_FILE)->data($data)->where('id')->in($_SESSION['album']['used'][$value])->exec();
+        }
         return !dao::isError();
     }
 
@@ -885,6 +916,7 @@ class fileModel extends model
     {
         $moduleName = $this->app->getModuleName();
         $methodName = $this->app->getMethodName();
+        if($moduleName == 'story' && isset($data->type)) $moduleName = $data->type;
         if(is_string($fields)) $fields = explode(',', str_replace(' ', '', $fields));
 
         $textareaFields = $this->dao->select('id,field')->from(TABLE_WORKFLOWFIELD)->where('module')->eq($moduleName)->andWhere('control')->eq('richtext')->andWhere('buildin')->eq('0')->fetchPairs();
@@ -971,15 +1003,26 @@ class fileModel extends model
 
         /* Append the extension name auto. */
         $extension = $fileType ? ('.' . $fileType) : '';
-        if(strpos($fileName, $extension) === false) $fileName .= $extension;
+        if($extension && strpos($fileName, $extension) === false) $fileName .= $extension;
 
         /* Judge the content type. */
         $mimes       = $this->config->file->mimes;
         $contentType = isset($mimes[$fileType]) ? $mimes[$fileType] : $mimes['default'];
-        $fileName    = str_replace('+', ' ', urlencode($fileName));
+
+        /* Safari浏览器下载文件名乱码问题。 */
+        if($fileType != 'zip' && preg_match("/Safari/", $_SERVER["HTTP_USER_AGENT"]))
+        {
+            $fileName   = rawurlencode($fileName);
+            $attachment = 'attachment; filename*=utf-8\'\'' . $fileName;
+        }
+        else
+        {
+            $fileName   = str_replace("+", "%20", urlencode($fileName));
+            $attachment = "attachment; filename=\"{$fileName}\";";
+        }
 
         helper::header('Content-type', $contentType);
-        helper::header('Content-Disposition', "attachment; filename=\"$fileName\"");
+        helper::header('Content-Disposition', $attachment);
         helper::header('Pragma', 'no-cache');
         helper::header('Expires', '0');
         if($type == 'content') helper::end($content);
@@ -1104,7 +1147,7 @@ class fileModel extends model
      */
     public function printFile(object $file, string $method, bool $showDelete, bool $showEdit, object|null $object): string
     {
-        if(!common::hasPriv('file', 'download')) return '';
+        if(!common::hasPriv('file', 'download') && !common::hasPriv('file', 'preview')) return '';
 
         $html = '';
 
@@ -1123,10 +1166,11 @@ class fileModel extends model
         $downloadLink  = helper::createLink('file', 'download', "fileID=$file->id");
         $downloadLink .= strpos($downloadLink, '?') === false ? '?' : '&';
         $downloadLink .= $sessionString;
+        $fileTitleLink = common::hasPriv('file', 'download') ? html::a($downloadLink, $fileTitle . " <span class='text-gray'>({$fileSize})</span>", '_blank', "id='fileTitle$file->id'") : "<div id='fileTitle$file->id' style='display: inline-block'>" . $fileTitle . " <span class='text-gray'>({$fileSize})</span></div>";
 
         $objectType = zget($this->config->file->objectType, $file->objectType);
 
-        $html .= "<li class='mb-2 file' title='{$uploadDate}'>" . html::a($downloadLink, $fileTitle . " <span class='text-gray'>({$fileSize})</span>", '_blank', "id='fileTitle$file->id'");
+        $html .= "<li class='mb-2 file' title='{$uploadDate}'>" . $fileTitleLink;
         if(strpos('view,edit', $method) !== false)
         {
             if(common::hasPriv($objectType, 'view', $object)) $html = $this->buildFileActions($html, $downloadLink, $imageWidth, $showEdit, $showDelete, $file, $object);
@@ -1174,16 +1218,18 @@ class fileModel extends model
         }
 
         /* For the open source version of the file judgment. */
-        $canPreview = false;
+        $canPreview   = false;
+        $officeTypes  = 'doc|docx|xls|xlsx|ppt|pptx|pdf';
+        $isOfficeFile = stripos($officeTypes, $file->extension) !== false;
         if(stripos('txt|jpg|jpeg|gif|png|bmp|mp4', $file->extension) !== false) $canPreview = true;
-        if(isset($this->config->file->libreOfficeTurnon) and $this->config->file->libreOfficeTurnon == 1)
-        {
-            $officeTypes = 'doc|docx|xls|xlsx|ppt|pptx|pdf';
-            if(stripos($officeTypes, $file->extension) !== false) $canPreview = true;
-        }
+        if(isset($this->config->file->libreOfficeTurnon) and $this->config->file->libreOfficeTurnon == 1 && $isOfficeFile) $canPreview = true;
 
-        if($canPreview) $html .= html::a($downloadLink, "<i class='icon icon-eye'></i>", '_blank', "class='fileAction btn btn-link text-primary' title='{$this->lang->file->preview}' onclick=\"return downloadFile($file->id, '$file->extension', $imageWidth, '$file->title')\"");
-        if(common::hasPriv('file', 'download')) $html .= html::a(helper::createLink('file', 'download', "fileID=$file->id"), "<i class='icon icon-download'></i>", '_blank', "class='fileAction btn btn-link text-primary' title='{$this->lang->file->downloadFile}'");
+        if($canPreview)
+        {
+            $dataToggle = $isOfficeFile ? '' : " data-toggle='modal' data-size='lg'";
+            $html      .= html::a(helper::createLink('file', 'download', "fileID=$file->id&mouse=left"), "<i class='icon icon-eye'></i>", $isOfficeFile ? '_blank' : '', "class='fileAction btn btn-link text-primary' title='{$this->lang->file->preview}' {$dataToggle}");
+        }
+        if(common::hasPriv('file', 'download')) $html .= html::a($downloadLink, "<i class='icon icon-download'></i>", '_blank', "class='fileAction btn btn-link text-primary' title='{$this->lang->file->downloadFile}'");
         if(common::hasPriv($objectType, 'edit', $object))
         {
             if($showEdit and common::hasPriv('file', 'edit')) $html .= html::a('###', "<i class='icon icon-pencil-alt'></i>", '', "id='renameFile$file->id' class='fileAction btn btn-link edit text-primary' onclick='showRenameBox($file->id)' title='{$this->lang->file->edit}'");

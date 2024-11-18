@@ -275,7 +275,7 @@ class Expression extends Component
                     $isExpr = true;
                 } elseif (
                     $brackets === 0 && strlen((string) $ret->expr) > 0 && ! $alias
-                    && ($ret->table === null || $ret->table === '')
+                    && (($ret->table === null || $ret->table === '') || $token->keyword === 'END')
                 ) {
                     /* End of expression */
                     break;
@@ -488,6 +488,6 @@ class Expression extends Component
             $ret .= ' AS ' . Context::escape($component->alias);
         }
 
-        return $ret;
+        return $ret . PHP_EOL;
     }
 }

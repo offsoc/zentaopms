@@ -10,6 +10,9 @@ class thinkStepMenu extends wg
 
     protected static array $defineProps = array(
         'modules: array',
+        'wizard: object',
+        'marketID?: int',
+        'from?: string',
         'activeKey?: int',
         'hover?: bool=true',
         'showAction?: bool=true',
@@ -34,9 +37,22 @@ class thinkStepMenu extends wg
         return file_get_contents(__DIR__ . DS . 'js' . DS . 'v1.js');
     }
 
+    private function getQuotedText(array $modules, string $quotedTitle): string
+    {
+        foreach($modules as $item)
+        {
+            if($item->id == $quotedTitle) return sprintf($this->lang->thinkstep->treeLabel, $item->index);
+            if(!empty($item->children))
+            {
+                $childrenResult = $this->getQuotedText($item->children, $quotedTitle);
+                if($childrenResult) return $childrenResult;
+            }
+        }
+        return '';
+    }
+
     private function buildMenuTree(array $items, int $parentID = 0): array
     {
-        jsVar('from', data('from') ?? '');
         if(empty($items)) $items = $this->modules;
         if(empty($items)) return array();
 
@@ -48,12 +64,21 @@ class thinkStepMenu extends wg
         foreach($items as $setting)
         {
             if(!is_object($setting)) continue;
+            $options     = !empty($setting->options) && is_string($setting->options) ? json_decode($setting->options) : array();
+            $quotedTitle = !empty($options->quoteTitle) ? $options->quoteTitle : null;
+            $quotedText  = '';
+            /* 给引用其他问题的多选题添加标签。Add tags to multiple-choice questions that reference other questions. */
+            if($quotedTitle)
+            {
+                $quotedText = $this->getQuotedText($this->modules, $quotedTitle);
+            }
 
             $canView     = common::hasPriv('thinkstep', 'view');
             $unClickable = $toggleNonNodeShow && $setting->id != $activeKey && $setting->type != 'node' && json_decode($setting->answer) == null;
             $item        = array(
                 'key'         => $setting->id,
                 'text'        => (isset($setting->index) ? ($setting->index . '. ') : '') . $setting->title,
+                'subtitle'    => !empty($quotedText) ? array('html' => "<span class='label size-sm rounded-full warning-pale'>$quotedText</span>") : null,
                 'hint'        => $unClickable ? $this->lang->thinkrun->error->unanswered :$setting->title,
                 'url'         => $unClickable || !$canView ? '' : $setting->url,
                 'data-id'     => $setting->id,
@@ -119,6 +144,8 @@ class thinkStepMenu extends wg
 
     private function getOperateItems($item): array
     {
+        global $config;
+        $wizard             = $this->prop('wizard');
         $canAddChild        = true;
         $showQuestionOfNode = true;
         if(!empty($item->children))
@@ -129,13 +156,12 @@ class thinkStepMenu extends wg
                 if($showQuestionOfNode && $child->type == 'node') $showQuestionOfNode = false;
             }
         }
-
         $canCreate   = common::hasPriv('thinkstep', 'create');
         $canEdit     = common::hasPriv('thinkstep', 'edit');
         $canDelete   = common::hasPriv('thinkstep', 'delete');
+        $canLink     = common::hasPriv('thinkstep', 'link');
         $parentID    = $item->type != 'node' ? $item->parent : $item->id;
-        $confirmTips = $this->lang->thinkstep->deleteTips[$item->type];
-
+        $confirmTips = empty($item->link) ? $this->lang->thinkstep->deleteTips[$item->type] : array('message' => $this->lang->thinkstep->tips->deleteLinkStep, 'icon' => 'icon-exclamation-sign', 'iconClass' => 'warning-pale rounded-full icon-2x', 'size' => 'sm');
         $menus            = array();
         $transitionAction = array();
         if($canCreate)
@@ -162,7 +188,38 @@ class thinkStepMenu extends wg
             );
         }
 
-        $marketID = data('marketID');
+        $marketID      = $this->prop('marketID');
+        $itemHasQuoted = empty($item->hasQuoted) || $item->hasQuoted == 0;
+        $deleteItem    = (!$item->existNotNode && $itemHasQuoted) ? array(
+            'key'          => 'deleteNode',
+            'icon'         => 'trash',
+            'text'         => $this->lang->thinkstep->actions['delete'],
+            'innerClass'   => 'ajax-submit',
+            'data-url'     => createLink('thinkstep', 'delete', "marketID={$marketID}&stepID={$item->id}"),
+            'data-confirm' => $confirmTips,
+        ) : array(
+            'key'        => 'deleteNode',
+            'icon'       => 'trash',
+            'text'       => $this->lang->thinkstep->actions['delete'],
+            'innerClass' => 'text-gray opacity-50',
+            'hint'       => $item->existNotNode ? $this->lang->thinkstep->cannotDeleteNode : $this->lang->thinkstep->cannotDeleteQuestion,
+        );
+        $linkItem = ($canLink && $item->type === 'question') ? array(
+            'key'          => 'linkNode',
+            'icon'         => 'link',
+            'text'         => $this->lang->thinkstep->actions['link'],
+            'data-url'     => createLink('thinkstep', 'link', "marketID={$marketID}&stepID={$item->id}"),
+            'data-toggle'  => 'modal',
+            'data-dismiss' => 'modal',
+            'data-size'    => 'sm'
+        ) : array(
+            'key'          => 'linkNode',
+            'icon'         => 'link',
+            'text'         => $this->lang->thinkstep->actions['link'],
+            'innerClass'   => 'text-gray opacity-50',
+            'hint'         => $this->lang->thinkstep->tips->linkBlocks
+        );
+
         $menus = array_merge($menus, array(
             $canEdit ? array(
                 'key'  => 'editNode',
@@ -170,20 +227,8 @@ class thinkStepMenu extends wg
                 'text' => $this->lang->thinkstep->actions['edit'],
                 'url'  => createLink('thinkstep', 'edit', "marketID={$marketID}&stepID={$item->id}")
             ) : null,
-            $canDelete ? (!$item->existNotNode ? array(
-                'key'          => 'deleteNode',
-                'icon'         => 'trash',
-                'text'         => $this->lang->thinkstep->actions['delete'],
-                'innerClass'   => 'ajax-submit',
-                'data-url'     => createLink('thinkstep', 'delete', "marketID={$marketID}&stepID={$item->id}"),
-                'data-confirm' => $confirmTips,
-            ) : array(
-                'key'        => 'deleteNode',
-                'icon'       => 'trash',
-                'text'       => $this->lang->thinkstep->actions['delete'],
-                'innerClass' => 'text-gray opacity-50',
-                'hint'       => $this->lang->thinkstep->cannotDeleteNode,
-            )) : null
+            $canDelete ? $deleteItem : null,
+            in_array($wizard->model, $config->thinkwizard->venn) && $item->type == 'question' && $canLink ? $linkItem : null
         ), $transitionAction);
 
         if($canCreate && (($showQuestionOfNode && $item->type == 'node') || $item->hasSameQuestion || $item->type == 'question')) $menus = array_merge($menus, array(
@@ -191,7 +236,7 @@ class thinkStepMenu extends wg
             $this->buildMenuItem('radio', 'radio', $this->lang->thinkstep->createStep . $this->lang->thinkstep->actions['radio'], $item, $parentID, 'radio'),
             $this->buildMenuItem('checkbox', 'checkbox', $this->lang->thinkstep->createStep . $this->lang->thinkstep->actions['checkbox'], $item, $parentID, 'checkbox'),
             $this->buildMenuItem('input', 'input', $this->lang->thinkstep->createStep . $this->lang->thinkstep->actions['input'], $item, $parentID, 'input'),
-            $this->buildMenuItem('tableInput', 'cell-input', $this->lang->thinkstep->createStep . $this->lang->thinkstep->actions['tableInput'], $item, $parentID, 'tableInput'),
+            $this->buildMenuItem('tableInput', 'multi-input', $this->lang->thinkstep->createStep . $this->lang->thinkstep->actions['tableInput'], $item, $parentID, 'tableInput'),
             $this->buildMenuItem('multicolumn', 'multi-input', $this->lang->thinkstep->createStep . $this->lang->thinkstep->actions['multicolumn'], $item, $parentID, 'multicolumn'),
         ));
         return $menus;
@@ -224,12 +269,14 @@ class thinkStepMenu extends wg
         $treeProps   = $this->props->pick(array('items', 'activeClass', 'activeIcon', 'activeKey', 'onClickItem', 'defaultNestedShow', 'changeActiveKey', 'isDropdownMenu', 'checkbox', 'checkOnClick', 'onCheck', 'sortable', 'onSort'));
         $isInSidebar = $this->parent instanceof sidebar;
         $treeType    = (!empty($treeProps['onSort']) || !empty($treeProps['sortable'])) ? 'sortableTree' : 'tree';
+        list($marketID, $from) = $this->prop(array('marketID', 'from'));
 
         return array
         (
             div
             (
-                setClass('think-node-menu rounded bg-white col bg-canvas pb-3 h-full'),
+                setClass('think-node-menu rounded bg-white col bg-canvas pb-3 h-full no-morph'),
+                setData(array('marketID' => $marketID, 'from' => $from ?? '')),
                 zui::$treeType
                 (
                     set::_id('thinkNodeMenu'),

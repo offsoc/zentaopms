@@ -24,6 +24,7 @@ $isCustomExport      = (!empty($customExport) and !empty($allExportFields));
 $showBizGuide        = $config->edition == 'open' && empty($config->{$this->moduleName}->closeBizGuide) ? true : false;
 $bizGuideLink        = common::checkNotCN() ? 'https://www.zentao.pm/page/zentao-pricing.html' : 'https://www.zentao.net/page/enterprise.html';
 $bizName             = $showBizGuide ? "<a href='{$bizGuideLink}' target='_blank' class='text-primary'>{$lang->bizName}</a>" : '';
+$defaultExportFields = '';
 
 if($isCustomExport)
 {
@@ -31,7 +32,7 @@ if($isCustomExport)
     $hasDefaultField  = isset($selectedFields);
     $selectedFields   = $hasDefaultField ? explode(',', $selectedFields) : array();
     $moduleName       = $this->moduleName;
-    $moduleLang       = $lang->$moduleName;
+    $moduleLang       = $moduleName == 'caselib' ? $lang->testcase : $lang->$moduleName;
 
     $exportFieldPairs = array();
     foreach($allExportFields as $key => $field)
@@ -196,12 +197,16 @@ formPanel
         setClass('justify-center'),
         div
         (
-            setClass('form-actions'),
-            btn
+            setClass('form-actions col text-center'),
+            div
             (
-                set::btnType('submit'),
-                set::type('primary'),
-                $lang->export
+                btn
+                (
+                    on::click()->do("$(target).parent().addClass('disabled');$(target).parent().attr('disabled');$(target).closest('.form-actions').append('<span class=\"text-gray\">{$lang->file->waitDownloadTip}</span>');"),
+                    set::btnType('submit'),
+                    set::type('primary'),
+                    $lang->export
+                )
             )
         )
     ),
@@ -276,6 +281,7 @@ window.onChangeFileType = function(event)
     encodePicker.render({disabled: true});
 
     $('#tplBox').toggleClass('hidden', fileType == 'word');
+    $('.customFieldsBox').toggleClass('hidden', fileType == 'word' || !$('#showCustomFieldsBox').prop('checked'));
 }
 
 window.onChangeFileName = function(event)
@@ -354,17 +360,31 @@ setExportTPL();
 if($('.dtable .dtable-header .has-checkbox').length > 0)
 {
     const dtable = zui.DTable.query($('.dtable .dtable-header .has-checkbox').closest('.dtable')[0]);
-    const checkedList = dtable ? dtable.$.getChecks() : [];
+    let checkedList = dtable ? dtable.$.getChecks() : [];
     if(checkedList.length)
     {
         if(window.config.currentModule == 'testcase') checkedList.forEach(function(item, index){ checkedList[index] = item.replace('case_', '');});
         if(window.config.currentModule == 'product') checkedList.forEach(function(item, index){if(item.indexOf('-')) checkedList[index] = item.substr(item.indexOf('-') + 1);});
+        if(window.config.currentModule == 'testtask' && window.config.currentMethod == 'cases')
+        {
+            let caseIDList = [];
+            checkedList.forEach(function(item, index) {
+                let testrun = dtable.options.data.find(obj => obj.id == item);
+                let caseID  = testrun ? testrun.case : null;
 
-        $('#exportType').val('selected');
+                if(caseID) caseIDList.push(caseID);
+            });
+            checkedList = caseIDList;
+        }
+
+        waitDom('#exportPanel [name=exportType]', function(){ $('#exportPanel [name=exportType]').zui('picker').$.setValue('selected');});
         $.cookie.set('checkedItem', checkedList.join(','), {expires:config.cookieLife, path:config.webRoot});
     }
+    else
+    {
+        $.cookie.set('checkedItem', '', {expires:config.cookieLife, path:config.webRoot});
+    }
 }
-
 
 /**
  * 关闭升级到企业版提示。

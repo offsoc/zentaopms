@@ -77,10 +77,10 @@ $createMenu = array();
 $modal      = $productID ? 'modal' : false;
 if($canCreateStory)                   $createMenu[] = array('text' => $lang->story->create, 'url' => $productID ? helper::createLink('story', 'create', "productID=$productID&branch=0&moduleID=0&story=0&execution=$execution->id") : 'javascript:;', 'data-toggle' => $modal, 'data-size' => 'lg', 'data-on' => 'click', 'data-call' => 'checkProducts');
 if($canBatchCreateStory)              $createMenu[] = array('text' => $lang->story->batchCreate, 'url' => $productID ? (count($productNames) > 1 ? '#batchCreateStory' : helper::createLink('story', 'batchCreate', "productID=$productID&branch=$branchID&moduleID=0&story=0&execution=$execution->id")) : 'javascript:;', 'data-toggle' => $modal, 'data-size' => 'lg', 'data-on' => 'click', 'data-call' => 'checkProducts');
-if($canLinkStory)                     $createMenu[] = array('text' => $lang->execution->linkStory, 'url' => $productID ? helper::createLink('execution', 'linkStory', "execution=$execution->id") : 'javascript:;', 'data-toggle' => $modal, 'data-size' => 'lg', 'data-on' => 'click', 'data-call' => 'checkProducts');
+if($canLinkStory)                     $createMenu[] = array('text' => $lang->execution->linkStory, 'url' => $productID ? helper::createLink('execution', 'linkStory', "execution=$execution->id") : 'javascript:;', 'data-toggle' => $modal, 'data-size' => 'lg', 'data-on' => 'click', 'data-call' => 'checkProducts', 'class' => 'linkStory-btn');
 if($canLinkStoryByPlan)               $createMenu[] = array('text' => $lang->execution->linkStoryByPlan, 'url' => $productID ? "#linkStoryByPlan" : 'javascript:;', 'data-toggle' => $modal, 'data-size' => 'sm', 'data-on' => 'click', 'data-call' => 'checkProducts');
 if($hasStoryButton && $hasTaskButton) $createMenu[] = array('type' => 'divider');
-if($canCreateBug)                     $createMenu[] = array('text' => $lang->bug->create, 'url' => helper::createLink('bug', 'create', "productID=$productID&branch=0&extra=executionID=$execution->id"), 'data-toggle' => 'modal', 'data-size' => 'lg');
+if($canCreateBug)                     $createMenu[] = array('text' => $lang->bug->create, 'url' => helper::createLink('bug', 'create', "productID=$productID&branch=0&extra=executionID=$execution->id"), 'data-toggle' => 'modal', 'data-size' => 'lg', 'class' => 'bug-create-btn');
 if($canBatchCreateBug)
 {
     if(count($productNames) > 1)
@@ -98,6 +98,7 @@ if($canImportBug)  $createMenu[] = array('text' => $lang->execution->importBug, 
 if($canImportTask) $createMenu[] = array('text' => $lang->execution->importTask, 'url' => helper::createLink('execution', 'importTask', "execution=$execution->id"));
 if($canBatchCreateTask) $createMenu[] = array('text' => $lang->execution->batchCreateTask, 'url' => helper::createLink('task', 'batchCreate', "execution=$execution->id"), 'data-toggle' => 'modal', 'data-size' => 'lg');
 
+jsVar('taskToOpen', $taskToOpen);
 jsVar('laneCount', $laneCount);
 jsVar('kanbanLang', $lang->kanban);
 jsVar('storyLang', $lang->story);
@@ -281,7 +282,7 @@ toolbar
     (
         btn
         (
-            setClass('primary btn btn-default'),
+            setClass('primary btn btn-default create-btn'),
             set::icon('plus'),
             $lang->create,
         ),

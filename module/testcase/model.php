@@ -127,6 +127,8 @@ class testcaseModel extends model
      */
     public function getExecutionCases(string $browseType = 'all', int $executionID = 0, int $productID = 0, int|string $branchID = 0, int $moduleID = 0, int $paramID = 0, string $orderBy = 'id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getCases();
+
         if($browseType == 'needconfirm')
         {
             return $this->dao->select('distinct t1.*, t2.*')->from(TABLE_PROJECTCASE)->alias('t1')
@@ -170,6 +172,8 @@ class testcaseModel extends model
      */
     public function getById(int $caseID, int $version = 0): object|bool
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getCase();
+
         $case = $this->dao->findById($caseID)->from(TABLE_CASE)->fetch();
         if(!$case) return false;
 
@@ -258,6 +262,8 @@ class testcaseModel extends model
      */
     public function getTestCases(int $productID, string|int $branch, string $browseType, int $queryID, int $moduleID, string $caseType = '', string $auto = 'no', string $orderBy = 'id_desc', object $pager = null): array
     {
+        if(common::isTutorialMode()) return $this->loadModel('tutorial')->getCases();
+
         $modules    = $moduleID ? $this->loadModel('tree')->getAllChildId($moduleID) : array();
         $browseType = ($browseType == 'bymodule' and $this->session->caseBrowseType and $this->session->caseBrowseType != 'bysearch') ? $this->session->caseBrowseType : $browseType;
         $auto       = $this->cookie->onlyAutoCase ? 'auto' : $auto;
@@ -1206,6 +1212,8 @@ class testcaseModel extends model
     public function importToLib(array $cases, array $steps, array $files): bool
     {
         $this->loadModel('action');
+        $caseIdList  = array_column($cases, 'id');
+        $oldCaseList = $this->getByList($caseIdList);
         foreach($cases as $case)
         {
             /* 如果用例没有 ID，插入用例。 */
@@ -1223,7 +1231,8 @@ class testcaseModel extends model
             /* If case id is exist, update it. */
             else
             {
-                $caseID = $case->id;
+                $caseID  = $case->id;
+                $oldCase = isset($oldCaseList[$caseID]) ? $oldCaseList[$caseID] : null;
                 $this->testcaseTao->doUpdate($case);
                 $this->action->create('case', $caseID, 'updatetolib', '', $case->fromCaseID);
 
@@ -1238,6 +1247,13 @@ class testcaseModel extends model
                     $datePath = substr($file->pathname, 0, 6);
                     $filePath = $this->app->getAppRoot() . "www/data/upload/{$this->app->company->id}/" . "{$datePath}/" . $filePath;
                     if(file_exists($filePath)) unlink($filePath);
+                }
+
+                if(!empty($oldCase) && $oldCase->lib && empty($oldCase->product))
+                {
+                    $fromcaseVersion = $this->dao->select('fromCaseVersion')->from(TABLE_CASE)->where('fromCaseID')->eq($case->id)->fetch('fromCaseVersion');
+                    $fromcaseVersion = (int)$fromcaseVersion + 1;
+                    $this->dao->update(TABLE_CASE)->set('`fromCaseVersion`')->eq($fromcaseVersion)->where('`fromCaseID`')->eq($case->id)->exec();
                 }
             }
             if(isset($caseID))
@@ -1497,85 +1513,117 @@ class testcaseModel extends model
             {
                 if($field != 'stepDesc' and $field != 'stepExpect') continue;
                 $value = (string)$value;
-                if($field == 'stepDesc' or $field == 'stepExpect')
+
+                $steps = $value;
+                if(strpos($value, "\n"))
                 {
-                    $steps = $value;
-                    if(strpos($value, "\n"))
+                    $steps = explode("\n", $value);
+                }
+                elseif(strpos($value, "\r"))
+                {
+                    $steps = explode("\r", $value);
+                }
+                if(is_string($steps)) $steps = explode("\n", $steps);
+
+                $stepKey  = str_replace('step', '', strtolower($field));
+
+                $caseStep = array();
+                foreach($steps as $step)
+                {
+                    $trimmedStep = trim($step);
+                    if(empty($trimmedStep)) continue;
+
+                    preg_match('/^((([0-9]+)[.]([0-9]+))[.]([0-9]+))[.、](.*)$/Uu', $trimmedStep, $out);
+                    if(!$out) preg_match('/^(([0-9]+)[.]([0-9]+))[.、](.*)$/Uu', $trimmedStep, $out);
+                    if(!$out) preg_match('/^([0-9]+)[.、](.*)$/Uu', $trimmedStep, $out);
+                    if($out && !empty(trim($out[1])))
                     {
-                        $steps = explode("\n", $value);
+                        $count  = count($out);
+                        $num    = $out[1];
+                        $parent = $count > 4 ? $out[2] : '0';
+                        $grand  = $count > 6 ? $out[3] : '0';
+                        $step   = trim($out[2]);
+                        if($count > 4) $step = $count > 6 ? trim($out[6]) : trim($out[4]);
+
+                        $caseStep[$num]['content'] = $step;
+                        $caseStep[$num]['number']  = $num;
+
+                        $caseStep[$num]['type'] = $count > 4 ? 'item' : 'step';
+                        if(!empty($parent)) $caseStep[$parent]['type'] = 'group';
+                        if(!empty($grand)) $caseStep[$grand]['type']   = 'group';
                     }
-                    elseif(strpos($value, "\r"))
+                    elseif(isset($num))
                     {
-                        $steps = explode("\r", $value);
+                        $caseStep[$num]['content'] = isset($caseStep[$num]['content']) ? "{$caseStep[$num]['content']}\n{$step}" : "\n{$step}";
                     }
-                    if(is_string($steps)) $steps = explode("\n", $steps);
-
-                    $stepKey  = str_replace('step', '', strtolower($field));
-
-                    $caseStep = array();
-                    foreach($steps as $step)
+                    elseif($field == 'stepDesc')
                     {
-                        $trimmedStep = trim($step);
-                        if(empty($trimmedStep)) continue;
-
-                        preg_match('/^((([0-9]+)[.]([0-9]+))[.]([0-9]+))[.、](.*)$/Uu', $trimmedStep, $out);
-                        if(!$out) preg_match('/^(([0-9]+)[.]([0-9]+))[.、](.*)$/Uu', $trimmedStep, $out);
-                        if(!$out) preg_match('/^([0-9]+)[.、](.*)$/Uu', $trimmedStep, $out);
-                        if($out)
-                        {
-                            $count  = count($out);
-                            $num    = $out[1];
-                            $parent = $count > 4 ? $out[2] : '0';
-                            $grand  = $count > 6 ? $out[3] : '0';
-                            $step   = trim($out[2]);
-                            if($count > 4) $step = $count > 6 ? trim($out[6]) : trim($out[4]);
-
-                            if(!empty($step))
-                            {
-                                $caseStep[$num]['content'] = $step;
-                                $caseStep[$num]['number']  = $num;
-                            }
-
-                            $caseStep[$num]['type'] = $count > 4 ? 'item' : 'step';
-                            if(!empty($parent)) $caseStep[$parent]['type'] = 'group';
-                            if(!empty($grand)) $caseStep[$grand]['type']   = 'group';
-                        }
-                        elseif(isset($num))
-                        {
-                            $caseStep[$num]['content'] = isset($caseStep[$num]['content']) ? "{$caseStep[$num]['content']}\n{$step}" : "\n{$step}";
-                        }
-                        elseif($field == 'stepDesc')
-                        {
-                            $num = 1;
-                            $caseStep[$num]['content'] = $step;
-                            $caseStep[$num]['type']    = 'step';
-                            $caseStep[$num]['number']  = $num;
-                        }
-                        elseif($field == 'stepExpect' && isset($stepData[$row]['desc']))
-                        {
-                            end($stepData[$row]['desc']);
-                            $num = key($stepData[$row]['desc']);
-                            $caseStep[$num]['content'] = $step;
-                            $caseStep[$num]['number']  = $num;
-                        }
+                        $num = 1;
+                        $caseStep[$num]['content'] = $step;
+                        $caseStep[$num]['type']    = 'step';
+                        $caseStep[$num]['number']  = $num;
                     }
-                    unset($num);
-                    unset($sign);
-                    if($stepKey == 'expect' && !empty($stepData[$row]['desc']))
+                    elseif($field == 'stepExpect' && isset($stepData[$row]['desc']))
                     {
-                        foreach($stepData[$row]['desc'] as $stepDescValue)
-                        {
-                            if(empty($stepDescValue['number'])) continue;
-                            $caseNumber = $stepDescValue['number'];
-
-                            if($stepDescValue && !isset($caseStep[$caseNumber]) || empty($caseStep[$caseNumber]['content'])) $caseStep[$caseNumber] = '';
-                        }
+                        end($stepData[$row]['desc']);
+                        $num = key($stepData[$row]['desc']);
+                        $caseStep[$num]['content'] = $step;
+                        $caseStep[$num]['number']  = $num;
                     }
-                    $stepVars += count($caseStep, COUNT_RECURSIVE) - count($caseStep);
-                    $stepData[$row][$stepKey] = $caseStep;
+                }
+                unset($num);
+                unset($sign);
+                if($stepKey == 'expect' && !empty($stepData[$row]['desc']))
+                {
+                    foreach($stepData[$row]['desc'] as $stepDescValue)
+                    {
+                        if(empty($stepDescValue['number'])) continue;
+                        $caseNumber = $stepDescValue['number'];
+
+                        if($stepDescValue && !isset($caseStep[$caseNumber]) || empty($caseStep[$caseNumber]['content'])) $caseStep[$caseNumber] = '';
+                    }
+                }
+                $stepVars += count($caseStep, COUNT_RECURSIVE) - count($caseStep);
+                $stepData[$row][$stepKey] = $caseStep;
+            }
+        }
+
+        /* Fix bug#52689. */
+        foreach($stepData as $index => $step)
+        {
+            $descCount   = count($step['desc']);
+            $expectCount = count($step['expect']);
+            if($expectCount > $descCount)
+            {
+                foreach($step['expect'] as $num => $expect)
+                {
+                    if($num > $descCount && $expect['content'])
+                    {
+                        $stepData[$index]['expect'][$descCount]['content'] .= "\n{$expect['content']}";
+                        unset($stepData[$index]['expect'][$num]);
+                    }
                 }
             }
         }
+
+        /* Fix bug#52689. */
+        foreach($stepData as $index => $step)
+        {
+            $descCount   = count($step['desc']);
+            $expectCount = count($step['expect']);
+            if($expectCount > $descCount)
+            {
+                foreach($step['expect'] as $num => $expect)
+                {
+                    if($num > $descCount && $expect['content'])
+                    {
+                        $stepData[$index]['expect'][$descCount]['content'] .= "\n{$expect['content']}";
+                        unset($stepData[$index]['expect'][$num]);
+                    }
+                }
+            }
+        }
+
         return $stepData;
     }
 
@@ -2124,8 +2172,7 @@ class testcaseModel extends model
 
         foreach($testcases as $testcase)
         {
-            $testcase = (object)$testcase;
-            $result   = $this->saveTestcase($testcase, $sceneIDList);
+            $result = $this->saveTestcase($testcase, $sceneIDList);
             if($result['result'] == 'fail')
             {
                 $this->dao->rollBack();
@@ -2153,42 +2200,27 @@ class testcaseModel extends model
         $nodeID = $testcase->tmpPId;
         if(isset($sceneIdList[$nodeID]['id'])) $scene = $sceneIdList[$nodeID]['id'];
 
-        $case = new stdclass();
-        $case->scene   = $scene;
-        $case->module  = $testcase->module;
-        $case->product = $testcase->product;
-        $case->branch  = $testcase->branch;
-        $case->title   = $testcase->name;
-        $case->pri     = $testcase->pri;
-        $case->version = 1;
+        unset($testcase->tmpPId);
+        $testcase->scene = $scene;
 
-        $case = $this->processCaseSteps($case, $testcase);
-
-        $oldCase = false;
-        $caseID  = (int)zget($testcase, 'id', 0);
-        if($caseID) $oldCase = $this->fetchBaseInfo($caseID);
-        if(empty($oldCase))
+        if(empty($testcase->id))
         {
-            $case->type       = 'feature';
-            $case->status     = 'normal';
-            $case->openedBy   = $this->app->user->account;
-            $case->openedDate = helper::now();
-
-            $this->create($case);
+            $this->create($testcase);
         }
         else
         {
-            $case->id             = $caseID;
-            $case->version        = $oldCase->version + 1;
-            $case->lastEditedBy   = $this->app->user->account;
-            $case->lastEditedDate = helper::now();
-
-            $this->update($case, $oldCase);
+            $oldCase = $this->getById($testcase->id);
+            $changes = $this->update($testcase, $oldCase);
+            if($changes)
+            {
+                $actionID = $this->loadModel('action')->create('case', $testcase->id, 'edited');
+                $this->action->logHistory($actionID, $changes);
+            }
         }
 
         if(dao::isError()) return array('result' => 'fail', 'message' => dao::getError(true));
 
-        return array('result' => 'success', 'message' => 1, 'testcaseID' => $caseID);
+        return array('result' => 'success', 'message' => 1, 'testcaseID' => zget($testcase, 'id', 0));
     }
 
     /**
@@ -2215,7 +2247,9 @@ class testcaseModel extends model
             {
                 if(isset($stepList[$step->tmpPId]))
                 {
-                    $parentStep  = $stepList[$step->tmpPId];
+                    $parentStep = $stepList[$step->tmpPId];
+                    $parentStep->children = isset($parentStep->children) ? $parentStep->children : array();
+
                     $step->index = $parentStep->index . '.' . (count($parentStep->children) + 1);
                     $parentStep->children[] = $step;
                 }

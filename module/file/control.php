@@ -68,7 +68,7 @@ class file extends control
     {
         $file = $this->file->getUpload($field);
 
-        if(!isset($file[0]) or !in_array($file[0]['extension'], $this->config->file->imageExtensions)) return print(json_encode(array('result' => 'fail', 'message' => $this->lang->file->errorFileFormat)));
+        if(!isset($file[0]) or strpos(",{$this->config->file->allowed},", ",{$file[0]['extension']},") === false) return print(json_encode(array('result' => 'fail', 'message' => $this->lang->file->errorFileFormat)));
 
         $file = $file[0];
         if($file)
@@ -199,6 +199,7 @@ class file extends control
                         $row->$fieldName = preg_replace($pattern, $replacement, $row->$fieldName);
                     }
 
+                    if(isset($row->$fieldName) && is_numeric($row->$fieldName)) $row->$fieldName = $row->$fieldName . "\t";
                     $output .= isset($row->$fieldName) ? str_replace(array('"', '&nbsp;', '&gt;'), array('“', ' ', '>'), htmlSpecialString(strip_tags((string)$row->$fieldName, '<img>'))) : '';
                     $output .= '","';
                 }
@@ -314,6 +315,7 @@ class file extends control
 
             /* Update test case version for test case synchronization. */
             if($file->objectType == 'testcase') $this->file->updateTestcaseVersion($file);
+            if($file->objectType == 'charter')  $this->loadModel('charter')->updateFileByDelete($file);
 
             if(!helper::isAjaxRequest()) return print(js::reload('parent'));
             return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'load' => true));
@@ -534,6 +536,28 @@ class file extends control
         }
     }
 
+    /**
+     * Query the file.
+     *
+     * @param  int    $fileID
+     * @param  string $objectType
+     * @param  int    $objectID
+     * @param  string $title
+     * @param  string $extra
+     * @param  int    $stream
+     * @access public
+     * @return void
+     */
+    public function ajaxQuery(int $fileID, string $objectType = '', int $objectID = 0, string $title = '', string $extra = '', int $stream = 0)
+    {
+        if($fileID) return $this->fetch('file', 'read', "fileID=$fileID&stream=$stream");
+
+        if(!empty($title)) $title = base64_decode($title);
+        $file = $this->file->query($objectType, $objectID, $title, $extra);
+        if(empty($file)) return $this->send(array('result' => 'fail', 'message' => $this->lang->file->fileNotFound, 'load' => helper::createLink('my', 'index'), 'closeModal' => true));
+        $fileID = $file->id;
+        return $this->fetch('file', 'read', "fileID=$fileID&stream=$stream");
+    }
 
     /**
      * 关闭升级到企业版提示。

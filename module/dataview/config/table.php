@@ -1,5 +1,6 @@
 <?php
-global $lang;
+global $lang, $app;
+$app->loadLang('bi');
 $config->dataview->schema = new stdclass();
 $config->dataview->schema->dtable = new stdclass();
 $config->dataview->schema->dtable->fieldList = array();
@@ -16,7 +17,6 @@ $config->dataview->schema->dtable->fieldList['type']['name'] = 'type';
 $config->dataview->schema->dtable->fieldList['type']['type'] = 'category';
 
 $config->dataview->schema->dtable->fieldList['length']['name']  = 'length';
-$config->dataview->schema->dtable->fieldList['length']['title'] = $lang->dataview->length;
 $config->dataview->schema->dtable->fieldList['length']['type']  = 'number';
 
 $config->dataview->schema->dtable->fieldList['null']['name']  = 'null';

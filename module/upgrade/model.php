@@ -185,7 +185,7 @@ class upgradeModel extends model
         $this->loadModel('product')->refreshStats(true);
         $this->deletePatch();
         $this->processDataset();
-        $this->upgradeMetricData();
+        $this->upgradeScreenAndMetricData();
 
         if($fromEdition == 'open')
         {
@@ -1147,7 +1147,7 @@ class upgradeModel extends model
         static $mysqlVersion;
         if($mysqlVersion === null) $mysqlVersion = $this->loadModel('install')->getDatabaseVersion();
 
-        $ignoreCode = '|1050|1054|1060|1091|1061|'; // Get ignore code when execing.
+        $ignoreCode = '|1050|1054|1060|1091|1061|';
         $sqls       = $this->parseToSqls($sqlFile); // Get sqls in the file.
         foreach($sqls as $sql)
         {
@@ -6038,7 +6038,8 @@ class upgradeModel extends model
             $this->lang->workflowaction->upgrade->actions = $labels;
             foreach($upgradeConfig[$module] as $code => $config) $this->config->workflowaction->upgrade->$code = $config;
 
-            $flow = $this->workflow->getByModule($module);
+            $flow = $this->dao->select('*')->from(TABLE_WORKFLOW)->where('module')->eq($module)->fetch();
+            if(!$flow) continue;
             $this->workflow->createActions($flow, 'upgrade');
 
             $this->dao->update(TABLE_WORKFLOWACTION)->set('extensionType')->eq('none')->set('role')->eq('buildin')->where('module')->eq($module)->andWhere('action')->in(array_keys($labels))->exec();
@@ -6573,7 +6574,6 @@ class upgradeModel extends model
             if(dao::isError()) return false;
 
             $projectID = $this->dao->lastInsertID();
-            $this->action->create('project', $projectID, 'openedbysystem');
             if($project->status == 'closed') $this->action->create('project', $projectID, 'closedbysystem');
 
             if($fromMode == 'classic')
@@ -6581,9 +6581,13 @@ class upgradeModel extends model
                 $this->dao->update(TABLE_PROJECT)->set('multiple')->eq('0')->where('id')->eq($sprint->id)->exec();
                 $this->dao->update(TABLE_DOCLIB)->set('project')->eq($projectID)->set('type')->eq('project')->set('execution')->eq(0)->where('execution')->eq($sprint->id)->andWhere('type')->eq('execution')->exec();
                 $this->dao->update(TABLE_DOC)->set('project')->eq($projectID)->set('execution')->eq(0)->where('execution')->eq($sprint->id)->exec();
+                $this->dao->update(TABLE_ACTION)->set('objectType')->eq('project')->set('objectID')->eq($projectID)->set('project')->eq($projectID)->set('execution')->eq('0')->where('objectID')->eq($sprint->id)->andWhere('objectType')->eq('execution')->exec();
+                $this->dao->update(TABLE_ACTION)->set('project')->eq($projectID)->set('execution')->eq('0')->where('execution')->eq($sprint->id)->exec();
             }
             else
             {
+                $this->action->create('project', $projectID, 'openedbysystem');
+
                 $project->id = $projectID;
                 $this->upgradeTao->createProjectDocLib($project);
             }
@@ -7128,9 +7132,11 @@ class upgradeModel extends model
     public function processDashboard()
     {
         $dashboards = $this->dao->select('*')->from(TABLE_DASHBOARD)->fetchAll();
+        $id = 1002;
         foreach($dashboards as $dashboard)
         {
             $screen = new stdclass();
+            $screen->id          = $id;
             $screen->name        = $dashboard->name;
             $screen->dimension   = 1;
             $screen->desc        = $dashboard->desc;
@@ -7140,6 +7146,7 @@ class upgradeModel extends model
             $screen->createdBy   = $dashboard->createdBy;
             $screen->createdDate = $dashboard->createdDate;
             $this->dao->insert(TABLE_SCREEN)->data($screen)->exec();
+            $id++;
         }
 
         $this->dao->exec("ALTER TABLE " . TABLE_CHART . " DROP `dataset`");
@@ -7175,7 +7182,7 @@ class upgradeModel extends model
             $component->attr->h = round(54 * $option->h);
 
             $type  = !empty($option->i->type) ? $option->i->type : 'chart';
-            $chart = $this->loadModel($type)->getByID($option->i->id);
+            $chart = $this->loadModel($type)->getByID($option->i->id, false, 'published', false);
 
             if($chart)
             {
@@ -7206,7 +7213,6 @@ class upgradeModel extends model
                 $chart->langs    = json_encode($chart->langs);
 
                 $chartFilters = !empty($chart->filters) ? json_decode($chart->filters, true) : array();
-                $component    = $this->screen->getChartOption($chart, $component, $chartFilters);
             }
 
             $componentList[] = $component;
@@ -7743,6 +7749,7 @@ class upgradeModel extends model
             $data->vars        = $report->vars;
             $data->langs       = $report->langs;
             $data->stage       = 'published';
+            $data->mode        = 'text';
             $data->step        = 4;
             $data->desc        = $report->desc;
             $data->createdBy   = $report->addedBy;
@@ -8053,6 +8060,7 @@ class upgradeModel extends model
         $this->loadModel('pivot');
         $this->loadModel('chart');
         $this->loadModel('dataview');
+        $this->loadModel('bi');
 
         $pivotList = $this->dao->select('*')->from(TABLE_PIVOT)->where('deleted')->eq(0)->fetchAll('id');
         foreach($pivotList as $pivotID => $pivot)
@@ -8062,7 +8070,7 @@ class upgradeModel extends model
             $filters = json_decode($pivot->filters, true);
             $filters = $this->pivot->setFilterDefault(empty($filters) ? array() : $filters);
             $sql     = trim(str_replace(';', '', $pivot->sql));
-            $sql     = $this->chart->parseSqlVars($sql, $filters);
+            $sql     = $this->bi->parseSqlVars($sql, $filters);
 
             $this->dbh->setAttribute(PDO::ATTR_ERRMODE, PDO::ERRMODE_SILENT);
             $stmt = $this->dbh->query($sql);
@@ -9115,21 +9123,25 @@ class upgradeModel extends model
     }
 
     /**
-     * 更新升级度量项数据。
-     * Import metric data.
+     * 更新升级大屏和度量项数据。
+     * Import screen and metric data.
      *
      * @access public
      * @return bool
      */
-    public function upgradeMetricData()
+    public function upgradeScreenAndMetricData()
     {
+        $this->loadModel('bi');
         $this->saveLogs('Run Method ' . __FUNCTION__);
         $this->dao->clearTablesDescCache();
 
-        $metricSQLs = $this->loadModel('bi')->prepareBuiltinMetricSQL('update');
+        $metricSQLs  = $this->bi->prepareBuiltinMetricSQL('update');
+        $screenSQLs  = $this->bi->prepareBuiltinScreenSQL('update');
+        $upgradeSqls = array_merge($metricSQLs, $screenSQLs);
+
         try
         {
-            foreach($metricSQLs as $sql)
+            foreach($upgradeSqls as $sql)
             {
                 $sql = trim($sql);
                 if(empty($sql)) continue;
@@ -9137,7 +9149,7 @@ class upgradeModel extends model
                 $this->saveLogs($sql);
 
                 $sql = str_replace('zt_', $this->config->db->prefix, $sql);
-                $this->dbh->query($sql);
+                $this->dbh->exec($sql);
                 if(dao::isError()) return false;
             }
         }
@@ -9161,19 +9173,14 @@ class upgradeModel extends model
     {
         $this->loadModel('bi');
         $this->saveLogs('Run Method ' . __FUNCTION__);
-
         $this->dao->clearTablesDescCache();
-        /* Prepare built-in sqls of bi. */
 
-        $upgradeSqls = array();
-        if($this->config->db->driver == 'mysql')
-        {
-            $chartSQLs   = $this->bi->prepareBuiltinChartSQL('update');
-            $pivotSQLs   = $this->bi->prepareBuiltinPivotSQL('update');
-            $upgradeSqls = array_merge($upgradeSqls, $chartSQLs, $pivotSQLs);
-        }
-        $screenSQLs  = $this->bi->prepareBuiltinScreenSQL('update');
-        $upgradeSqls = array_merge($upgradeSqls, $screenSQLs);
+        if($this->config->db->driver != 'mysql') return true;
+
+        /* Prepare built-in sqls of bi. */
+        $chartSQLs   = $this->bi->prepareBuiltinChartSQL('update');
+        $pivotSQLs   = $this->bi->prepareBuiltinPivotSQL('update');
+        $upgradeSqls = array_merge($chartSQLs, $pivotSQLs);
 
         try
         {
@@ -9847,5 +9854,223 @@ class upgradeModel extends model
         }
 
         return $node;
+    }
+
+    /**
+     * 修正工作流字段选项。
+     * Fix workflowfield options.
+     *
+     * @access public
+     * @return bool
+     */
+    public function fixWorkflowFieldOptions(): bool
+    {
+        $datasourceID = $this->dao->select('*')->from(TABLE_WORKFLOWDATASOURCE)->where('code')->eq('requirements')->fetch('id');
+        if($datasourceID != 5) return true;
+
+        $fieldOptions = $this->dao->select('*')->from(TABLE_WORKFLOWFIELD)->where('options')->ne('')->fetchPairs('id', 'options');
+        foreach($fieldOptions as $id => $options)
+        {
+            if(!is_numeric($options)) continue;
+            if($options < 5) continue;
+            $this->dao->update(TABLE_WORKFLOWFIELD)->set('options')->eq($options + 2)->where('id')->eq($id)->exec();
+        }
+        return true;
+    }
+
+    /**
+     * Append flow fields for belong.
+     *
+     * @access public
+     * @return void
+     */
+    public function appendFlowFieldsForBelong()
+    {
+        $flows = $this->dao->select('*')->from(TABLE_WORKFLOW)->where('buildin')->eq('0')->fetchAll('id');
+        if(empty($flows)) return true;
+
+        $flowTables    = $this->dao->query("SHOW tables LIKE 'zt_flow_%'")->fetchAll(PDO::FETCH_COLUMN);
+        $flowTableDesc = array();
+        foreach($flowTables as $flowTable)
+        {
+            $desc = $this->dao->query("DESC $flowTable")->fetchAll(PDO::FETCH_ASSOC);
+            $flowTableDesc[$flowTable] = array_column($desc, NULL, 'Field');
+        }
+
+        $defaultData = array('type' => 'mediumint', 'length' => '8', 'control' => 'select', 'readonly' => 1, 'buildin' => 1, 'role' => 'default');
+        $orders      = array('program' => '1', 'product' => '2', 'project' => '3', 'execution' => '4');
+        $fields      = array();
+        $fields['execution'] = "ALTER TABLE %table% ADD `execution` mediumint(8) unsigned NOT NULL DEFAULT 0 AFTER `id`";
+        $fields['project']   = "ALTER TABLE %table% ADD `project` mediumint(8) unsigned NOT NULL DEFAULT 0 AFTER `id`";
+        $fields['product']   = "ALTER TABLE %table% ADD `product` mediumint(8) unsigned NOT NULL DEFAULT 0 AFTER `id`";
+        $fields['program']   = "ALTER TABLE %table% ADD `program` mediumint(8) unsigned NOT NULL DEFAULT 0 AFTER `id`";
+        foreach($flows as $flow)
+        {
+            if(!isset($flowTableDesc[$flow->table])) continue;
+            if($flow->vision == 'lite') continue;
+
+            foreach($fields as $field => $addSQL)
+            {
+                if($flow->vision == 'or' && $field != 'product') continue;
+
+                $searchedField = '';
+                foreach(array_keys($flowTableDesc[$flow->table]) as $existField)
+                {
+                    if($field == strtolower($existField))
+                    {
+                        $searchedField = $existField;
+                        break;
+                    }
+                }
+                if($searchedField)
+                {
+                    $tableDesc    = $flowTableDesc[$flow->table];
+                    $newFieldName = "{$searchedField}_1";
+                    $oldField     = $this->dao->select('*')->from(TABLE_WORKFLOWFIELD)->where('module')->eq($flow->module)->andWhere('field')->eq($searchedField)->fetch();
+                    if(isset($tableDesc[$newFieldName]) || ($oldField && ($oldField->buildin || $oldField->readonly)))
+                    {
+                        $this->dao->exec("ALTER TABLE {$flow->table} DROP `{$searchedField}`");
+                        $this->dao->delete()->from(TABLE_WORKFLOWFIELD)->where('module')->eq($flow->module)->andWhere('field')->eq("{$searchedField}")->exec();
+                    }
+                    elseif($oldField)
+                    {
+                        $this->dao->update(TABLE_WORKFLOWFIELD)->set('field')->eq("{$newFieldName}")->where('module')->eq($flow->module)->andWhere('field')->eq($searchedField)->exec();
+                        $this->dao->update(TABLE_WORKFLOWSQL)->set('field')->eq("{$newFieldName}")->where('module')->eq($flow->module)->andWhere('field')->eq($searchedField)->exec();
+
+                        $newField = clone $oldField;
+                        $newField->field = $newFieldName;
+
+                        $this->loadModel('workflowfield');
+                        $this->workflowfield->processTable($flow->table, $oldField, $newField);
+                        $this->workflowfield->updateRelated($flow, $oldField, $newFieldName);
+                    }
+                }
+
+                $this->dao->exec(str_replace('%table%', $flow->table, $addSQL));
+
+                $data = $defaultData;
+                $data['module']   = $flow->module;
+                $data['field']    = $field;
+                $data['name']     = $this->lang->upgrade->flowFields[$field];
+                $data['options']  = $field;
+                $data['order']    = $orders[$field];
+                $this->dao->replace(TABLE_WORKFLOWFIELD)->data($data)->exec();
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Process demand files.
+     *
+     * @access public
+     * @return bool
+     */
+    public function processDemandFiles(): bool
+    {
+        $demandIdList = $this->dao->select('objectID')->from(TABLE_FILE)->where('extra')->eq('')->andWhere('objectType')->eq('demand')->fetchPairs('objectID', 'objectID');
+
+        $latestVersion = $this->dao->select('id,version')->from(TABLE_DEMAND)->where('id')->in($demandIdList)->fetchPairs('id', 'version');
+
+        foreach($demandIdList as $demandID)
+        {
+            if(!isset($latestVersion[$demandID])) continue;
+
+            $this->dao->update(TABLE_FILE)->set('extra')->eq($latestVersion[$demandID])->where('objectID')->eq($demandID)->andWhere('objectType')->eq('demand')->exec();
+        }
+
+        return true;
+    }
+
+    /**
+     * Process tables of sql builder.
+     *
+     * @access public
+     * @return void
+     */
+    public function processSqlbuilderTables()
+    {
+        $prefix = $this->config->db->prefix;
+        $sqlbuilderSettings = $this->dao->select('id,setting')->from(TABLE_SQLBUILDER)->fetchPairs();
+        foreach($sqlbuilderSettings as $id => $setting)
+        {
+            $setting = json_decode($setting, true);
+
+            if($setting['from']['table'] && strpos($setting['from']['table'], 'zt_') === false) $setting['from']['table'] = $prefix . $setting['from']['table'];
+
+            foreach($setting['joins'] as $index => $join)
+            {
+                if($setting['joins'][$index]['table'] && strpos($setting['joins'][$index]['table'], 'zt_') === false) $setting['joins'][$index]['table'] = $prefix . $join['table'];
+            }
+
+            $this->dao->update(TABLE_SQLBUILDER)->set('setting')->eq(json_encode($setting))->where('id')->eq($id)->exec();
+        }
+        return !dao::isError();
+    }
+
+    /**
+     * Upgrade demand files.
+     *
+     * @access public
+     * @return bool
+     */
+    public function upgradeMyDocSpace()
+    {
+        $this->loadModel('doc');
+        $this->app->loadLang('doclib');
+
+        $spacesGroup = $this->dao->select('*')->from(TABLE_DOCLIB)
+            ->where('deleted')->eq(0)
+            ->andWhere('vision')->eq($this->config->vision)
+            ->andWhere('type')->eq('mine')
+            ->orderBy('`order` asc, id_asc')
+            ->fetchGroup('addedBy', 'id');
+
+        foreach($spacesGroup as $account => $spaces)
+        {
+            $space = new stdclass();
+            $space->type      = 'mine';
+            $space->vision    = 'rnd';
+            $space->parent    = 0;
+            $space->name      = $this->lang->doclib->defaultSpace;
+            $space->main      = '1';
+            $space->acl       = 'private';
+            $space->addedBy   = $account;
+            $space->addedDate = helper::now();
+            $spaceID = $this->doc->doInsertLib($space);
+
+            $this->dao->update(TABLE_DOCLIB)->set('parent')->eq($spaceID)->where('id')->in(array_keys($spaces))->exec();
+            $this->dao->update(TABLE_DOCLIB)->set('main')->eq(0)->where('id')->in(array_keys($spaces))->exec();
+        }
+    }
+
+    /**
+     * 历史产品、项目绑定默认工作流模板。
+     *
+     * @access public
+     * @return void
+     */
+    public function processWorkflowGroups()
+    {
+        $workflowGroups = $this->dao->select('code, id')->from(TABLE_WORKFLOWGROUP)->where('main')->eq('1')->fetchPairs();
+
+        foreach($workflowGroups as $code => $groupID)
+        {
+            if($code == 'productproject')
+            {
+                $this->dao->update(TABLE_PRODUCT)->set('workflowGroup')->eq($groupID)->exec();
+            }
+            else
+            {
+                $this->dao->update(TABLE_PROJECT)
+                     ->set('workflowGroup')->eq($groupID)
+                     ->where('type')->eq('project')
+                     ->beginIF($code == 'scrumproduct')->andWhere('model')->in('scrum,agileplus')->andWhere('hasProduct')->eq('1')->fi()
+                     ->beginIF($code == 'scrumproject')->andWhere('model')->in('scrum,agileplus')->andWhere('hasProduct')->eq('0')->fi()
+                     ->beginIF($code == 'waterfallproduct')->andWhere('model')->in('waterfall,waterfallplus,ipd')->andWhere('hasProduct')->eq('1')->fi()
+                     ->beginIF($code == 'waterfallproject')->andWhere('model')->in('waterfall,waterfallplus,ipd')->andWhere('hasProduct')->eq('0')->fi()
+                     ->exec();
+            }
+        }
     }
 }

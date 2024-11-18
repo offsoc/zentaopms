@@ -580,7 +580,7 @@ class testcaseZen extends testcase
         }
 
         $this->view->productID       = $productID;
-        $this->view->productName     = $this->products[$productID];
+        $this->view->productName     = zget($this->products, $productID, '');
         $this->view->product         = $product;
         $this->view->branch          = (!empty($product) and $product->type != 'normal') ? $branch : 0;
         $this->view->branchOption    = $branchOption;
@@ -607,7 +607,7 @@ class testcaseZen extends testcase
         $showModule = !empty($this->config->testcase->browse->showModule) ? $this->config->testcase->browse->showModule : '';
         $tree       = $moduleID ? $this->tree->getByID($moduleID) : '';
 
-        $this->view->title       = $this->products[$productID] . $this->lang->hyphen . $this->lang->testcase->common;
+        $this->view->title       = zget($this->products, $productID, '') . $this->lang->hyphen . $this->lang->testcase->common;
         $this->view->projectID   = $projectID;
         $this->view->projectType = !empty($projectID) ? $this->dao->select('model')->from(TABLE_PROJECT)->where('id')->eq($projectID)->fetch('model') : '';
         $this->view->browseType  = $browseType;
@@ -1303,6 +1303,9 @@ class testcaseZen extends testcase
         $case = $this->testcase->appendCaseFails($case, $from, $taskID);
         $case = $this->processStepsForMindMap($case);
 
+        $sceneOptionMenu = $this->testcase->getSceneMenu($case->product, $case->module);
+        if(!isset($sceneOptionMenu[$case->scene])) $sceneOptionMenu += $this->testcase->getScenesName((array)$case->scene);
+
         $this->view->from       = $from;
         $this->view->taskID     = $taskID;
         $this->view->runID      = $from == 'testcase' ? 0 : $run->id;
@@ -1313,6 +1316,7 @@ class testcaseZen extends testcase
         $this->view->preAndNext = !isOnlybody() ? $this->loadModel('common')->getPreAndNextObject('testcase', $case->id) : '';
         $this->view->users      = $this->user->getPairs('noletter');
         $this->view->actions    = $this->loadModel('action')->getList('case', $case->id);
+        $this->view->scenes     = $sceneOptionMenu;
     }
 
     /**
@@ -1537,7 +1541,7 @@ class testcaseZen extends testcase
             /* Build inserted case. */
             else
             {
-                $case->product        = $productID;
+                $case->product    = $productID;
                 $case->version    = 1;
                 $case->openedBy   = $this->app->user->account;
                 $case->openedDate = $now;
@@ -1549,6 +1553,82 @@ class testcaseZen extends testcase
             $case->expects   = $case->expect;
             $case->frequency = 1;
             unset($case->desc, $case->expect, $case->rawID);
+        }
+
+        return $cases;
+    }
+
+    /**
+     * 根据 xmind 构建导入用例的数据。
+     * Build imported cases by xmind data.
+     *
+     * @param  int       $productID
+     * @param  string    $branch
+     * @param  array     $caseList
+     * @param  bool      $isInsert
+     * @access protected
+     * @return array
+     */
+    protected function buildCasesByXmind(int $productID, string $branch, array $caseList, bool $isInsert): array
+    {
+        $caseIdList     = array_filter(array_map(function($case){return zget($case, 'id', 0);}, $caseList));
+        $now            = helper::now();
+        $forceNotReview = $this->testcase->forceNotReview();
+        $account        = $this->app->user->account;
+        $oldCases       = $this->testcase->getByList($caseIdList);
+        $oldSteps       = $this->testcase->fetchStepsByList($caseIdList);
+        $branch         = (int)$branch;
+        $modules        = $this->loadModel('tree')->getOptionMenu($productID, 'case');
+
+        $cases = array();
+        foreach($caseList as $caseData)
+        {
+            $moduleID = (int)$caseData['module'];
+            $case     = new stdclass();
+            $case->module  = isset($modules[$moduleID]) ? $moduleID : 0;
+            $case->product = $productID;
+            $case->branch  = $branch;
+            $case->title   = $caseData['name'];
+            $case->pri     = $caseData['pri'];
+            $case->tmpPId  = $caseData['tmpPId'];
+            $case->version = 1;
+
+            $case = $this->testcase->processCaseSteps($case, (object)$caseData);
+
+            $caseID  = (int)zget($caseData, 'id', 0);
+            $oldCase = zget($oldCases, $caseID, null);
+
+            if(empty($oldCase) || $isInsert)
+            {
+                $case->type       = 'feature';
+                $case->status     = !$forceNotReview ? 'wait' : 'normal';
+                $case->openedBy   = $account;
+                $case->openedDate = $now;
+            }
+            else
+            {
+                $oldStep     = zget($oldSteps, $caseID, array());
+                $stepChanged = (count($oldStep) != count($case->steps));
+                if(!$stepChanged)
+                {
+                    $desc     = array_values($case->steps);
+                    $expect   = array_values($case->expects);
+                    $stepType = array_values($case->stepType);
+                    foreach($oldStep as $index => $step)
+                    {
+                        if($stepChanged) break;
+                        if(!isset($desc[$index]) || !isset($expect[$index]) || $step->desc != $desc[$index] || $step->expect != $expect[$index] || $step->type != $stepType[$index]) $stepChanged = true;
+                    }
+                }
+                $case->version     = $stepChanged ? (int)$oldCase->version + 1 : (int)$oldCase->version;
+                $case->stepChanged = $stepChanged;
+                if($stepChanged && !$forceNotReview) $case->status = 'wait';
+
+                $case->id             = $caseID;
+                $case->lastEditedBy   = $account;
+                $case->lastEditedDate = $now;
+            }
+            $cases[] = $case;
         }
 
         return $cases;
@@ -2067,9 +2147,9 @@ class testcaseZen extends testcase
      *
      * @param  array     $cases
      * @access protected
-     * @return void
+     * @return array
      */
-    protected function importCases(array $cases): void
+    protected function importCases(array $cases): array
     {
         $this->loadModel('action');
         $daoErrors = array();
@@ -2090,11 +2170,14 @@ class testcaseZen extends testcase
             }
             else
             {
-                $caseID = $this->testcase->create($case);
+                $caseID   = $this->testcase->create($case);
+                $case->id = $caseID;
                 dao::isError() ? $daoErrors = array_merge($daoErrors, dao::getError()) : $this->testcase->syncCase2Project($case, $caseID);
             }
         }
         if(!empty($daoErrors)) dao::$errors = $daoErrors;
+
+        return $cases;
     }
 
     /**
@@ -2370,10 +2453,11 @@ class testcaseZen extends testcase
      * @param  string    $branch
      * @param  int       $maxImport
      * @param  string    $tmpFile
+     * @param  string    $message
      * @access protected
      * @return void
      */
-    protected function responseAfterShowImport(int $productID, string $branch = '0', int $maxImport = 0, string $tmpFile = ''): array
+    protected function responseAfterShowImport(int $productID, string $branch = '0', int $maxImport = 0, string $tmpFile = '', string $message = ''): array
     {
         if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
 
@@ -2387,7 +2471,7 @@ class testcaseZen extends testcase
         {
             $locateLink = inlink('showImport', "productID={$productID}&branch={$branch}&pagerID=" . ((int)$this->post->pagerID + 1) . "&maxImport={$maxImport}&insert=" . zget($_POST, 'insert', ''));
         }
-        return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'load' => $locateLink));
+        return $this->send(array('result' => 'success', 'message' => $message ? $message : $this->lang->saveSuccess, 'load' => $locateLink));
     }
 
     /**
@@ -2526,7 +2610,7 @@ class testcaseZen extends testcase
         $this->config->testcase->search['params']['scene']['values']   = $this->testcase->getSceneMenu($productID, $moduleID, $branch, 0, 0, true);
         $this->config->testcase->search['params']['lib']['values']     = $this->loadModel('caselib')->getLibraries();
 
-        $product = $this->loadModel('product')->fetchByID($productID);
+        $product = $this->loadModel('product')->getByID($productID);
         if((isset($product->type) && $product->type == 'normal') || $this->app->tab == 'project')
         {
             unset($this->config->testcase->search['fields']['branch']);
@@ -2764,11 +2848,8 @@ class testcaseZen extends testcase
                 $step   = trim($out[2]);
                 if($count > 4) $step = $count > 6 ? trim($out[6]) : trim($out[4]);
 
-                if(!empty($step))
-                {
-                    $caseSteps[$num]['content'] = $step;
-                    $caseSteps[$num]['number']  = $num;
-                }
+                $caseSteps[$num]['content'] = $step;
+                $caseSteps[$num]['number']  = $num;
 
                 $caseSteps[$num]['type'] = $count > 4 ? 'item' : 'step';
                 if(!empty($parent)) $caseSteps[$parent]['type'] = 'group';

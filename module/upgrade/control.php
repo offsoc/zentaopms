@@ -11,6 +11,10 @@
  */
 class upgrade extends control
 {
+    public function ajaxUpgradeDocSpace()
+    {
+        $this->upgrade->upgradeMyDocSpace();
+    }
     /**
      * The index page.
      *
@@ -174,7 +178,7 @@ class upgrade extends control
         {
             $this->view->result = 'sqlFail';
             $this->view->errors = $this->upgrade->getError();
-            $this->display();
+            return $this->display();
         }
 
         $this->upgradeZen->afterExecuteSql($fromVersion, $rawFromVersion);
@@ -541,7 +545,7 @@ class upgrade extends control
     {
         /* 如果数据库有冲突，显示更改的 sql。*/
         /* If there is a conflict with the standard database, display the changed sql. */
-        $alterSQL = $this->upgrade->checkConsistency($this->config->version);
+        $alterSQL = $this->config->db->driver == 'mysql' ? $this->upgrade->checkConsistency() : array();
         if(!empty($alterSQL)) return $this->displayConsistency($alterSQL);
 
         /**
@@ -588,7 +592,7 @@ class upgrade extends control
         $hasError = $this->upgrade->hasConsistencyError();
         if(file_exists($logFile)) unlink($logFile);
 
-        $alterSQL = $this->upgrade->checkConsistency();
+        $alterSQL = $this->config->db->driver == 'mysql' ? $this->upgrade->checkConsistency() : array();
         if(empty($alterSQL))
         {
             /* 能访问禅道官网插件接口跳转到检查插件页面，否则跳转到选择版本页面。*/
@@ -775,15 +779,15 @@ class upgrade extends control
     }
 
     /**
-     * 升级度量项内置数据。
-     * Upgrade metric built-in data.
+     * 升级大屏和度量项内置数据。
+     * Upgrade screen and metric built-in data.
      *
      * @access public
      * @return void
      */
-    public function ajaxUpgradeMetricData()
+    public function ajaxUpgradeScreenAndMetricData()
     {
-        $this->upgrade->upgradeMetricData();
+        $this->upgrade->upgradeScreenAndMetricData();
         echo 'ok';
     }
 

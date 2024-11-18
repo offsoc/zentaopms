@@ -41,7 +41,8 @@
     let zinbar        = null;
     let historyState  = parent.window.history.state;
     const hasZinBar   = DEBUG && window.zin && window.zin.zinTool && !isIndexPage;
-    const localCacheFirst = config.cache === 'local-first';
+    const localCacheFirst = config.clientCache === 'local-first';
+    const isTutorial  = top.config.currentModule === 'tutorial';
 
     function getUrlID(url)
     {
@@ -114,7 +115,11 @@
             if(DEBUG) showLog('Update', [code, title], {state, code, url, title});
             return state;
         },
-        updateAppUrl:      function(url, title){return $.apps.updateApp(currentCode, url, title)},
+        updateAppUrl: function(url, title)
+        {
+            currentAppUrl = url;
+            return $.apps.updateApp(currentCode, url, title);
+        },
         isOldPage:         () => false,
         reloadApp:         function(_code, url){loadPage(url);},
         openApp:           function(url, options){loadPage(url, options);},
@@ -159,7 +164,7 @@
         if($bar.length) return;
 
         $bar = $('<div id="zinbar"></div>').insertAfter('body');
-        zinbar = new zui.Zinbar($bar[0]);
+        zinbar = new zui.Zinbar($bar[0], typeof window.zin.zinTool === 'object' ? window.zin.zinTool : {});
     }
 
     function registerTimer(callback, time, type)
@@ -176,8 +181,9 @@
         config = window.config;
         const $body = $(document.body);
         const classList = ($body.attr('class') || '').split(' ').filter(x => x.length && !x.startsWith('m-'));
-        classList.push(`m-${config.currentModule}-${config.currentMethod}`);
-        $body.attr('class', classList.join(' '));
+        const pageID = `${config.currentModule}-${config.currentMethod}`;
+        classList.push(`m-${pageID}`);
+        $body.attr('class', classList.join(' ')).attr('data-page', pageID).attr('data-page-raw', `${config.rawModule}-${config.rawMethod}`);
     }
 
     function updatePageCSS(data, _info, options)
@@ -190,8 +196,9 @@
     function updatePageJS(data, _info, options)
     {
         if(window.onPageUnmount) window.onPageUnmount();
+        $(document).trigger('pageunmount.app');
 
-        ['beforePageLoad', 'beforeRequestContent', 'onPageUnmount', 'beforePageUpdate', 'afterPageUpdate', 'onPageRender'].forEach(key =>
+        ['beforePageLoad', 'beforeRequestContent', 'onPageUnmount', 'beforePageUpdate', 'afterPageUpdate', 'onPageRender', 'afterPageRender'].forEach(key =>
         {
             if(window[key]) delete window[key];
         });
@@ -334,7 +341,11 @@
         const $navbar = $('#navbar');
 
         const $newNav = $(data);
-        if($newNav.text().trim() !== $navbar.text().trim() || $newNav.find('.nav-item>a').map((_, element) => element.href).get().join(' ') !== $navbar.find('.nav-item>a').map((_, element) => element.href).get().join(' ')) return $navbar.empty().append($newNav);
+        if(
+            $newNav.find('.item').length !== $navbar.find('.item').length
+            || $newNav.text().trim() !== $navbar.text().trim()
+            || $newNav.find('.nav-item>a').map((_, element) => element.href).get().join(' ') !== $navbar.find('.nav-item>a').map((_, element) => element.href).get().join(' ')
+        ) return $navbar.empty().append($newNav);
 
         activeNav($newNav.find('.nav-item>a.active').data('id'), $navbar);
         layoutNavbar();
@@ -481,6 +492,7 @@
             updatePageLayout();
             $('html').enableScroll();
         }
+        if(window.afterPageRender) window.afterPageRender(list, options);
         if(!options.partial)
         {
             const newState = $.apps.updateApp(currentCode, currentAppUrl, document.title);
@@ -527,8 +539,14 @@
         if(DEBUG && !selectors.includes('zinDebug()')) selectors.push('zinDebug()');
         const isDebugRequest = DEBUG && selectors.length === 1 || selectors[0] === 'zinDebug()';
         if(options.modal === undefined) options.modal = $(target[0] !== '#' && target[0] !== '.' ? `#${target}` : target).closest('.modal').length;
-        const headers = {'X-ZIN-Options': JSON.stringify($.extend({selector: selectors, type: 'list'}, options.zinOptions)), 'X-ZIN-App': currentCode, 'X-Zin-Cache-Time': 0};
+        const headers =
+        {
+            'X-ZIN-Options': JSON.stringify($.extend({selector: selectors, type: 'list'}, options.zinOptions)),
+            'X-ZIN-App': currentCode,
+            'X-Zin-Cache-Time': 0,
+        };
         if(options.modal) headers['X-Zui-Modal'] = 'true';
+        if(isTutorial && top.getCurrentStepID) headers['X-ZIN-Tutorial'] = top.getCurrentStepID();
         const requestMethod = (options.method || 'GET').toUpperCase();
         if(!options.cache && options.cache !== false) options.cache = !!(requestMethod === 'GET' && config.clientCache && !options.partial);
         if(options.cache === true) options.cache = url + (url.includes('?') ? '&zin=' : '?zin=') + encodeURIComponent(selectors.join(','));
@@ -569,6 +587,7 @@
                 if(isDebugRequest) return;
                 if(options.loadingTarget !== false) toggleLoading(options.loadingTarget || target, true, options.loadingClass, options.loadingIndicatorDelay || (options.partial ? '.2s' : (cache ? '5s' : '1s')));
                 if(options.before) options.before();
+                if(!options.partial) $('body').addClass('loading-page');
             },
             success(rawData)
             {
@@ -729,6 +748,7 @@
             },
             complete: () =>
             {
+                if(!options.partial) $('body').removeClass('loading-page');
                 if(ajax.canceled) return;
                 if(onFinish) onFinish();
                 $(document).data('zinCache', null);
@@ -1297,6 +1317,7 @@
             location.href = $.createLink('index', 'app', 'url=' + btoa(url));
             return;
         }
+        if(getUrlID(url) === 'index-index') return top.location.href = url;
         $.apps.openApp(url, $.extend({code: appCode, forceReload: true}, options));
     }
 
@@ -1662,7 +1683,7 @@
         const $target = $(e.target);
         if($target.closest('.not-open-url').length) return;
         const $link = $target.closest('a,.open-url');
-        if(!$link.length || $link.hasClass('ajax-submit') || $link.attr('download') || $link.attr('data-on') || $link.hasClass('show-in-app') || $link.hasClass('not-open-url') || ($link.attr('target') || '')[0] === '_') return;
+        if(!$link.length || $link.hasClass('ajax-submit') || $link.attr('download') || $link.attr('data-on') || $link.attr('zui-on') || $link.attr('zui-toggle') || $link.attr('zui-command') || $link.hasClass('show-in-app') || $link.hasClass('not-open-url') || ($link.attr('target') || '')[0] === '_') return;
 
         const href = $link.attr('href');
         if($link.is('a') && (/^(https?|javascript):/.test(href)) && !$link.data('app')) return;

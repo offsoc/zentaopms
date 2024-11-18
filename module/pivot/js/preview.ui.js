@@ -19,7 +19,7 @@ function loadBugCreate()
     const execution = $('#conditions').find('[name=execution]').val();
     const params    = window.btoa('begin=' + begin + '&end=' + end + '&product=' + +product + '&execution=' + +execution);
     const link      = $.createLink('pivot', 'preview', 'dimensionID=' + dimensionID + '&groupID=' + groupID + '&method=bugCreate&params=' + params);
-    loadPage(link, '#table-pivot-preview');
+    loadPage(link, '#pivotPanel');
 }
 
 /**
@@ -38,9 +38,13 @@ function loadProductSummary()
     })
     conditions = conditions.substring(0, conditions.length - 1);
 
-    const params = window.btoa('conditions=' + conditions);
+    const productID     = $('#product').find('.pick-value').val();
+    const productStatus = $('#productStatus').find('.pick-value').val();
+    const productType   = $('#productType').find('.pick-value').val();
+
+    const params = window.btoa('conditions=' + conditions + '&productID=' + productID + '&productStatus=' + productStatus + '&productType=' + productType);
     const link   = $.createLink('pivot', 'preview', 'dimensionID=' + dimensionID + '&groupID=' + groupID + '&method=productSummary&params=' + params);
-    loadPage(link, '#table-pivot-preview');
+    loadPage(link, '#pivotPanel');
 }
 
 /**
@@ -56,7 +60,7 @@ function loadProjectDeviation()
     const end    = $('#conditions').find('[name="end"]').val().replaceAll('-', '');
     const params = window.btoa('begin=' + begin + '&end=' + end);
     const link   = $.createLink('pivot', 'preview', 'dimensionID=' + dimensionID + '&groupID=' + groupID + '&method=projectdeviation&params=' + params);
-    loadPage(link, '#table-pivot-preview,#pivotChart');
+    loadPage(link, '#pivotPanel,#pivotChart');
 }
 
 /**
@@ -79,7 +83,7 @@ function loadWorkload()
 
     const params = window.btoa('begin=' + begin.replaceAll('-', '') + '&end=' + end.replaceAll('-', '') + '&days=' + days + '&workhour=' + +workhour + '&dept=' + dept + '&assign=' + assign);
     const link   = $.createLink('pivot', 'preview', 'dimensionID=' + dimensionID + '&groupID=' + groupID + '&method=workload&params=' + params);
-    loadPage(link, '#table-pivot-preview');
+    loadPage(link, '#pivotPanel');
 }
 
 function toggleShowMode(showMode = 'group')
@@ -181,27 +185,38 @@ function diffDate(date1, date2)
  */
 renderCell = function(result, {row, col})
 {
-    if(result && col.setting.colspan)
+    if(result)
     {
         let values  = result.shift();
-        let isDrill = false;
-        if(typeof(values.type) != 'undefined' && values.type == 'a')
+        let isDrill = row.data.isDrill[col.name];
+        let isTotal = row.data.isTotal;
+        if(col.setting.colspan && typeof(values.type) != 'undefined' && values.type == 'a')
         {
             values = values.props['children'];
-            if(typeof(row.data['field0_colspan']) == 'undefined') isDrill = true;
+            result.push({className: 'gap-0 p-0.5'});
+            values.forEach((value, index) =>
+              result.push({
+                html: value + '' || !Number.isNaN(value) ? (isDrill && index == 0 ? "<a href='#'>" + `${value}` + '</a>' : `${value}`) : '&nbsp;',
+                className: 'flex justify-center items-center h-full w-1/2' + (index == 0 ? ' border-r': ''),
+                style: 'border-color: var(--dtable-border-color)' + (isTotal ? '; background-color: var(--color-surface-light);' : '')
+              })
+            );
         }
-
-        result.push({className: 'gap-0 px-0'});
-        values.forEach((value, index) =>
-          result.push({
-            html: value || !Number.isNaN(value) ? (isDrill && index == 0 ? "<a href='#'>" + `${value}` + '</a>' : `${value}`) : '&nbsp;',
-            className: 'flex justify-center items-center h-full w-1/2' + (index == 0 ? ' border-r': ''),
-            style: 'border-color: var(--dtable-border-color)'
-          })
-        );
+        else
+        {
+            if(!isDrill && values?.type == 'a') values = values.props.children;
+            if(isTotal)
+            {
+                result.push({className: 'gap-0 p-0.5'});
+                values = {
+                    html: values + '',
+                    className: 'flex justify-center items-center h-full w-full',
+                    style: 'border-color: var(--dtable-border-color)' + (isTotal ? '; background-color: var(--color-surface-light);' : '')
+                };
+            }
+            result.push(values);
+        }
     }
-
-    if(typeof(row.data['field0_colspan']) != 'undefined' && !Array.isArray(row.data[col.name])) result[0] = row.data[col.name];
 
     return result;
 }

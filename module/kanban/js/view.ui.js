@@ -295,8 +295,10 @@ window.renderProductplanItem = function(info)
 
     const today     = zui.formatDate(new Date(), 'yyyy-MM-dd');
     const labelType = (info.item.begin <= today && info.item.end >= today) ? 'danger' : 'ghost';
+    info.item.begin = info.item.begin == futureDate ? productplanLang.future : info.item.begin.slice(5);
+    info.item.end   = info.item.end   == futureDate ? productplanLang.future : info.item.end.slice(5);
 
-    const date = '<span class="ml-2 label ' + labelType + '">' + info.item.begin.slice(5) + ' ' + productplanLang.to + ' ' + info.item.end.slice(5) + '</span>';
+    const date = '<span class="ml-2 label ' + labelType + '">' + info.item.begin + ' ' + productplanLang.to + ' ' + info.item.end + '</span>';
     info.item.content      = {html: `<div title='${info.item.originDesc}'>${info.item.desc}</div>`};
     info.item.contentClass = 'text-gray clip mr-2';
     info.item.footer       = {html: statusBox + date}
@@ -351,7 +353,7 @@ function renderAvatar(avatarList)
     for(let avatar of avatarList)
     {
         if(count > 2) break;
-        assignees += `<div class="avatar rounded-full size-xs ml-1 primary">${avatar}</div>`;
+        assignees += `<div class="avatar rounded-full size-xs ml-1 primary" style="font-size: .5rem">${avatar}</div>`;
         count ++;
     }
 
@@ -408,19 +410,8 @@ window.buildCardActions = function(item)
 
     if((performable || basicActions) && otherActions) actions.push({type: 'divider'});
 
-    if(item.actionList.includes('moveCard'))
-    {
-        moveColumns = groupCols[item.group] || {};
-        let moveCardItems = [];
+    if(item.actionList.includes('moveCard')) actions.push({text: kanbanLang.moveCard, url: $.createLink('kanban', 'moveCard', `cardID=${item.id}&fromColID=0&toColID=0&fromLaneID=0&toLaneID=0&kanbanID=${kanbanID}&showModal=true`), 'data-toggle': 'modal', 'icon': 'move', 'data-size': 'sm'});
 
-        for(const toColID in moveColumns)
-        {
-            if(toColID == item.column) continue;
-            moveCardItems.push({text: moveColumns[toColID], url: $.createLink('kanban', 'moveCard', `cardID=${item.id}&fromColID=${item.column}&toColID=${toColID}&fromLaneID=${item.lane}&toLaneID=${item.lane}&kanbanID=${kanbanID}`), 'innerClass': 'ajax-submit'});
-        }
-
-        actions.push({text: kanbanLang.moveCard, icon: 'move', items: moveCardItems});
-    }
     if(item.actionList.includes('setCardColor'))
     {
         actions.push({text: kanbanLang.cardColor, 'icon': 'color', items: buildColorItems(item)});

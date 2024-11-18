@@ -1,7 +1,6 @@
-<?php
-declare(strict_types=1);
+<?php declare(strict_types=1);
 /**
- * The model file of custom module of ZenTaoCMS.
+ * The model file of custom module of ZenTaoPMS.
  *
  * @copyright   Copyright 2009-2023 禅道软件（青岛）有限公司(ZenTao Software (Qingdao) Co., Ltd. www.cnezsoft.com)
  * @license     ZPL(http://zpl.pub/page/zplv12.html) or AGPL(https://www.gnu.org/licenses/agpl-3.0.en.html)
@@ -92,6 +91,7 @@ class customModel extends model
         {
             $item->vision = $this->config->vision;
             if(in_array("{$item->module}-{$item->section}", $this->config->custom->nonInterface->lang)) $item->vision = 'all';
+            if($item->module == 'feedback') $item->vision = 'all';
         }
         $this->dao->replace(TABLE_LANG)->data($item)->exec();
 
@@ -181,7 +181,7 @@ class customModel extends model
      */
     public static function setMenuByConfig(object|array $allMenu, string|array $customMenu, string $module = ''): array
     {
-        global $app, $lang, $config;
+        global $app, $lang;
 
         $tab = $app->tab;
         list($customMenuMap, $order) = static::buildCustomMenuMap($allMenu, $customMenu, $module);
@@ -194,6 +194,7 @@ class customModel extends model
         }
 
         $menu = static::buildMenuItems($allMenu, $customMenuMap, $module, $order);
+
         ksort($menu, SORT_NUMERIC);
 
         if(!isset($lang->{$tab})) return array();
@@ -226,7 +227,7 @@ class customModel extends model
             else
             {
                 $isFirst = false;
-                if(!isset($menu[$item->order]->divider))$menu[$item->order]->divider = false;
+                if(!isset($menu[$item->order]->divider)) $menu[$item->order]->divider = false;
             }
         }
 
@@ -248,39 +249,17 @@ class customModel extends model
         global $lang;
         $customMenuMap = array();
         $order         = 1;
-        if($customMenu)
+        if($customMenu && is_array($customMenu))
         {
-            if(is_string($customMenu))
+            $prev = '';
+            foreach($customMenu as $customMenuItem)
             {
-                $customMenuItems = explode(',', $customMenu);
-                foreach($customMenuItems as $customMenuItem)
-                {
-                    $item = new stdclass();
-                    $item->name   = $customMenuItem;
-                    $item->order  = $order ++;
-                    $item->hidden = false;
-                    $customMenuMap[$item->name] = $item;
-                }
-                foreach($allMenu as $name => $item)
-                {
-                    if(!isset($customMenuMap[$name]))
-                    {
-                        $item = new stdclass();
-                        $item->name   = $name;
-                        $item->hidden = true;
-                        $item->order  = $order ++;
-                        $customMenuMap[$name] = $item;
-                    }
-                }
-            }
-            elseif(is_array($customMenu))
-            {
-                foreach($customMenu as $customMenuItem)
-                {
-                    if(!isset($customMenuItem->order)) $customMenuItem->order = $order;
-                    $customMenuMap[$customMenuItem->name] = $customMenuItem;
-                    $order ++;
-                }
+                $name = $customMenuItem->name;
+                if(!isset($customMenuItem->order)) $customMenuItem->order = $order;
+                if($prev == 'divider') $customMenuItem->divider = true;
+                if($name != 'divider') $customMenuMap[$name]    = $customMenuItem;
+                $prev = $name;
+                $order ++;
             }
         }
         elseif($module)
@@ -387,6 +366,8 @@ class customModel extends model
                 /* Process menu item's order and hidden attirbute. */
                 $menuItem = static::buildMenuItem($item, $customMenuMap, $name, $label, $itemLink, $isTutorialMode, $subMenu);
                 $menuItem->order = (isset($customMenuMap[$name]) && isset($customMenuMap[$name]->order) ? $customMenuMap[$name]->order : $order ++);
+                if(!empty($customMenuMap) && !empty($customMenuMap[$name]->hidden)) $menuItem->hidden = true; // 自定义过滤掉的菜单不显示。
+                if(isset($customMenuMap[$name]) && isset($customMenuMap[$name]->divider)) $menuItem->divider = true;
                 if($app->viewType == 'mhtml' && isset($config->custom->moblieHidden[$menuModuleName]) && in_array($name, $config->custom->moblieHidden[$menuModuleName])) $menuItem->hidden = 1; // Hidden menu by config in mobile.
                 while(isset($menu[$menuItem->order])) $menuItem->order ++;
                 $menu[$menuItem->order] = $menuItem;
@@ -412,6 +393,7 @@ class customModel extends model
      */
     public static function buildMenuItem(array|string $item, $customMenuMap, string $name = '', string $label = '', string|array $itemLink = '', bool $isTutorialMode = false, array $subMenu = array()): object
     {
+        /* 用例列表featureBar的分割线。 */
         if($item === '-')
         {
             $menuItem = new stdclass();
@@ -427,13 +409,6 @@ class customModel extends model
                 foreach($item[$key] as $subItem)
                 {
                     if(isset($subItem->link['module']) && isset($subItem->link['method'])) $subItem->hidden = !common::hasPriv($subItem->link['module'], $subItem->link['method']);
-                }
-                if(isset($customMenuMap[$name]->$key))
-                {
-                    foreach($customMenuMap[$name]->$key as $subItem)
-                    {
-                        if(isset($subItem->hidden) && isset($item[$key][$subItem->name])) $item[$key][$subItem->name]->hidden = $subItem->hidden;
-                    }
                 }
             }
         }
@@ -461,10 +436,11 @@ class customModel extends model
      * Get module menu data, if module is 'main' then return main menu.
      *
      * @param  string $module
+     * @param  bool   $isHomeMenu
      * @access public
      * @return array
      */
-    public static function getModuleMenu($module = 'main'): array
+    public static function getModuleMenu($module = 'main', $isHomeMenu = false): array
     {
         global $app, $lang, $config;
 
@@ -474,8 +450,11 @@ class customModel extends model
         if($module == 'main' and !empty($lang->menu)) $allMenu = $lang->menu;
         if($module != 'main' and isset($lang->menu->$module) and isset($lang->menu->{$module}['subMenu'])) $allMenu = $lang->menu->{$module}['subMenu'];
         if($module == 'product' and isset($allMenu->branch)) $allMenu->branch = str_replace('@branch@', $lang->custom->branch, $allMenu->branch);
-        $flowModule = $config->global->flow . '_' . $module;
-        $customMenu = isset($config->customMenu->$flowModule) ? $config->customMenu->$flowModule : array();
+
+        /* 获取自定义过的导航。 */
+        $customKey  = $isHomeMenu ? $app->tab . '-home' : ($module == 'main' ? $app->tab : $app->tab . '-' . $module);
+        $customMenu = (isset($config->customMenu->{$customKey}) && !commonModel::isTutorialMode()) ? $config->customMenu->{$customKey}: array();
+
         if(!empty($customMenu) && is_string($customMenu) && substr($customMenu, 0, 1) === '[') $customMenu = json_decode($customMenu);
         if($module == 'my' && empty($config->global->scoreStatus)) unset($allMenu->score);
 
@@ -486,12 +465,13 @@ class customModel extends model
      * 获取主菜单数据。
      * Get main menu data.
      *
+     * @param  bool   $isHomeMenu
      * @access public
      * @return array
      */
-    public static function getMainMenu(): array
+    public static function getMainMenu($isHomeMenu = false): array
     {
-        return static::getModuleMenu('main');
+        return static::getModuleMenu('main', $isHomeMenu);
     }
 
     /**
@@ -531,6 +511,7 @@ class customModel extends model
         global $lang, $app;
         if(!isset($lang->$module->featureBar[$method])) return;
         $queryModule = $module == 'execution' ? 'task' : ($module == 'product' ? 'story' : $module);
+        $queryModule = $module == 'execution' && $method == 'story' ? 'executionStory' : $queryModule;
         $shortcuts   = $app->dbQuery('select id, title from ' . TABLE_USERQUERY . " where (`account` = '{$app->user->account}' or `common` = '1') AND `module` = '{$queryModule}' AND `shortcut` = '1' order by id")->fetchAll();
 
         if($shortcuts)

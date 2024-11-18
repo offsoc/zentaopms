@@ -233,9 +233,9 @@ class taskTest
      * @param  int    $taskID
      * @param  array  $param
      * @access public
-     * @return array
+     * @return array|string
      */
-    public function startTest(int $taskID, array $param = array()): array
+    public function startTest(int $taskID, array $param = array()): array|string
     {
         $task        = new stdclass();
         $startFields = array('id' => $taskID, 'status' => 'doing', 'assignedTo' => '', 'realstarted' => helper::now(), 'left' => 0, 'consumed' => 0);
@@ -244,7 +244,7 @@ class taskTest
 
         $oldTask = $this->objectModel->getByID($taskID);
         $result  = $this->objectModel->start($oldTask, $task);
-        return $result;
+        return dao::isError() ? dao::getError() : $result;
     }
 
     /**
@@ -471,7 +471,7 @@ class taskTest
 
         $oldTask = $this->objectModel->getByID($taskID);
         $result  = $this->objectModel->finish($oldTask, $task);
-        return $result;
+        return dao::isError() ? dao::getError() : $result;
     }
 
     /**
@@ -2200,5 +2200,82 @@ class taskTest
         foreach($conditionList as $key => $value) $condition->$key = $value;
 
         return $this->objectModel->getListByCondition($condition, $orderBy);
+    }
+
+    /**
+     * 获取执行未关闭的任务。
+     * Get unclosed tasks by execution.
+     *
+     * @param  array|int    $executionID
+     * @access public
+     * @return string|false
+     */
+    public function getUnclosedTasksByExecutionTest(array|int $executionID): string|false
+    {
+        $tasks = $this->objectModel->getUnclosedTasksByExecution($executionID);
+        if(!$tasks) return false;
+
+        $result = '';
+        if(is_array($tasks))
+        {
+            foreach($tasks as $task)
+            {
+                if(is_array($task))
+                {
+                    foreach($task as $key => $value) $result .= $value->id . ',' . $value->execution . ';';
+                }
+                else
+                {
+                    $result .= $task . ';';
+                }
+            }
+        }
+        return rtrim($result, ';');
+    }
+
+    /**
+     * 获取子任务。
+     * Get child tasks
+     *
+     * @param  array       $taskIdList
+     * @access public
+     * @return array|false
+     */
+    public function getChildTasksByListTest(array $taskIdList): array|false
+    {
+        list($childTasks, $nonStoryChildTasks) = $this->objectModel->getChildTasksByList($taskIdList);
+
+        $result = array();
+        if(!empty($childTasks))
+        {
+            foreach($childTasks as $parentID => $parentChildTasks)
+            {
+                if(!isset($result[$parentID])) $result[$parentID] = 'childTasks: ';
+                $result[$parentID] .= implode(',', array_keys($parentChildTasks)) . '; ';
+            }
+        }
+        if(!empty($nonStoryChildTasks))
+        {
+            foreach($nonStoryChildTasks as $parentID => $parentChildTasks) $result[$parentID] .= 'nonStoryChildTasks: ' . implode(',', array_keys($parentChildTasks)) . '; ';
+        }
+        return $result;
+    }
+
+    /**
+     * 同步父任务的需求到子任务。
+     * Sync parent story to children
+     *
+     * @param  object       $task
+     * @access public
+     * @return string|false
+     */
+    public function syncStoryToChildrenTest(object $task): string|false
+    {
+        $this->objectModel->syncStoryToChildren($task);
+
+        $result     = '';
+        $childTasks = $this->objectModel->dao->select('id,story')->from(TABLE_TASK)->where('parent')->eq($task->id)->andWhere('deleted')->eq('0')->fetchPairs();
+        foreach($childTasks as $key => $value) $result .= $key . ':' . $value . ';';
+        return rtrim($result, ';');
     }
 }

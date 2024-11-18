@@ -50,7 +50,7 @@ class bugZen extends bug
             {
                 $locate    = array('load' => true);
                 $loginLink = $this->createLink('user', 'login');
-                if($this->server->http_referer && strpos($this->server->http_referer, $loginLink) !== false) $locate = $this->createLink('bug', 'index');
+                if($this->server->http_referer && (strpos($this->server->http_referer, $loginLink) !== false || strpos($this->server->http_referer, 'index'))) $locate = $this->createLink('bug', 'browse');
                 return $this->send(array('result' => 'fail', 'load' => array('alert' => $this->lang->bug->notice->executionAccessDenied, 'locate' => $locate)));
             }
         }
@@ -118,6 +118,7 @@ class bugZen extends bug
         /* Check required fields of resolving bug. */
         foreach(explode(',', $this->config->bug->resolve->requiredFields) as $requiredField)
         {
+            if($requiredField == 'resolvedBuild') continue;
             if(!isset($bug->{$requiredField}) or strlen(trim($bug->{$requiredField})) == 0)
             {
                 $fieldName = $requiredField;
@@ -197,7 +198,7 @@ class bugZen extends bug
             }
 
             if(!empty($bug->resolvedBy) && empty($bug->resolution)) dao::$errors["resolution[{$bug->id}]"] = sprintf($this->lang->error->notempty, $this->lang->bug->resolution);
-            if($bug->resolution == 'duplicate' && empty($bug->duplicateBug)) dao::$errors["duplicateBug[{$bug->id}]"] = sprintf($this->lang->error->notempty, $this->lang->bug->duplicateBug);
+            if(!empty($bug->resolution) && $bug->resolution == 'duplicate' && empty($bug->duplicateBug)) dao::$errors["duplicateBug[{$bug->id}]"] = sprintf($this->lang->error->notempty, $this->lang->bug->duplicateBug);
         }
 
         return !dao::isError();
@@ -536,7 +537,7 @@ class bugZen extends bug
                 $this->view->executionID = $output['executionID'];
             }
             $execution = $this->dao->findById($this->session->execution)->from(TABLE_EXECUTION)->fetch();
-            if($execution->type == 'kanban') $this->assignKanbanVars($execution, $output);
+            if(!empty($execution) && $execution->type == 'kanban') $this->assignKanbanVars($execution, $output);
         }
         elseif($this->app->tab == 'project')
         {
@@ -987,15 +988,15 @@ class bugZen extends bug
         }
         elseif($executionID)
         {
-            $builds = $this->build->getBuildPairs(array($productID), $branch, 'noempty,noterminate,nodone,noreleased,nowaitrelease', $executionID, 'execution');
+            $builds = $this->build->getBuildPairs(array($productID), $branch, 'noempty,noterminate,nodone,noreleased,nowaitreleased,nofail', $executionID, 'execution');
         }
         elseif($projectID)
         {
-            $builds = $this->build->getBuildPairs(array($productID), $branch, 'noempty,noterminate,nodone,noreleased,nowaitrelease', $projectID, 'project');
+            $builds = $this->build->getBuildPairs(array($productID), $branch, 'noempty,noterminate,nodone,noreleased,nowaitreleased,nofail', $projectID, 'project');
         }
         else
         {
-            $builds = $this->build->getBuildPairs(array($productID), $branch, 'noempty,noterminate,nodone,withbranch,noreleased,nowaitrelease');
+            $builds = $this->build->getBuildPairs(array($productID), $branch, 'noempty,noterminate,nodone,withbranch,noreleased,nowaitreleased,nofail');
         }
         $builds = $this->build->addReleaseLabelForBuilds($productID, $builds);
 
@@ -1020,7 +1021,7 @@ class bugZen extends bug
 
         if($executionID || $projectID)
         {
-            $stories = $this->story->getExecutionStoryPairs($executionID ? $executionID : $projectID, $productID, $branch, '', 'full', 'all', 'story', false);
+            $stories = $this->story->getExecutionStoryPairs($executionID ? $executionID : $projectID, $productID, $branch, $moduleID, 'full', 'all', 'story', false);
         }
         else
         {
@@ -1105,7 +1106,7 @@ class bugZen extends bug
         $this->view->projectID             = $bug->projectID;
         $this->view->executions            = commonModel::isTutorialMode() ? $this->loadModel('tutorial')->getExecutionPairs() : $bug->executions;
         $this->view->execution             = $bug->execution;
-        $this->view->executionID           = $bug->executionID;
+        $this->view->executionID           = !empty($executionID) ? $executionID : $bug->executionID;
         $this->view->branches              = $bug->branches;
         $this->view->builds                = $bug->builds;
         $this->view->moduleOptionMenu      = $bug->modules;
@@ -1200,17 +1201,17 @@ class bugZen extends bug
 
         if($bug->execution)
         {
-            $openedBuilds   = $this->loadModel('build')->getBuildPairs(array($bug->product), $bug->branch, 'noempty,noterminate,nodone,withbranch,noreleased', $bug->execution, 'execution');
+            $openedBuilds   = $this->loadModel('build')->getBuildPairs(array($bug->product), $bug->branch, 'noempty,noterminate,nodone,withbranch,noreleased,nofail', $bug->execution, 'execution');
             $assignedToList = $this->user->getTeamMemberPairs($bug->execution, 'execution');
         }
         elseif($bug->project)
         {
-            $openedBuilds   = $this->loadModel('build')->getBuildPairs(array($bug->product), $bug->branch, 'noempty,noterminate,nodone,withbranch,noreleased', $bug->project, 'project');
+            $openedBuilds   = $this->loadModel('build')->getBuildPairs(array($bug->product), $bug->branch, 'noempty,noterminate,nodone,withbranch,noreleased,nofail', $bug->project, 'project');
             $assignedToList = $this->loadModel('project')->getTeamMemberPairs($bug->project);
         }
         else
         {
-            $openedBuilds   = $this->loadModel('build')->getBuildPairs(array($bug->product), $bug->branch, 'noempty,noterminate,nodone,withbranch,noreleased');
+            $openedBuilds   = $this->loadModel('build')->getBuildPairs(array($bug->product), $bug->branch, 'noempty,noterminate,nodone,withbranch,noreleased,nofail');
             $assignedToList = $this->bug->getProductMemberPairs($bug->product, (string)$bug->branch);
             $assignedToList = array_filter($assignedToList);
             if(empty($assignedToList)) $assignedToList = $this->user->getPairs('devfirst|noclosed');
@@ -2138,14 +2139,7 @@ class bugZen extends bug
 
         if($this->app->tab == 'execution')
         {
-            if(!preg_match("/(m=|\/)execution(&f=|-)bug(&|-|\.)?/", $this->session->bugList))
-            {
-                $location = $this->session->bugList;
-            }
-            else
-            {
-                $location = $this->createLink('execution', 'bug', "executionID=$executionID");
-            }
+            $location = $this->createLink('execution', 'bug', "executionID=$executionID");
         }
         elseif($this->app->tab == 'project')
         {

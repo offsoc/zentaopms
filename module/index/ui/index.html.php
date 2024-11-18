@@ -106,6 +106,8 @@ jsVar('vision',      $config->vision);
 jsVar('navGroup',    $lang->navGroup);
 jsVar('oldPages',    $config->index->oldPages);
 jsVar('appsItems',   $appsItems);
+jsVar('allAppsItems', $allAppsItems);
+jsVar('isTutorialMode', common::isTutorialMode());
 jsVar('defaultOpen', !empty($open) ? $open : '');
 jsVar('manualText',  $lang->manual);
 jsVar('manualUrl',   ((!empty($config->isINT)) ? $config->manualUrl['int'] : $config->manualUrl['home']) . '&theme=' . $_COOKIE['theme']);
@@ -175,7 +177,7 @@ div(setID('apps'));
 div
 (
     setID('appsBar'),
-    div(setID('visionSwitcher'), visionSwitcher()),
+    div(setID('visionSwitcher'), visionSwitcher(), setData('vision', $app->config->vision)),
     ul(setID('appTabs'), setClass('nav')),
     toolbar
     (
@@ -213,5 +215,28 @@ div
         )
     )
 );
+
+/**
+ * Check if the tutorial mode is on, show confirm dialog if it is.
+ * 检查是否处于教程模式，如果是则显示确认对话框是否继续。
+ */
+if(common::isTutorialMode())
+{
+    setData('tutorialTip', $lang->index->tutorialTip);
+    to::head
+    (
+        js
+        (<<<'JS'
+            $(function()
+            {
+                if(window.top !== window) return;
+                zui.Modal.confirm($('html').data('tutorialTip')).then(result =>
+                {
+                    window.location = result ? $.createLink('tutorial', 'index') : $.createLink('tutorial', 'quit');
+                });
+            })
+        JS)
+    );
+}
 
 render('pagebase');

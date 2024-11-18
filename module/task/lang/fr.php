@@ -88,6 +88,7 @@ $lang->task->storyAB           = 'Story';
 $lang->task->storySpec         = 'Description Story';
 $lang->task->storyVerify       = "Critères d'Acceptance";
 $lang->task->storyVersion      = 'Story Version';
+$lang->task->storyFiles        = 'Story Dateien';
 $lang->task->designVersion     = "Design Version";
 $lang->task->color             = 'Couleur';
 $lang->task->name              = 'Nom';
@@ -154,7 +155,7 @@ $lang->task->recordWorkhour    = 'Effort';
 $lang->task->editEffort        = 'Editer Estimé';
 $lang->task->deleteWorkhour    = 'Supprimer Estimés';
 $lang->task->repo              = 'Repo';
-$lang->task->mr                = 'Merge Request';
+$lang->task->mr                = 'Merge Requests';
 $lang->task->entry             = 'Code Path';
 $lang->task->lines             = 'Lines';
 $lang->task->v1                = 'Version A';
@@ -201,6 +202,7 @@ $lang->task->noClosed          = 'Non Fermées';
 $lang->task->yesterdayFinished = 'Tâche Terminée Hier';
 $lang->task->allTasks          = 'Tâche';
 $lang->task->linkMR            = 'Related MRs';
+$lang->task->linkPR            = 'Related PRs';
 $lang->task->linkCommit        = 'Related Commits';
 
 $lang->task->statusList['']        = '';
@@ -272,6 +274,7 @@ $lang->task->noticeLinkStory           = "No story has been linked. You can for 
 $lang->task->noticeLinkStoryNoProduct  = "No story has been linked.";
 $lang->task->noticeSaveRecord          = "Votre temps n'a pas été sauvé. Enregistrez-le d'abord.";
 $lang->task->noticeManageTeam          = 'Task status is %s, can not manage team.';
+$lang->task->teamNotEmpty              = 'Team can not be empty.';
 $lang->task->commentActions            = '%s. %s, commenté par <strong>%s</strong>.';
 $lang->task->deniedNotice              = 'Seulement le %s peut %s la tâche.';
 $lang->task->deniedStatusNotice        = 'The task status is %s, the effort cannot be maintained.';
@@ -283,6 +286,7 @@ $lang->task->cannotDeleteParent        = 'Impossible de supprimer la tâche pare
 $lang->task->addChildTask              = 'Because the task has already consumed consumption, to ensure data consistency, we will help you create a subtask with the same name to record the consumption.';
 $lang->task->selectTestStoryTip        = "The following {$lang->SRCommon} will be subtasks of this task";
 $lang->task->effortOperateTips         = 'Only the project manager, the executive supervisor, and the department head have the authority to %s logs belonging to others.';
+$lang->task->syncStoryToChildrenTip    = "Child tasks of %s do not have {$lang->SRCommon}, will {$lang->SRCommon} be synchronised with these child tasks?";
 
 $lang->task->error = new stdclass();
 $lang->task->error->totalNumber       = '"Coût Total" doit être numérique.';
@@ -410,3 +414,6 @@ $lang->taskestimate->consumed = 'Estimés';
 
 $lang->task->overEsStartDate = 'The %s schedule start time has exceeded, please modify the %s schedule start time first';
 $lang->task->overEsEndDate   = 'The %s schedule end time has exceeded, please modify the %s schedule end time first';
+
+$lang->task->overParentEsStarted = 'StartDate is less than the parent task\'s startDate: %s';
+$lang->task->overParentDeadline  = 'Deadline is greater than the parent task\'s deadline: %s';

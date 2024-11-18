@@ -7,11 +7,11 @@ $config->uitest->langClient = getenv('ZT_DEFAULT_LANG') ? getenv('ZT_DEFAULT_LAN
 $config->uitest->baseRoot = dirname(__FILE__, 2);
 
 /* 截图相uitest->关配置 */
-$config->uitest->captureRoot    = $config->baseRoot . '/www/data/capture/';
+$config->uitest->captureRoot    = $config->uitest->baseRoot . '/www/data/capture/';
 $config->uitest->captureWebRoot = '/data/capture/';
 
 /* 报告相uitest->关配置 */
-$config->uitest->reportRoot    = $config->baseRoot . '/www/data/report';
+$config->uitest->reportRoot    = $config->uitest->baseRoot . '/www/data/report';
 $config->uitest->reportWebRoot = '/data/report/';
 $config->uitest->reportType    = 'html'; //html or markdown
 
@@ -43,5 +43,6 @@ $config->uitest->chrome->options[] = '--ignore-certificate-errors';
 $config->uitest->chrome->options[] = '--test-type';
 $config->uitest->chrome->options[] = '--start-maximized';
 
+$config->uitest->exitBrowserOnException = true;
 $extConfigFiles = glob(dirname(__FILE__) . DS . 'ext' . DS . '*.php');
 if($extConfigFiles) foreach($extConfigFiles as $extConfigFile) include $extConfigFile;

@@ -44,6 +44,23 @@ class screenModel extends model
     }
 
     /**
+     * 判断是否有权限访问。
+     * Check screen access.
+     *
+     * @param  int    $dimensionID
+     * @access public
+     * @return array
+     */
+    public function checkAccess($screenID)
+    {
+        $viewableObjects = $this->bi->getViewableObject('screen');
+        if(!in_array($screenID, $viewableObjects))
+        {
+            return $this->app->control->sendError($this->lang->screen->accessDenied, helper::createLink('screen', 'browse'));
+        }
+    }
+
+    /**
      * 通过维度id获取大屏列表。
      * Get screen list by dimension id.
      *
@@ -251,8 +268,7 @@ class screenModel extends model
         $chart = clone($chart);
         if($type == 'pivot' and $chart)
         {
-            $chart = $this->loadModel('pivot')->processPivot($chart);
-            $chart->settings = json_encode($chart->settings);
+            $this->loadModel('pivot')->processNameDesc($chart);
         }
 
         if(empty($filters) and !empty($chart->filters))
@@ -974,13 +990,19 @@ class screenModel extends model
     {
         if($chart->sql)
         {
-            $settings = json_decode($chart->settings, true);
-            $fields   = json_decode($chart->fields, true);
-            $langs    = json_decode($chart->langs, true);
+            $chart->settings = json_decode($chart->settings, true);
+            $this->loadModel('pivot')->addDrills($chart);
+
+            $settings     = $chart->settings;
+            $fields       = json_decode($chart->fields, true);
+            $langs        = json_decode($chart->langs, true);
+            $chartFilters = json_decode($chart->filters, true);
 
             if(empty($langs)) $langs = array();
             if(empty($fields)) $fields = array();
             if(!is_array($filters)) $filters = array();
+
+            if(empty($chartFilters)) $filters = false;
 
             if(isset($settings['summary']) and $settings['summary'] == 'notuse')
             {
@@ -991,22 +1013,12 @@ class screenModel extends model
                 list($options, $config) = $this->loadModel('pivot')->genSheet($fields, $settings, $chart->sql, $filters, $langs, $chart->driver);
             }
 
-            $colspan = array();
-            if(isset($options->columnTotal) and $options->columnTotal == 'sum' and !empty($options->array))
+            $colspan         = array();
+            $showColPosition = $this->pivot->getShowColPosition($options);
+            $isShowLastRow   = $this->pivot->isShowLastRow($showColPosition);
+            if($isShowLastRow and !empty($options->array))
             {
-                $optionsData = $options->array;
-                $count       = count($optionsData);
-                foreach($optionsData as $index => $data)
-                {
-                    if($index == ($count - 1))
-                    {
-                        $newData = array('total' => $this->lang->pivot->step2->total);
-                        foreach($options->groups as $field) unset($data[$field]);
-                        $newData += $data;
-                        $optionsData[$index] = $newData;
-                    }
-                }
-                $options->array = $optionsData;
+                $count = count($options->array);
                 $colspan[$count - 1][0] = count($options->groups);
             }
 
@@ -1024,9 +1036,9 @@ class screenModel extends model
                 }
             }
 
-            $align       = array();
-            $headers     = array();
-            $groupCount  = 0;
+            $align        = array();
+            $headers      = array();
+            $groupCount   = 0;
             $drillConfigs = array();
             foreach($options->cols as $cols)
             {
@@ -1320,6 +1332,20 @@ class screenModel extends model
                     }
                 }
                 break;
+            case strpos($type, '.') !== false:
+                $params = explode('.', $type);
+                if(empty(array_filter($params)))
+                {
+                    $options = array();
+                }
+                else
+                {
+                    $module   = $params[0];
+                    $typeList = $params[1] . 'List';
+                    $this->app->loadLang($module);
+                    $options = $this->lang->$module->$typeList;
+                }
+                break;
             default:
                 if($field and $sql)
                 {
@@ -1576,6 +1602,25 @@ class screenModel extends model
                 break;
             case 'waterpolo':
                 return $this->getWaterPoloOption($component, $chart, array());
+        }
+    }
+
+    /**
+     * Set select filter.
+     *
+     * @param  string $sourceID
+     * @param  array  $filters
+     * @access public
+     * @return void
+     */
+    public function setSelectFilter($sourceID, $filters)
+    {
+        if(empty($filters)) return;
+
+        foreach($filters as $filter)
+        {
+            if(!isset($this->filter->charts[$sourceID])) $this->filter->charts[$sourceID] = array();
+            $this->filter->charts[$sourceID][$filter['type']] = $filter['field'];
         }
     }
 
@@ -3115,12 +3160,16 @@ class screenModel extends model
      */
     public function getThumbnail($screens)
     {
+        $screenIds = array_column($screens, 'id');
+        $images = $this->loadModel('file')->getByObject('screen', $screenIds);
         foreach($screens as $screen)
         {
-            $images = $this->loadModel('file')->getByObject('screen', $screen->id);
-            if(empty($images)) continue;
+            $currentImages = array_filter($images, function($image) use ($screen) {
+                return $image->objectID == $screen->id;
+            });
+            if(empty($currentImages)) continue;
 
-            $image = end($images);
+            $image = end($currentImages);
             $screen->cover = helper::createLink('file', 'read', "fileID={$image->id}", 'png');
         }
 

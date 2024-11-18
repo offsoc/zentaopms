@@ -88,6 +88,7 @@ $lang->task->storyAB           = $lang->SRCommon;
 $lang->task->storySpec         = "{$lang->SRCommon}描述";
 $lang->task->storyVerify       = '验收标准';
 $lang->task->storyVersion      = "{$lang->SRCommon}版本";
+$lang->task->storyFiles        = '需求附件';
 $lang->task->designVersion     = "设计版本";
 $lang->task->color             = '标题颜色';
 $lang->task->name              = '任务名称';
@@ -201,6 +202,7 @@ $lang->task->noClosed          = '未关闭';
 $lang->task->yesterdayFinished = '昨日完成任务数';
 $lang->task->allTasks          = '总任务';
 $lang->task->linkMR            = '相关合并请求';
+$lang->task->linkPR            = '相关推送请求';
 $lang->task->linkCommit        = '相关代码版本';
 
 $lang->task->statusList['']       = '';
@@ -272,6 +274,7 @@ $lang->task->noticeLinkStory           = "没有可关联的相关{$lang->SRComm
 $lang->task->noticeLinkStoryNoProduct  = "没有可关联的相关{$lang->SRCommon}";
 $lang->task->noticeSaveRecord          = '您有尚未保存的工时记录，请先将其保存。';
 $lang->task->noticeManageTeam          = '任务状态是%s，不能维护团队';
+$lang->task->teamNotEmpty              = '多人任务团队不能为空。';
 $lang->task->commentActions            = '%s. %s, 由 <strong>%s</strong> 添加备注。';
 $lang->task->deniedNotice              = '当前任务只有%s才可以%s。';
 $lang->task->deniedStatusNotice        = '当前任务状态是%s，不能维护日志。';
@@ -283,6 +286,7 @@ $lang->task->cannotDeleteParent        = '不能删除父任务。';
 $lang->task->addChildTask              = '因该任务已经产生消耗，为保证数据一致性，我们会帮您创建一条同名子任务记录该消耗。';
 $lang->task->selectTestStoryTip        = "以下{$lang->SRCommon}将作为此任务的子任务";
 $lang->task->effortOperateTips         = '只有项目负责人、执行负责人、所属部门负责人才能%s他人日志。';
+$lang->task->syncStoryToChildrenTip    = "子任务%s没有关联{$lang->SRCommon}，是否同步更新这些子任务的相关{$lang->SRCommon}？";
 
 $lang->task->error                    = new stdclass();
 $lang->task->error->totalNumber       = '"耗时"必须为数字';
@@ -313,10 +317,10 @@ $lang->task->error->leftEmptyAB       = '任务状态为%s时，预计剩余不�
 $lang->task->error->leftEmpty         = 'Task#%s任务状态为%s时，剩余不能为0';
 $lang->task->error->notempty          = '%s必须大于0。';
 $lang->task->error->teamLeftEmpty     = '请维护团队工时。';
-$lang->task->error->beginLtExecution  = "任务开始日期应大于等于%s的开始日期：%s。";
-$lang->task->error->beginGtExecution  = "任务开始日期应小于等于%s的结束日期：%s。";
-$lang->task->error->endGtExecution    = "任务截止日期应小于等于%s的结束日期：%s。";
-$lang->task->error->endLtExecution    = "任务截止日期应大于等于%s的开始日期：%s。";
+$lang->task->error->beginLtExecution  = "任务预计开始日期应大于等于%s的预计开始日期：%s。";
+$lang->task->error->beginGtExecution  = "任务预计开始日期应小于等于%s的截止日期：%s。";
+$lang->task->error->endGtExecution    = "任务截止日期应小于等于%s的截止日期：%s。";
+$lang->task->error->endLtExecution    = "任务截止日期应大于等于%s的预计开始日期：%s。";
 $lang->task->error->dateExceed        = "任务%s的计划日期超过该{$lang->execution->common}计划日期，将自动改为{$lang->execution->common}的计划日期。";
 $lang->task->error->length            = "长度超过了%d个字符，无法保存，请修改后再试";
 
@@ -410,3 +414,6 @@ $lang->taskestimate->consumed = '工时';
 
 $lang->task->overEsStartDate = '已超出%s计划开始时间，请先修改%s计划开始时间';
 $lang->task->overEsEndDate   = '已超出%s计划结束时间，请先修改%s计划结束时间';
+
+$lang->task->overParentEsStarted = '任务的预计开始日期小于了父任务的预计开始日期：%s';
+$lang->task->overParentDeadline  = '任务的截止日期大于了父任务的截止日期：%s';

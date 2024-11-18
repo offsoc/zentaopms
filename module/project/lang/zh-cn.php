@@ -242,7 +242,7 @@ $lang->project->unlinkExecutionMember  = "该用户参与了%s%s%s个{$lang->exe
 $lang->project->unlinkExecutionMembers = "移除的团队成员还参与了{$lang->projectCommon}下的执行，是否同步从执行团队中移除？";
 $lang->project->productTip             = "点击新建{$lang->productCommon}后，{$lang->projectCommon}将不会关联已选中的{$lang->productCommon}。";
 $lang->project->noDevStage             = "该{$lang->projectCommon}下没有研发类型的阶段，或者您没有权限访问，暂时不支持创建版本。";
-$lang->project->budgetOverrun          = "{$lang->projectCommon}的预算超出了父项目集的剩余预算：%s。";
+$lang->project->budgetOverrun          = "{$lang->projectCommon}的预算超出了项目集的剩余预算：%s。";
 $lang->project->disabledInputTip       = '请先取消%s';
 $lang->project->linkRepoFailed         = '关联代码库失败';
 $lang->project->unLinkProductTip       = "您确认要取消与%s的关联关系吗？（不影响已关联的需求）";
@@ -448,6 +448,7 @@ $lang->project->endGreatEqualExecution  = "{$lang->projectCommon}的完成日期
 $lang->project->childLongTime        = "子{$lang->projectCommon}中有长期{$lang->projectCommon}，父{$lang->projectCommon}也应该是长期{$lang->projectCommon}";
 $lang->project->confirmUnlinkMember  = "您确定从该{$lang->projectCommon}中移除该用户吗？";
 $lang->project->stageByTips          = "按{$lang->projectCommon}创建为单套阶段，阶段关联所有{$lang->productCommon}；按{$lang->productCommon}创建为多套阶段，每套阶段关联一个{$lang->productCommon}。";
+$lang->project->confirmCloseProject  = "该{$lang->projectCommon}下还有未关闭的{$lang->executionCommon}：%s，您确定要关闭{$lang->projectCommon}吗？";
 
 $lang->project->action = new stdclass();
 $lang->project->action->managed = '$date, 由 <strong>$actor</strong> 维护。$extra' . "\n";

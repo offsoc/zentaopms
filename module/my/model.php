@@ -324,6 +324,7 @@ class myModel extends model
             ->where('t1.deleted')->eq(0)
             ->andWhere('t2.deleted')->eq(0)
             ->andWhere('t1.id')->in($objectIdList)
+            ->andWhere("FIND_IN_SET('{$this->config->vision}', t1.vision)")
             ->orderBy($orderBy)
             ->page($pager, 't1.id')
             ->fetchAll('id');
@@ -485,7 +486,7 @@ class myModel extends model
         $taskIdList = array();
         if($moduleName == 'contributeTask')
         {
-            $tasksAssignedByMe = $this->getAssignedByMe($account, null, $orderBy, 'task');
+            $tasksAssignedByMe = $this->getAssignedByMe($account, null, 'id_desc', 'task');
             $taskIdList        = array_keys($tasksAssignedByMe);
         }
 
@@ -626,7 +627,7 @@ class myModel extends model
 
         if($type == 'contribute')
         {
-            $assignedByMe = $this->getAssignedByMe($this->app->user->account, null, $orderBy, 'risk');
+            $assignedByMe = $this->getAssignedByMe($this->app->user->account, null, 'id_desc', 'risk');
             $risks = $this->dao->select('*')->from(TABLE_RISK)
                 ->where($riskQuery)
                 ->andWhere('deleted')->eq('0')
@@ -819,9 +820,10 @@ class myModel extends model
         $this->config->ticket->search['module']    = $queryName;
         $this->config->ticket->search['queryID']   = $queryID;
         $this->config->ticket->search['actionURL'] = $actionURL;
-        $this->config->ticket->search['params']['product']['values'] = $grantProducts;
-        $this->config->ticket->search['params']['module']['values']  = $this->loadModel('feedback')->getModuleList('ticket', true, 'no');
+        $this->config->ticket->search['params']['product']['values']     = $grantProducts;
+        $this->config->ticket->search['params']['module']['values']      = $this->loadModel('feedback')->getModuleList('ticket', true, 'no');
         $this->config->ticket->search['params']['openedBuild']['values'] = $this->loadModel('build')->getBuildPairs(array_keys($grantProducts), 'all', 'releasetag');
+        $this->config->ticket->search['params']['feedback']['values']    = $this->feedback->getPairs();
 
         $this->loadModel('search')->setSearchParams($this->config->ticket->search);
 
@@ -864,7 +866,7 @@ class myModel extends model
         $myEpicQuery = $this->session->{$queryName};
         $myEpicQuery = preg_replace('/`(\w+)`/', 't1.`$1`', $myEpicQuery);
 
-        $epicsAssignedByMe = $type == 'contribute' ? $this->getAssignedByMe($this->app->user->account, null, $orderBy, 'epic') : array();
+        $epicsAssignedByMe = $type == 'contribute' ? $this->getAssignedByMe($this->app->user->account, null, 'id_desc', 'epic') : array();
         $epicIdList        = array_keys($epicsAssignedByMe);
 
         return $this->myTao->fetchEpicsBySearch($myEpicQuery, $type, $orderBy, $pager, $epicIdList, 'epic');
@@ -906,7 +908,7 @@ class myModel extends model
         $myRequirementQuery = $this->session->{$queryName};
         $myRequirementQuery = preg_replace('/`(\w+)`/', 't1.`$1`', $myRequirementQuery);
 
-        $requirementsAssignedByMe = $type == 'contribute' ? $this->getAssignedByMe($this->app->user->account, null, $orderBy, 'requirement') : array();
+        $requirementsAssignedByMe = $type == 'contribute' ? $this->getAssignedByMe($this->app->user->account, null, 'id_desc', 'requirement') : array();
         $requirementIdList        = array_keys($requirementsAssignedByMe);
 
         return $this->myTao->fetchRequirementsBySearch($myRequirementQuery, $type, $orderBy, $pager, $requirementIdList, 'requirement');
@@ -1184,12 +1186,12 @@ class myModel extends model
 
         $this->loadModel('flow');
         $this->loadModel('workflowaction');
-        $flows       = $this->dao->select('module,`table`,name,titleField')->from(TABLE_WORKFLOW)->where('module')->in(array_keys($objectIdList))->andWhere('buildin')->eq(0)->fetchAll('module');
+        $flows       = $this->dao->select('module,`table`,name,titleField,app')->from(TABLE_WORKFLOW)->where('module')->in(array_keys($objectIdList))->fetchAll('module');
         $objectGroup = array();
         foreach($objectIdList as $objectType => $idList)
         {
-            $table = zget($this->config->objectTables, $objectType, '');
-            if(empty($table) && isset($flows[$objectType])) $table = $flows[$objectType]->table;
+            if(!isset($flows[$objectType])) continue;
+            $table = zget($this->config->objectTables, $objectType, $flows[$objectType]->table);
             if(empty($table)) continue;
 
             $objectGroup[$objectType] = $this->dao->select('*')->from($table)->where('id')->in($idList)->fetchAll('id');
@@ -1445,5 +1447,55 @@ class myModel extends model
     public function getFlowPairs(): array
     {
         return $this->dao->select('module,name')->from(TABLE_WORKFLOW)->where('buildin')->eq(0)->fetchPairs();
+    }
+
+    /**
+     * 获取我的产品。
+     * Get my charged products.
+     *
+     * @param  string $type undone|ownbyme
+     * @access public
+     * @return object
+     */
+    public function getProducts(string $type = 'undone'): object
+    {
+        $products = $this->dao->select('t1.*, t2.name as programName')->from(TABLE_PRODUCT)->alias('t1')
+            ->leftJoin(TABLE_PROGRAM)->alias('t2')->on('t1.program = t2.id')
+            ->where('t1.deleted')->eq(0)
+            ->beginIF($type == 'undone')->andWhere('t1.status')->eq('normal')->fi()
+            ->beginIF($type == 'ownbyme')->andWhere('t1.PO')->eq($this->app->user->account)->fi()
+            ->beginIF(!$this->app->user->admin)->andWhere('t1.id')->in($this->app->user->view->products)->fi()
+            ->orderBy('t1.order_asc')
+            ->fetchAll('id');
+
+        list($summaryStories, $plans, $releases, $executions) = $this->getProductRelatedData(array_keys($products));
+
+        $allCount      = count($products);
+        $unclosedCount = 0;
+        foreach($products as $key => $product)
+        {
+            $product->plans      = isset($plans[$product->id]) ? $plans[$product->id] : 0;
+            $product->releases   = isset($releases[$product->id]) ? $releases[$product->id] : 0;
+            if(isset($executions[$product->id])) $product->executions = $executions[$product->id];
+            $product->storyEstimateCount = isset($summaryStories[$product->id]) ? $summaryStories[$product->id]->estimateCount : 0;
+            $product->storyTotal         = isset($summaryStories[$product->id]) ? $summaryStories[$product->id]->total : 0;
+            $product->storyFinishedTotal = isset($summaryStories[$product->id]) ? $summaryStories[$product->id]->finishedTotal : 0;
+            $product->storyLeftTotal     = isset($summaryStories[$product->id]) ? $summaryStories[$product->id]->leftTotal : 0;
+            $product->storyFinishedRate  = isset($summaryStories[$product->id]) ? $summaryStories[$product->id]->finishedRate : 0;
+            $product->latestExecution    = isset($executions[$product->id])     ? $executions[$product->id] : '';
+            if($product->status != 'closed') $unclosedCount ++;
+            if($product->status == 'closed') unset($products[$key]);
+        }
+
+        /* Sort by storyCount, get 5 records */
+        $products = json_decode(json_encode($products), true);
+        array_multisort(helper::arrayColumn($products, 'storyEstimateCount'), SORT_DESC, $products);
+        $products = array_slice($products, 0, 5);
+
+        $data = new stdClass();
+        $data->allCount      = $allCount;
+        $data->unclosedCount = $unclosedCount;
+        $data->products      = array_values($products);
+        return $data;
     }
 }

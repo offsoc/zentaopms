@@ -223,8 +223,11 @@ class router extends baseRouter
 	    /* When upgrading from version 12 to the paid version, the workflow table does not exist. */
         try
         {
-            $flows = $this->dbQuery('SELECT * FROM ' . TABLE_WORKFLOW . " WHERE `buildin` = 0 AND `vision` = '{$this->config->vision}' AND status = 'normal' AND type = 'flow' AND `navigator` = 'primary'")->fetchAll();
-            foreach($flows as $flow) $this->lang->mainNav->{$flow->module} = "{$this->lang->navIcons['workflow']} {$flow->name}|{$flow->module}|browse|";
+            $flows = $this->dbQuery('SELECT * FROM ' . TABLE_WORKFLOW . " WHERE `buildin` = 0 AND `vision` = '{$this->config->vision}' AND status = 'normal' AND type = 'flow'")->fetchAll();
+            foreach($flows as $flow)
+            {
+                if($flow->navigator == 'primary') $this->lang->mainNav->{$flow->module} = "{$this->lang->navIcons['workflow']} {$flow->name}|{$flow->module}|browse|";
+            }
         }
         catch(PDOException){}
     }

@@ -43,8 +43,6 @@ class program extends control
         $this->app->loadClass('pager', $static = true);
         $pager = new pager($recTotal, $recPerPage, $pageID);
 
-        $this->program->refreshStats(); // Refresh stats fields of projects.
-
         $programs = $this->programZen->getProgramsByType($status, $orderBy, (int)$param, $pager);
         $PMList   = $this->programZen->getPMListByPrograms($programs);
 
@@ -120,13 +118,11 @@ class program extends control
             $this->view->program = $program;
         }
 
-        $this->loadModel('product')->refreshStats();
-
         /* Load pager. */
         $this->app->loadClass('pager', true);
         $pager = new pager($recTotal, $recPerPage, $pageID);
 
-        $products = $this->product->getList($programID, $browseType);
+        $products = $this->loadModel('product')->getList($programID, $browseType);
         $this->view->products = $this->product->getStats(array_keys($products), $orderBy, $pager, 'story',  $programID);
 
         $this->view->title         = $this->lang->program->product;
@@ -245,7 +241,11 @@ class program extends control
             $hasUnfinished = $this->program->hasUnfinishedChildren($program);
             if($hasUnfinished) return $this->send(array('result' => 'fail', 'callback' => "zui.Modal.alert('{$this->lang->program->closeErrorMessage}');"));
 
-            $programData = form::data(null, $programID)->get();
+            $programData = form::data(null, $programID)
+                ->add('closedBy', $this->app->user->account)
+                ->add('lastEditedBy', $this->app->user->account)
+                ->get();
+
             $changes     = $this->program->close($programData, $program);
             if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
 
@@ -320,7 +320,7 @@ class program extends control
 
         if(!empty($_POST))
         {
-            $programData = form::data(null, $programID)->get();
+            $programData = form::data(null, $programID)->add('lastEditedBy', $this->app->user->account)->get();
             $changes     = $this->program->activate($programData, $program);
             if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
 
@@ -615,7 +615,7 @@ class program extends control
      */
     public function ajaxGetDropMenu(int $programID, string $module, string $method)
     {
-        $programs = $this->program->getList('all');
+        $programs = $this->program->getList('all', 'order_asc');
         foreach($programs as $programID => $program)
         {
             if($program->type != 'program') unset($programs[$programID]);
@@ -717,8 +717,6 @@ class program extends control
         $this->loadModel('user');
         $this->session->set('productList', $this->app->getURI(true), 'program');
 
-        $this->product->refreshStats(); // Refresh stats fields of products.
-
         $this->app->loadClass('pager', true);
         $pager = new pager($recTotal, $recPerPage, $pageID);
 
@@ -761,5 +759,25 @@ class program extends control
         $this->view->param              = $param;
 
         $this->render();
+    }
+
+    /**
+     * 刷新项目集统计数据。
+     * Refresh program stats.
+     *
+     * @access public
+     * @return void
+     */
+    public function refreshStats()
+    {
+        $this->program->refreshStats();
+
+        if(dao::isError())
+        {
+            echo json_encode(dao::getError());
+            return true;
+        }
+
+        echo 'success';
     }
 }

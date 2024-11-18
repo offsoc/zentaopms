@@ -15,7 +15,10 @@ class featureBar extends wg
         'method?:string',
         'load?: string="table"',
         'loadID?: string',
-        'app?: string=""'
+        'app?: string=""',
+        'param?: int=0',
+        'searchModule?: string=""',
+        'labelCount?: int=-1'
     );
 
     protected static array $defineBlocks = array
@@ -28,6 +31,7 @@ class featureBar extends wg
     protected function getItems()
     {
         $items = $this->prop('items');
+
         if(!empty($items)) return array_values($items);
 
         global $app, $lang;
@@ -35,23 +39,26 @@ class featureBar extends wg
         $currentMethod = $this->prop('method', $app->rawMethod);
 
         \common::sortFeatureMenu($currentModule, $currentMethod);
-
         $rawItems = \customModel::getFeatureMenu($currentModule, $currentMethod);
         if(!is_array($rawItems)) return null;
 
-        $current    = $this->prop('current', data('browseType'));
-        $pager      = data('pager');
-        $recTotal   = $pager ? $pager->recTotal : data('recTotal');
-        $items      = array();
-        $loadID     = $this->prop('loadID');
-        $load       = $this->prop('load');
-        $tab        = $this->prop('app');
-        $commonLink = $this->prop('link');
-        $itemLink   = $this->prop('itemLink');
+        $current      = $this->prop('current', data('browseType'));
+        $pager        = data('pager');
+        $recTotal     = $pager ? $pager->recTotal : data('recTotal');
+        $recTotal     = $this->prop('labelCount') >= 0 ? $this->prop('labelCount') : $recTotal;
+        $items        = array();
+        $loadID       = $this->prop('loadID');
+        $load         = $this->prop('load');
+        $tab          = $this->prop('app');
+        $param        = $this->prop('param') ? $this->prop('param') : data('param');
+        $searchModule = $this->prop('searchModule');
+        $commonLink   = $this->prop('link');
+        $itemLink     = $this->prop('itemLink');
 
         data('activeFeature', $current);
 
-        if(empty($commonLink)) $commonLink = createLink($app->rawModule, $app->rawMethod, $this->prop('linkParams'));
+        if(empty($commonLink))   $commonLink = createLink($app->rawModule, $app->rawMethod, $this->prop('linkParams'));
+        if(empty($searchModule)) $searchModule = data("config.{$currentModule}.search.module") ? data("config.{$currentModule}.search.module") : $currentModule;
 
         foreach($rawItems as $item)
         {
@@ -79,11 +86,9 @@ class featureBar extends wg
 
                 foreach($moreSelects as $key => $text)
                 {
-                    $searchModule = data("config.{$currentModule}.search.module") ? data("config.{$currentModule}.search.module") : $currentModule;
-
                     $subItem = array();
                     $subItem['text']   = $text;
-                    $subItem['active'] = $key == $current;
+                    $subItem['active'] = $item->name == 'QUERY' ? $key == $param : $key == $current;
                     $subItem['url']    = ($callback instanceof \Closure) ? $callback($key, $text) : str_replace('{key}', (string)$key, $link);
                     $subItem['attrs']  = ['data-id' => $key, 'data-load' => $load, 'data-target' => $loadID, 'data-app' => $tab, 'data-success' => "() => zui.updateSearchForm('$searchModule')"];
 
@@ -99,7 +104,7 @@ class featureBar extends wg
 
                     $subItems[] = $subItem;
 
-                    if($key === $current)
+                    if($key === $current || ($current == 'bysearch' && $key == $param))
                     {
                         $isActive   = true;
                         $activeText = $text;

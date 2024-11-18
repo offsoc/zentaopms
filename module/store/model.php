@@ -43,43 +43,24 @@ class storeModel extends model
      */
     public function searchApps(string $orderBy = '', string $keyword = '', int $categoryID = 0, int $page = 1, int $pageSize = 20): object
     {
-        $apps  = array();
-        $total = 0;
+        $params = array(
+            'channel' => $this->config->cloud->api->channel,
+            'q'       => rawurlencode(trim($keyword)),
+            'exclude' => 'zentao*',
+            'sort'    => rawurlencode(trim($orderBy)),
+            'page_size' => $pageSize,
+            'page'    => $page
+        );
+        if($categoryID) $params['category'] = $categoryID;
 
-        $apiUrl  = $this->config->cloud->api->host;
-        $apiUrl .= '/api/market/applist?channel='. $this->config->cloud->api->channel;
-        $apiUrl .= "&q=" . rawurlencode(trim($keyword));
-        $apiUrl .= "&sort=" . rawurlencode(trim($orderBy));
-        $apiUrl .= "&page_size=$pageSize";
-        if($categoryID) $apiUrl .= "&category=$categoryID"; // The names of category are same that reason is CNE api is required.
-
-        $pageID = 1;
-        while(true)
-        {
-            $result = commonModel::apiGet("{$apiUrl}&page={$pageID}", array(), $this->config->cloud->api->headers);
-            if(empty($result) || $result->code != 200) break;
-
-            $total = $result->data->total;
-            $apps  = array_merge($apps, $result->data->apps);
-
-            if(count($result->data->apps) < $pageSize) break;
-            $pageID ++;
-        }
-
-        foreach($apps as $index => $app)
-        {
-            if(strpos($app->name, 'zentao') === 0)
-            {
-                $total --;
-                unset($apps[$index]);
-                continue;
-            }
-        }
-        $apps = array_chunk($apps, $pageSize);
+        $apiUrl  = "{$this->config->cloud->api->host}/api/market/applist?";
+        $apiUrl .= http_build_query($params);
+        $result  = commonModel::apiGet($apiUrl, array(), $this->config->cloud->api->headers);
+        if(empty($result) || $result->code != 200) return array();
 
         $pagedApps = new stdclass();
-        $pagedApps->apps  = empty($apps[$page - 1]) ? array() : $apps[$page - 1];
-        $pagedApps->total = $total;
+        $pagedApps->apps  = $result->data->apps;
+        $pagedApps->total = $result->data->total;
         return $pagedApps;
     }
 
@@ -95,9 +76,9 @@ class storeModel extends model
      * @access public
      * @return object|null
      */
-    public function getAppInfo(int $appID, bool $analysis = false, string $name = '', string $version ='', string $channel = ''): object|null
+    public function getAppInfo(int $appID = 0, bool $analysis = false, string $name = '', string $version = '', string $channel = ''): object|null
     {
-        if(empty($appID)) return null;
+        if(empty($appID) && (empty($name) || empty($channel))) return null;
         $apiParams = array();
         $apiParams['analysis'] = $analysis ? 'true' : 'false' ;
 
@@ -343,5 +324,44 @@ class storeModel extends model
         if(!isset($result->code) || $result->code != 200) return new stdclass();
 
         return $result->data;
+    }
+
+    /**
+     * 设置应用最新版本。
+     * Set app latest version.
+     *
+     * @param  array  $appList
+     * @access public
+     * @return array
+     */
+    public function batchSetLatestVersions(array $appList): array
+    {
+        $channel = $this->config->cloud->api->channel;
+        $apiUrl  = $this->config->cloud->api->host;
+        $apiUrl .= '/api/market/applist/version/upgradable';
+
+        $data = array();
+        foreach($appList as $app)
+        {
+            $data[] = array(
+                'version'    => $app->version,
+                'channel'    => $channel,
+                'id'         => $app->appID,
+                'instanceID' => $app->id
+            );
+        }
+
+        $result = json_decode(common::http($apiUrl, $data, array(), $this->config->cloud->api->headers, 'json'));
+        if(!isset($result->code) || $result->code != 200) return array();
+
+        $versionList = array();
+        foreach($result->data as $app)
+        {
+            $latestVersion = $this->pickHighestVersion($app->versions);
+            $versionList[$app->id] = empty($latestVersion) ? '' : $latestVersion->version;
+        }
+
+        foreach($appList as $app) $app->latestVersion = $versionList[$app->appID];
+        return $appList;
     }
 }

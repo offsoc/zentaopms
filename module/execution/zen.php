@@ -257,7 +257,7 @@ class executionZen extends execution
             }
         }
 
-        $project = $this->loadModel('project')->fetchByID($execution->project);
+        $project = $this->loadModel('project')->getByID($execution->project);
         if(!($execution->type == 'stage' && in_array($execution->attribute, array('mix', 'request', 'design'))) && $project->multiple) $project->storyType = 'story';
 
         $productPairs = $this->loadModel('product')->getProductPairsByProject($execution->id); // Get execution's product.
@@ -355,7 +355,7 @@ class executionZen extends execution
         if($products) $productID = key($products);
         foreach($products as $product) $productNames[$product->id] = $product->name;
 
-        $plans    = $this->execution->getPlans(array_keys($products));
+        $plans    = $this->execution->getPlans(array_keys($products), 'skipParent|withMainPlan|unexpired|noclosed|sortedByDate', $execution->id);
         $allPlans = array();
         if(!empty($plans))
         {
@@ -928,8 +928,7 @@ class executionZen extends execution
         $type    = 'sprint';
         if($project) $type = zget($this->config->execution->modelList, $project->model, 'sprint');
 
-        $fields       = $this->config->execution->form->create;
-        $editorFields = array_keys(array_filter(array_map(function($config){return $config['control'] == 'editor';}, $fields)));
+        $fields = $this->config->execution->form->create;
         foreach(explode(',', trim($this->config->execution->create->requiredFields, ',')) as $field) $fields[$field]['required'] = true;
         if(!isset($_POST['code'])) $fields['code']['required'] = false;
         if(!isset($_POST['percent'])) $fields['percent']['required'] = false;
@@ -961,7 +960,7 @@ class executionZen extends execution
             if(!empty($execution->realBegan) && !empty($execution->realEnd)) $execution->realDuration = $this->programplan->getDuration($execution->realBegan, $execution->realEnd);
         }
 
-        return $this->loadModel('file')->processImgURL($execution, $editorFields, $this->post->uid);
+        return $this->loadModel('file')->processImgURL($execution, $this->config->execution->editor->create['id'], $this->post->uid);
     }
 
     /**
@@ -1574,6 +1573,13 @@ class executionZen extends execution
 
         if($module == 'execution' && $method == 'create') return '';
 
+        if($this->config->edition != 'open')
+        {
+            $flow = $this->loadModel('workflow')->getByModule($module);
+            if(in_array($flow->app, array('scrum', 'waterfall'))) $flow->app = 'project';
+            if(!empty($flow) && $flow->buildin == '0') return helper::createLink('flow', 'ajaxSwitchBelong', "objectID=%s&moduleName=$module") . "#app=$flow->app";
+        }
+
         $link = helper::createLink($module, $method, "executionID=%s");
         if($module == 'execution' && ($method == 'index' || $method == 'all'))
         {
@@ -1586,6 +1592,10 @@ class executionZen extends execution
         elseif($module == 'execution' && in_array($method, array('kanban', 'cfd')))
         {
             $link = helper::createLink($module, 'view', "executionID=%s");
+        }
+        elseif($module == 'execution' && $method == 'autoschedule')
+        {
+            $link = helper::createLink('task', 'autoSchedule', "executionID=%s");
         }
         elseif($module == 'bug' && $method == 'create' && $this->app->tab == 'execution')
         {

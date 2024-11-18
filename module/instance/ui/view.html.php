@@ -19,10 +19,11 @@ jsVar('instanceStatus', $instance->status);
 jsVar('instanceType',   $type);
 jsVar('inQuickon',      $config->inQuickon);
 
+if(empty($instance->externalID)) $instance->externalID = 0;
 $instance->appName = strtolower($instance->appName);
 $cpuInfo    = $this->instance->printCpuUsage($instance, (object)$instanceMetric->cpu);
-$memoryInfo = $this->instance->printMemUsage($instance, (object)$instanceMetric->memory);
-$volumeInfo = $this->instance->printVolUsage($instance, (object)$instanceMetric->disk);
+$memoryInfo = $this->instance->printStorageUsage($instance, (object)$instanceMetric->memory);
+$volumeInfo = $this->instance->printStorageUsage($instance, (object)$instanceMetric->disk);
 $actions    = $this->loadModel('common')->buildOperateMenu($instance);
 
 if($type !== 'store')
@@ -216,6 +217,7 @@ div
                             $type !== 'store' ? null : h::td
                             (
                                 setID('statusTD'),
+                                setData('status', $instance->status),
                                 setData('reload', in_array($instance->status, array('creating', 'initializing', 'pulling', 'startup', 'starting', 'suspending', 'installing', 'uninstalling', 'stopping', 'destroying', 'upgrading'))),
                                 span
                                 (

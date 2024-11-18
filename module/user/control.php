@@ -716,10 +716,18 @@ class user extends control
         /* 处理登录逻辑。*/
         /* Process login. */
         $result = $this->userZen->login($this->referer, $viewType, $loginLink, $denyLink, $locateReferer, $locateWebRoot);
-        if($result) return $this->send($result);
+        if($result)
+        {
+            /* Clean output buffer. Remove error message. Ensure that JSON can be parsed. */
+            $obLevel = ob_get_level();
+            for($i = 0; $i < $obLevel; $i++) ob_end_clean();
+
+            return $this->send($result);
+        }
 
         helper::setcookie('tab', '', time());
         $loginExpired = !(preg_match("/(m=|\/)(index)(&f=|-)(index)(&|-|\.)?/", strtolower($this->referer), $output) || $this->referer == $this->config->webRoot || empty($this->referer) || preg_match("/\/www\/$/", strtolower($this->referer), $output));
+        if($this->cookie->logout) $loginExpired = false;
 
         $this->view->title        = $this->lang->user->login;
         $this->view->plugins      = $this->loadModel('extension')->getExpiringPlugins(true);
@@ -792,6 +800,7 @@ class user extends control
         helper::setcookie('za',  '', time() - 3600);
         helper::setcookie('zp',  '', time() - 3600);
         helper::setcookie('tab', '', time() - 3600);
+        helper::setcookie('logout', '1', 0);
 
         $_SESSION = array();    // Clear session in roadrunner.
         session_destroy();
@@ -830,8 +839,7 @@ class user extends control
             if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
             if(!$result) return $this->send(array('result' => 'fail', 'message' => $this->lang->user->resetFail));
 
-            $referer = helper::safe64Encode($this->createLink('index', 'index'));
-            return $this->send(array('result' => 'success', 'message' => $this->lang->user->resetSuccess, 'locate' => inlink('logout', 'referer=' . $referer)));
+            return $this->send(array('result' => 'success', 'message' => $this->lang->user->resetSuccess, 'locate' => inlink('login')));
         }
 
         /* 移除真实路径以确保安全。*/
@@ -1004,6 +1012,26 @@ class user extends control
     }
 
     /**
+     * AJAX: get users from a contact list.
+     *
+     * @param  int    $contactListID
+     * @param  string $dropdownName mailto|whitelist
+     * @access public
+     * @return string
+     */
+    public function ajaxGetOldContactUsers(int $contactListID, string $dropdownName = 'mailto')
+    {
+        $list = $contactListID ? $this->user->getContactListByID($contactListID) : '';
+        $attr = $dropdownName == 'mailto' ? "data-placeholder='{$this->lang->chooseUsersToMail}' data-drop-direction='bottom'" : '';
+
+        $users = $this->user->getPairs('devfirst|nodeleted|noclosed', $list ? $list->userList : '', $this->config->maxCount);
+        if(isset($this->config->user->moreLink)) $this->config->moreLinks[$dropdownName . "[]"] = $this->config->user->moreLink;
+
+        $defaultUsers = empty($contactListID) ? '' : $list->userList;
+        return print(html::select($dropdownName . "[]", $users, $defaultUsers, "class='form-control chosen' multiple $attr"));
+    }
+
+    /**
      * AJAX: 获取某个联系人列表中包含的用户。
      * AJAX: Get users in a contact list.
      *
@@ -1039,6 +1067,20 @@ class user extends control
         $lists = $this->user->getContactLists();
         $items = array_map(function($id, $name){return array('text' => $name, 'value' => $id);}, array_keys($lists), $lists);
         return $this->send($items);
+    }
+
+    /**
+     * Ajax get old contact list.
+     *
+     * @param  $dropdownName mailto|whitelist
+     * @access public
+     * @return string
+     */
+    public function ajaxGetOldContactList(string $dropdownName = 'mailto')
+    {
+        $contactList = $this->user->getContactLists();
+        if(empty($contactList)) return false;
+        return print(html::select('contactListMenu', array('' => '') + $contactList, '', "class='form-control' onchange=\"setMailto('$dropdownName', this.value)\""));
     }
 
     /**

@@ -36,8 +36,11 @@ if(!empty($story->stages) && isset($fields['stage']['options']))
     }
 }
 
-unset($fields['stage']['options']['delivered']);
-unset($fields['stage']['options']['delivering']);
+if($story->type == 'story')
+{
+    unset($fields['stage']['options']['delivered']);
+    unset($fields['stage']['options']['delivering']);
+}
 
 if($app->tab == 'product') data('activeMenuID', $story->type);
 jsVar('storyType', $story->type);
@@ -318,7 +321,7 @@ detailBody
             item
             (
                 set::name($lang->story->estimate),
-                $story->isParent == '0' ? input(set::name('estimate'), set::value($story->estimate)) : $story->estimate
+                $story->isParent == '0' ? input(set::name('estimate'), set::value($story->estimate ? $story->estimate : 0)) : $story->estimate
             ),
             item
             (

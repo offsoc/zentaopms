@@ -12,11 +12,10 @@ namespace zin;
 
 include($this->app->getModuleRoot() . 'ai/ui/inputinject.html.php');
 
-jsVar('goalTip',         $lang->testreport->goalTip);
-jsVar('foundBugTip',     $lang->testreport->foundBugTip);
-jsVar('legacyBugTip',    $lang->testreport->legacyBugTip);
-jsVar('activatedBugTip', $lang->testreport->activatedBugTip);
-jsVar('fromCaseBugTip',  $lang->testreport->fromCaseBugTip);
+jsVar('objectID',        $objectID);
+jsVar('objectType',      $objectType);
+jsVar('extra',           $extra);
+jsVar('reportID',        !empty($report->id) ? $report->id : 0);
 
 $caseCharts = array();
 foreach($charts as $chartType => $chartOption)
@@ -350,13 +349,15 @@ panel
                     datePicker
                     (
                         set::name('begin'),
-                        set::value($begin)
+                        set::value($begin),
+                        setData(array('on' => 'change', 'call' => 'refreshPage'))
                     ),
                     $lang->testtask->to,
                     datePicker
                     (
                         set::name('end'),
-                        set::value($end)
+                        set::value($end),
+                        setData(array('on' => 'change', 'call' => 'refreshPage'))
                     )
                 ),
                 input
@@ -460,9 +461,8 @@ panel
                     icon
                     (
                         'help',
-                        setID('goalTip'),
                         setClass('text-light mr-0.5'),
-                        setData('toggle', 'tooltip'),
+                        setData(array('toggle' => 'tooltip', 'title' => $lang->testreport->goalTip))
                     ),
                     strip_tags($execution->desc)
                 )

@@ -187,6 +187,7 @@ $lang->action->objectTypes['metric']           = '度量';
 $lang->action->objectTypes['projectbuild']     = '版本';
 $lang->action->objectTypes['board']            = '白板';
 $lang->action->objectTypes['boardspace']       = '白板空间';
+$lang->action->objectTypes['productline']      = '产品线';
 
 /* 用来描述操作历史记录。*/
 $lang->action->desc = new stdclass();
@@ -284,12 +285,13 @@ $lang->action->desc->unlinkrepobranch     = '$date, 由 <strong>$actor</strong> 
 $lang->action->desc->changedprogram       = '$date, 由 <strong>$actor</strong> 调整了所属项目集。' . "\n";
 
 /* 用来描述和父子任务相关的操作历史记录。*/
-$lang->action->desc->createchildren     = '$date, 由 <strong>$actor</strong> 创建子任务 <strong>$extra</strong>。' . "\n";
-$lang->action->desc->linkchildtask      = '$date, 由 <strong>$actor</strong> 关联子任务 <strong>$extra</strong>。' . "\n";
-$lang->action->desc->unlinkchildrentask = '$date, 由 <strong>$actor</strong> 移除子任务 <strong>$extra</strong>。' . "\n";
-$lang->action->desc->linkparenttask     = '$date, 由 <strong>$actor</strong> 关联到父任务 <strong>$extra</strong>。' . "\n";
-$lang->action->desc->unlinkparenttask   = '$date, 由 <strong>$actor</strong> 从父任务<strong>$extra</strong>取消关联。' . "\n";
-$lang->action->desc->deletechildrentask = '$date, 由 <strong>$actor</strong> 删除子任务<strong>$extra</strong>。' . "\n";
+$lang->action->desc->createchildren        = '$date, 由 <strong>$actor</strong> 创建子任务 <strong>$extra</strong>。' . "\n";
+$lang->action->desc->linkchildtask         = '$date, 由 <strong>$actor</strong> 关联子任务 <strong>$extra</strong>。' . "\n";
+$lang->action->desc->unlinkchildrentask    = '$date, 由 <strong>$actor</strong> 移除子任务 <strong>$extra</strong>。' . "\n";
+$lang->action->desc->linkparenttask        = '$date, 由 <strong>$actor</strong> 关联到父任务 <strong>$extra</strong>。' . "\n";
+$lang->action->desc->unlinkparenttask      = '$date, 由 <strong>$actor</strong> 从父任务<strong>$extra</strong>取消关联。' . "\n";
+$lang->action->desc->deletechildrentask    = '$date, 由 <strong>$actor</strong> 删除子任务<strong>$extra</strong>。' . "\n";
+$lang->action->desc->syncstorybyparenttask = "\$date, 由于父任务更新了相关需求，子任务同步更新。\n";
 
 /* 用来描述和父子需求相关的操作历史记录。*/
 $lang->action->desc->createchildrenstory = '$date, 由 <strong>$actor</strong> 创建子需求 <strong>$extra</strong>。' . "\n";
@@ -477,9 +479,9 @@ $lang->action->label->syncexecution           = '开始了';
 $lang->action->label->syncexecutionbychild    = '开始了';
 $lang->action->label->syncmultipleproject     = '开始了';
 $lang->action->label->startProgram            = "（因{$lang->projectCommon}开始而启动项目集）";
-$lang->action->label->createmr                = '合并请求关联了';
-$lang->action->label->deletemr                = '合并请求取消了';
-$lang->action->label->mergedmr                = '合并请求合并了';
+$lang->action->label->createmr                = '关联了';
+$lang->action->label->deletemr                = '取消了';
+$lang->action->label->mergedmr                = '合并了';
 $lang->action->label->compilepass             = '构建成功';
 $lang->action->label->compilefail             = '构建失败';
 $lang->action->label->reopen                  = '重新打开了';
@@ -1100,3 +1102,12 @@ $lang->action->desc->approve                      = '$date, 由 <strong>$actor</
 $lang->action->desc->reject                       = '$date, 由 <strong>$actor</strong> 拒绝。';
 $lang->action->desc->linkedrepo                   = '$date, 由 <strong>$actor</strong> 关联代码库 $extra';
 $lang->action->desc->unlinkedrepo                 = '$date, 由 <strong>$actor</strong> 取消了' . $lang->projectCommon . '与代码库 $extra 的关联';
+
+$lang->action->reviewStatusList['wait']      = '待审批';
+$lang->action->reviewStatusList['doing']     = '审批中';
+$lang->action->reviewStatusList['pass']      = '通过';
+$lang->action->reviewStatusList['reject']    = '不通过';
+$lang->action->reviewStatusList['reverting'] = '回退中';
+
+$lang->action->reviewResultList['pass']   = '通过';
+$lang->action->reviewResultList['reject'] = '不通过';

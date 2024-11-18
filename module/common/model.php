@@ -605,41 +605,88 @@ class commonModel extends model
      * Get main nav items list
      *
      * @param  string $moduleName
+     * @param  bool   $useDefault 是否使用语言项中的默认值
      *
      * @static
      * @access public
      * @return array
      */
-    public static function getMainNavList(string $moduleName): array
+    public static function getMainNavList(string $moduleName, bool $useDefault = false): array
     {
         global $lang, $app, $config;
 
         $app->loadLang('my');
+        if($config->edition != 'open' && $app->isServing()) $app->control->loadModel('common')->mergePrimaryFlows();
 
         /* Ensure user has latest rights set. */
         $app->user->rights = $app->control->loadModel('user')->authorize($app->user->account);
 
-        $menuOrder = $lang->mainNav->menuOrder;
+        $menuOrder     = $lang->mainNav->menuOrder;
+        $hasCustomMenu = false;
+        if(isset($config->customMenu->nav) && !$useDefault && !commonModel::isTutorialMode())
+        {
+            $customMenuOrder = array();
+            $items           = json_decode($config->customMenu->nav);
+            $hiddenItems     = array();
+            foreach($items as $item)
+            {
+                if(!empty($item->hidden))
+                {
+                    $hiddenItems[] = $item->name;
+                    continue;
+                }
+
+                $customMenuOrder[$item->order] = $item->name;
+            }
+
+            $customMenuItems = array_values($customMenuOrder);
+            foreach($menuOrder as $order => $name)
+            {
+                if(in_array($name, $customMenuItems) || in_array($name, $hiddenItems)) continue;
+
+                while(isset($customMenuOrder[$order])) $order ++;
+                $customMenuOrder[$order] = $name;
+            }
+
+            $menuOrder     = $customMenuOrder;
+            $hasCustomMenu = true;
+        }
+
         ksort($menuOrder);
 
         $items        = array();
         $lastItem     = end($menuOrder);
         $printDivider = false;
+        $prev         = '';
 
         foreach($menuOrder as $key => $group)
         {
+            // 如果有自定义菜单，则直接用自定义后的divider分隔符
+            if($hasCustomMenu && $group == 'divider' && $prev != 'divider')
+            {
+                $items[] = 'divider';
+                $prev    = 'divider';
+                continue;
+            }
+
+            $prev = $group;
+
             if($group != 'my' && !empty($app->user->rights['acls']['views']) && !isset($app->user->rights['acls']['views'][$group])) continue; // 后台权限分组中没有给导航视图
             if(!isset($lang->mainNav->$group)) continue;
 
             $nav = $lang->mainNav->$group;
             list($title, $currentModule, $currentMethod, $vars) = explode('|', $nav);
 
-            /* When last divider is not used in mainNav, use it next menu. */
-            $printDivider = ($printDivider or ($lastItem != $key) and strpos($lang->dividerMenu, ",{$group},") !== false) ? true : false;
-            if($printDivider and !empty($items))
+            // 没有自定义过菜单，用默认语言项中的divider分隔符
+            if(!$hasCustomMenu)
             {
-                $items[]      = 'divider';
-                $printDivider = false;
+                /* When last divider is not used in mainNav, use it next menu. */
+                $printDivider = ($printDivider or ($lastItem != $key) and strpos($lang->dividerMenu, ",{$group},") !== false) ? true : false;
+                if($printDivider and !empty($items))
+                {
+                    $items[]      = 'divider';
+                    $printDivider = false;
+                }
             }
 
             $display = false;
@@ -707,8 +754,8 @@ class commonModel extends model
             $items[] = $item;
         }
 
-        /* Fix bug 14574. */
-        if(end($items) == 'divider') array_pop($items);
+        // 如果最后一个是分割线，则删除
+        while(!empty($items) && end($items) === 'divider') { array_pop($items); }
         return $items;
     }
 
@@ -860,10 +907,10 @@ class commonModel extends model
 
                 if($value != stripslashes((string)$old->$key))
                 {
-                    $diff = '';
-                    if(substr_count((string)$value, "\n") > 1     or
-                        substr_count((string)$old->$key, "\n") > 1 or
-                        strpos('name,title,desc,spec,steps,content,digest,verify,report,definition,analysis,summary,prevention,resolution,outline,schedule,minutes,sql,interface,ui,langs,performance,privileges,search,actions,deploy,bi,safe,other', strtolower($key)) !== false)
+                    $diff       = '';
+                    $showDiff   = (substr_count((string)$value, "\n") > 1 || substr_count((string)$old->$key, "\n") > 1 || strpos(',name,title,desc,spec,steps,content,digest,verify,report,definition,analysis,summary,prevention,resolution,outline,schedule,minutes,sql,interface,ui,langs,performance,privileges,search,actions,deploy,bi,safe,other,', ',' . strtolower($key) . ',') !== false);
+                    $hiddenDiff = array('bug' => 'resolution');
+                    if($showDiff && (!isset($hiddenDiff[$moduleName]) || (isset($hiddenDiff[$moduleName]) && strpos(",$hiddenDiff[$moduleName],", ",$key,") === false)))
                     {
                         $diff = commonModel::diff((string)$old->$key, (string)$value);
                     }
@@ -1304,6 +1351,9 @@ eof;
      */
     public static function hasPriv(string $module, string $method, mixed $object = null, string $vars = '')
     {
+        /* If the user is doing a tutorial, have all privileges. */
+        if(commonModel::isTutorialMode()) return true;
+
         global $app;
         if(empty($app->user->account)) return false;
 
@@ -1351,7 +1401,7 @@ eof;
         parse_str($vars, $params);
 
         if(empty($app->user)) return false;
-        list($module, $method) = commonTao::getStoryModuleAndMethod($module, $method, $params);
+        //list($module, $method) = commonTao::getStoryModuleAndMethod($module, $method, $params);
         list($module, $method) = commonTao::getBoardModuleAndMethod($module, $method, $params);
 
         /* Compatible with old search. */
@@ -1364,9 +1414,12 @@ eof;
         {
             $app->loadLang('tutorial');
             $app->loadConfig('tutorial');
-            foreach($app->config->tutorial->tasksConfig as $task)
+            foreach($app->config->tutorial->guides as $guide)
             {
-                if($task['nav']['module'] == $module and $task['nav']['method'] = $method) return true;
+                if(!isset($guide->modules)) continue;
+
+                $guideModules = explode(',', strtolower($guide->modules));
+                if(in_array($module, $guideModules)) return true;
             }
         }
 
@@ -1514,14 +1567,39 @@ eof;
         if(empty($object)) return true;
 
         $account = $app->user->account;
-        if(!empty($object->openedBy)     && $object->openedBy     == $account) return true;
-        if(!empty($object->addedBy)      && $object->addedBy      == $account) return true;
-        if(!empty($object->account)      && $object->account      == $account) return true;
-        if(!empty($object->assignedTo)   && $object->assignedTo   == $account) return true;
-        if(!empty($object->finishedBy)   && $object->finishedBy   == $account) return true;
-        if(!empty($object->canceledBy)   && $object->canceledBy   == $account) return true;
-        if(!empty($object->closedBy)     && $object->closedBy     == $account) return true;
-        if(!empty($object->lastEditedBy) && $object->lastEditedBy == $account) return true;
+        if($module == 'task' && !empty($object->team))
+        {
+            $taskModel = $app->control->loadModel('task');
+            if($object->mode == 'linear')
+            {
+                if($method == 'assignto' && !in_array($object->status, array('done', 'cancel', 'closed'))) return false;
+                if($method == 'start' && in_array($object->status, array('wait', 'doing')))
+                {
+                    if($object->assignedTo != $account) return false;
+
+                    $currentTeam = $taskModel->getTeamByAccount($object->team, $account);
+                    if($currentTeam && $currentTeam->status == 'wait') return true;
+                }
+                if($method == 'finish' && $object->assignedTo != $account) return false;
+            }
+            elseif($object->mode == 'multi')
+            {
+                $currentTeam = $taskModel->getTeamByAccount($object->team, $account);
+                if($method == 'start' && in_array($object->status, array('wait', 'doing')) && $currentTeam && $currentTeam->status == 'wait') return true;
+                if($method == 'finish' && (empty($currentTeam) || $currentTeam->status == 'done')) return false;
+            }
+        }
+        else
+        {
+            if(!empty($object->openedBy)     && $object->openedBy     == $account) return true;
+            if(!empty($object->addedBy)      && $object->addedBy      == $account) return true;
+            if(!empty($object->account)      && $object->account      == $account) return true;
+            if(!empty($object->assignedTo)   && $object->assignedTo   == $account) return true;
+            if(!empty($object->finishedBy)   && $object->finishedBy   == $account) return true;
+            if(!empty($object->canceledBy)   && $object->canceledBy   == $account) return true;
+            if(!empty($object->closedBy)     && $object->closedBy     == $account) return true;
+            if(!empty($object->lastEditedBy) && $object->lastEditedBy == $account) return true;
+        }
 
         return false;
     }
@@ -1647,6 +1725,11 @@ eof;
      */
     public static function convert2Pinyin($items): array
     {
+        foreach($items as $item)
+        {
+            if(!is_string($item)) return array();
+        }
+
         global $app;
         static $allConverted = array();
         static $pinyin;
@@ -1730,7 +1813,11 @@ eof;
         $this->loadModel('action')->create('user', $user->id, 'login');
         $this->loadModel('score')->create('user', 'login');
 
-        if($isFreepasswd) header("Location: {$this->config->webRoot}");
+        if($isFreepasswd)
+        {
+            header("Location: {$this->config->webRoot}");
+            helper::end();
+        }
 
         $this->session->set('ENTRY_CODE', $this->get->code);
         $this->session->set('VALID_ENTRY', md5(md5($this->get->code) . helper::getRemoteIp()));
@@ -1812,6 +1899,7 @@ eof;
 
         global $config;
         static $productsStatus   = array();
+        static $projectsStatus   = array();
         static $executionsStatus = array();
 
         $commonModel = new commonModel();
@@ -1835,16 +1923,39 @@ eof;
             if(!empty($productStatus['closed']) and count($productStatus) == 1) return false;
         }
 
+        /* Check the project is closed. */
+        $productModuleList = array('story', 'bug', 'testtask', 'release');
+        if(!in_array($module, $productModuleList) and !empty($object->project) and is_numeric($object->project) and empty($config->CRProject))
+        {
+            if(!isset($projectsStatus[$object->project]))
+            {
+                $project = $commonModel->loadModel('project')->getByID((int)$object->project);
+                $projectsStatus[$object->project] = $project ? $project->status : '';
+            }
+            if($projectsStatus[$object->project] == 'closed') return false;
+        }
+
         /* Check the execution is closed. */
         $productModuleList = array('story', 'bug', 'testtask');
         if(!in_array($module, $productModuleList) and !empty($object->execution) and is_numeric($object->execution) and empty($config->CRExecution))
         {
             if(!isset($executionsStatus[$object->execution]))
             {
-                $execution = $commonModel->loadModel('execution')->getByID($object->execution);
+                $execution = $commonModel->loadModel('execution')->getByID((int)$object->execution);
                 $executionsStatus[$object->execution] = $execution ? $execution->status : '';
             }
-            if($executionsStatus[$object->execution] == 'closed') return false;
+            if($executionsStatus[$object->execution] == 'closed'  || !empty($config->CRProject)) return false;
+
+            /* Check the execution's project is closed. */
+            if(isset($object->project))
+            {
+                if(!isset($projectsStatus[$object->project]))
+                {
+                    $project = $commonModel->loadModel('project')->getByID((int)$object->project);
+                    $projectsStatus[$object->project] = $project ? $project->status : '';
+                }
+                if($projectsStatus[$object->project] == 'closed') return false;
+            }
         }
 
         return true;
@@ -1865,9 +1976,24 @@ eof;
 
         if(empty($object)) return true;
 
-        /* Judge that if the closed object(product|execution) is readonly from config table. The default is can modify. */
-        if($type == 'product'   and empty($config->CRProduct)   and $object->status == 'closed') return false;
-        if($type == 'execution' and empty($config->CRExecution) and $object->status == 'closed') return false;
+        /* Judge that if the closed object(product|project|execution) is readonly from config table. The default is can modify. */
+        if($type == 'product'   and empty($config->CRProduct) and $object->status == 'closed') return false;
+        if($type == 'project'   and empty($config->CRProject) and $object->status == 'closed') return false;
+        if($type == 'execution' and empty($config->CRExecution))
+        {
+            if($object->status == 'closed') return false;
+            if(!isset($object->project) || !empty($config->CRProject)) return true;
+
+            /* Check the execution's project is closed. */
+            static $projectsStatus = array();
+            $commonModel = new commonModel();
+            if(!isset($projectsStatus[$object->project]))
+            {
+                $project = $commonModel->loadModel('project')->getByID((int)$object->project);
+                $projectsStatus[$object->project] = $project ? $project->status : '';
+            }
+            if($projectsStatus[$object->project] == 'closed') return false;
+        }
 
         return true;
     }
@@ -2034,9 +2160,9 @@ eof;
      *
      * @static
      * @access public
-     * @return void
+     * @return bool
      */
-    public static function setMainMenu()
+    public static function setMainMenu(): bool
     {
         global $app, $lang;
         $tab = $app->tab;
@@ -2050,12 +2176,12 @@ eof;
         $lang->menu      = isset($lang->$tab->menu) ? $lang->$tab->menu : array();
         $lang->menuOrder = isset($lang->$tab->menuOrder) ? $lang->$tab->menuOrder : array();
 
-        if(!isset($lang->$tab->homeMenu)) return;
+        if(!isset($lang->$tab->homeMenu)) return false;
 
         if($currentModule == $tab and $currentMethod == 'create')
         {
             $lang->menu = $lang->$tab->homeMenu;
-            return;
+            return true;
         }
 
         /* If the method is in homeMenu, display homeMenu. */
@@ -2068,7 +2194,7 @@ eof;
             if($method == $currentMethod)
             {
                 $lang->menu = $lang->$tab->homeMenu;
-                return;
+                return true;
             }
 
             $alias   = isset($menu['alias'])   ? explode(',', strtolower($menu['alias']))   : array();
@@ -2076,15 +2202,17 @@ eof;
             if(in_array($currentMethod, $alias) && !in_array("{$currentModule}-{$currentMethod}", $exclude))
             {
                 $lang->menu = $lang->$tab->homeMenu;
-                return;
+                return true;
             }
 
             if(isset($menu['subModule']) and strpos(",{$menu['subModule']},", ",$currentModule,") !== false)
             {
                 $lang->menu = $lang->$tab->homeMenu;
-                return;
+                return true;
             }
         }
+
+        return false;
     }
 
     /**
@@ -2101,6 +2229,8 @@ eof;
      */
     public function getRelations(string $AType = '', int $AID = 0, string $BType = '', int $BID = 0): array
     {
+        if(common::isTutorialMode()) return array();
+
         return $this->dao->select('*')->from(TABLE_RELATION)
             ->where('AType')->eq($AType)
             ->andWhere('AID')->eq($AID)
@@ -2140,6 +2270,11 @@ eof;
                 foreach($menu['subMenu'] as $key1 => $subMenu)
                 {
                     $lang->$moduleName->$menuKey->{$label}['subMenu']->$key1 = static::setMenuVarsEx($subMenu, $objectID, $params);
+                    if(!isset($subMenu['dropMenu'])) continue;
+                    foreach($subMenu['dropMenu'] as $key2 => $dropMenu)
+                    {
+                        $lang->$moduleName->$menuKey->{$label}['subMenu']->$key1['dropMenu']->$key2 = static::setMenuVarsEx($dropMenu, $objectID, $params);
+                    }
                 }
             }
 
@@ -2511,6 +2646,7 @@ eof;
         }
         else
         {
+            if($action == 'importToLib' && in_array($moduleName, array('epic', 'requirement'))) $moduleName = 'story';
             if(!common::hasPriv($moduleName, $action, $data)) return false;
         }
 
@@ -2594,6 +2730,8 @@ eof;
      */
     public function checkPrivByObject(string $objectType, int $objectID): bool
     {
+        if(common::isTutorialMode()) return true;
+
         $objectType = strtolower($objectType);
         if(in_array($objectType, array('program', 'project', 'product', 'execution'))) return $this->loadModel($objectType)->checkPriv($objectID);
 
@@ -3111,6 +3249,7 @@ eof;
 
         if(!$tab) return;
         if($tab == 'admin' and $app->control and method_exists($app->control, 'loadModel')) $app->control->loadModel('admin')->setMenu();
+        if($config->edition != 'open' && $app->isServing()) $app->control->loadModel('common')->mergeFlowMenuLang();
         $icon = zget($lang->navIcons, $tab, '');
 
         if(!in_array($tab, array('program', 'product', 'project')))
@@ -3196,7 +3335,7 @@ eof;
         {
             if(isset($menuItem->hidden) and $menuItem->hidden and (!isset($menuItem->tutorial) or !$menuItem->tutorial)) continue;
             if(empty($menuItem->link)) continue;
-            if($menuItem->divider) $menuHtml .= "<li class='divider'></li>";
+            if($menuItem->divider && $menuItem->link['method'] != 'more') $menuHtml .= "<li class='divider'></li>";
 
             /* Init the these vars. */
             $alias     = isset($menuItem->alias) ? $menuItem->alias : '';
@@ -3610,7 +3749,7 @@ eof;
             }
             else
             {
-                echo html::a(helper::createLink('user', 'logout'), "<i class='icon icon-exit'></i> " . $lang->logout, '_top');
+                echo html::a('javascript:$.apps.logout()', "<i class='icon icon-exit'></i> " . $lang->logout, '_top');
             }
             echo '</li></ul>';
 

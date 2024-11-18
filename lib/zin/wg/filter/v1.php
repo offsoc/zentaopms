@@ -19,7 +19,7 @@ class filter extends wg
         'type?: string',                    // 控件类型。
         'name?: string',                    // 控件名称。
         'value?: string',                   // 控件默认值。
-        'items?: array',                    // picker 列表项或表项获取方法。
+        'items?: array|string',             // picker 列表项或表项获取方法。
         'menu?: array',                     // picker 附加的菜单选项。
         'multiple?: boolean|number=false',  // picker 是否允许选择多个值，如果指定为数字，则限制多选的数目，默认 `false`。
         'layout?: string="horz"',             // 使用的方式，默认是水平使用，还可以指定为normal正常布局。
@@ -38,7 +38,23 @@ class filter extends wg
             set::items($items),
             set::menu($menu),
             set::multiple($multiple),
-            on::change("$onChange(e, '$name')")
+            on::change("$onChange(e, '$name')"),
+            on::inited()->do(<<<JS
+            const getItems = () => \$this.zui().\$.state.items;
+            const hasUrl   = () => \$this.zui().\$.state.items.hasOwnProperty('url');
+            const waitItems = () => {
+                if(!hasUrl())
+                {
+                    const picker = \$this.zui().\$;
+                    const itemValues = picker.state.items.map(item => item.value);
+                    const values = picker.valueList.filter(value => itemValues.includes(value));
+                    picker.setValue(values);
+                    return;
+                }
+                setTimeout(waitItems, 100);
+            }
+            if(hasUrl()) waitItems();
+            JS)
         );
     }
 
@@ -83,7 +99,7 @@ class filter extends wg
 
     protected function buildControl(string $type): node|array
     {
-        if($type == 'select')   return $this->buildPicker();
+        if($type == 'select' || $type == 'multipleselect') return $this->buildPicker();
         if($type == 'date')     return $this->buildDatePicker();
         if($type == 'datetime') return $this->buildDatetimePicker();
         return $this->buildInput();

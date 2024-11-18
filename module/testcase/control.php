@@ -507,7 +507,8 @@ class testcase extends control
 
             if(defined('RUN_MODE') && RUN_MODE == 'api') return $this->send(array('status' => 'success', 'data' => $caseID));
             if(isInModal() && $this->app->tab == 'my') return $this->send(array('result' => 'success', 'message' => $message, 'closeModal' => true));
-            return $this->send(array('result' => 'success', 'message' => $message, 'closeModal' => true, 'load' => $this->createLink('testcase', 'view', "caseID={$caseID}")));
+            $locate = $oldCase->lib ? $this->createLink('caselib', 'viewCase', "caseID={$caseID}") : $this->createLink('testcase', 'view', "caseID={$caseID}");
+            return $this->send(array('result' => 'success', 'message' => $message, 'closeModal' => true, 'load' => $locate));
         }
 
         $case = $this->testcaseZen->preProcessForEdit($oldCase);
@@ -573,6 +574,12 @@ class testcase extends control
             if(dao::isError()) return $this->send(array('result' => 'fail', 'message' => dao::getError()));
             $this->loadModel('score')->create('ajax', 'batchEdit');
             return $this->send(array('result' => 'success', 'message' => $this->lang->saveSuccess, 'load' => $this->session->caseList));
+        }
+
+        if($this->app->tab == 'project')
+        {
+            $this->loadModel('project')->setMenu($this->session->project);
+            $this->view->projectID = $this->session->project;
         }
 
         $this->testcaseZen->assignForBatchEdit($productID, $branch, $type, $cases);
@@ -887,6 +894,7 @@ class testcase extends control
             ->set('fromCaseVersion')->eq($version)
             ->set('precondition')->eq($libCase->precondition)
             ->set('title')->eq($libCase->title)
+            ->set('keywords')->eq($libCase->keywords)
             ->where('id')->eq($caseID)
             ->exec();
 
@@ -1029,6 +1037,7 @@ class testcase extends control
         {
             $task     = $this->loadModel('testtask')->fetchByID($taskID);
             $taskName = $task->name;
+            $this->config->testcase->exportFields = str_replace('pri,', 'pri,assignedTo,', $this->config->testcase->exportFields);
         }
 
         $this->view->fileName        = $product->name . $this->lang->dash . ($taskID ? $taskName . $this->lang->dash : '') . $browseType . $fileName;
@@ -1783,9 +1792,14 @@ class testcase extends control
 
         if(!empty($_POST))
         {
+            $productID    = (int)$this->post->productID;
+            $branch       = $this->post->branch;
+            $isInsert     = (bool)$this->post->insert;
             $sceneList    = json_decode($this->post->sceneList,    true);
             $testcaseList = json_decode($this->post->testcaseList, true);
-            $result = $this->testcase->saveXmindImport($sceneList, $testcaseList);
+
+            $cases  = $this->testcaseZen->buildCasesByXmind($productID, $branch, $testcaseList, $isInsert);
+            $result = $this->testcase->saveXmindImport($sceneList, $cases);
             if($result['result'] == 'success') $result['load'] = $this->createLink('testcase', 'browse');
             return $this->send($result);
         }

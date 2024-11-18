@@ -21,6 +21,9 @@ jsVar('storyType', $storyType);
 jsVar('tab', $app->tab);
 jsVar('vision', $config->vision);
 jsVar('window.globalSearchType', $storyType);
+jsVar('storyViewPriv', hasPriv('story', 'view'));
+jsVar('requirementViewPriv', hasPriv('requirement', 'view'));
+jsVar('epicViewPriv', hasPriv('epic', 'view'));
 
 $viewType          = $this->cookie->storyViewType ? $this->cookie->storyViewType : 'tree';
 $storyCommon       = $storyType == 'requirement' ? $lang->URCommon : $lang->SRCommon;
@@ -65,6 +68,7 @@ $fnGenerateSideBar = function() use ($moduleTree, $moduleID, $productID, $branch
 $fnBuildCreateStoryButton = function() use ($lang, $product, $isProjectStory, $storyType, $productID, $branch, $moduleID, $projectID, $project, $projectProducts)
 {
     if(!common::canModify('product', $product)) return null;
+    if(!empty($project) && !common::canModify('project', $project)) return null;
 
     global $app, $config;
     $currentProductID = empty($productID) ? current(array_keys($projectProducts)) : $productID;
@@ -98,7 +102,7 @@ $fnBuildCreateStoryButton = function() use ($lang, $product, $isProjectStory, $s
             $wizardParams = helper::safe64Encode("productID=$productID&branch=$branch&moduleID=$moduleID");
             if($isProjectStory) $wizardParams = helper::safe64Encode("productID=$productID&branch=$branch&moduleID=$moduleID&storyID=&projectID=$projectID");
             $link = $this->createLink('tutorial', 'wizard', "module=story&method=create&params=$wizardParams");
-            $items[] = array('text' => $lang->story->createCommon, 'url' => $link);
+            $items[] = array('text' => $lang->story->create, 'url' => $link);
         }
         elseif(!$isProjectStory)
         {
@@ -137,7 +141,7 @@ $fnBuildCreateStoryButton = function() use ($lang, $product, $isProjectStory, $s
                 set::text($createBtnTitle),
                 set::url($createBtnLink)
             ),
-            dropdown
+            empty($items) ? null : dropdown
             (
                 btn(setClass('dropdown-toggle'), setClass($app->tab != 'product' ? 'secondary' : 'primary'), setStyle(array('padding' => '6px', 'border-radius' => '0 2px 2px 0'))),
                 set::placement('bottom-end'),
@@ -159,6 +163,7 @@ $fnBuildCreateStoryButton = function() use ($lang, $product, $isProjectStory, $s
 $fnBuildLinkStoryButton = function() use($lang, $app, $product, $projectHasProduct, $project, $storyType)
 {
     if(!common::canModify('product', $product)) return null;
+    if(!empty($project) && !common::canModify('project', $project)) return null;
 
     if(!$projectHasProduct) return null;
 
@@ -233,13 +238,14 @@ $fnGenerateFootToolbar = function() use ($lang, $app, $product, $productID, $pro
 {
     /* Flag variables of permissions. */
     $canBeChanged = common::canModify('product', $product);
+    if(!empty($project)) $canBeChanged = $canBeChanged && common::canModify('project', $project);
     if($isProjectStory && $config->vision == 'rnd')
     {
-        $canBatchClose      = hasPriv('projectstory', 'batchClose') && strtolower($browseType) != 'closedbyme';
-        $canBatchEdit       = hasPriv('projectstory', 'batchEdit');
-        $canBatchReview     = hasPriv('projectstory', 'batchReview');
-        $canBatchAssignTo   = hasPriv('projectstory', 'batchAssignTo');
-        $canBatchChangePlan = hasPriv('projectstory', 'batchChangePlan') && $productID && $product;
+        $canBatchClose      = $canBeChanged && hasPriv('projectstory', 'batchClose') && strtolower($browseType) != 'closedbyme';
+        $canBatchEdit       = $canBeChanged && hasPriv('projectstory', 'batchEdit');
+        $canBatchReview     = $canBeChanged && hasPriv('projectstory', 'batchReview');
+        $canBatchAssignTo   = $canBeChanged && hasPriv('projectstory', 'batchAssignTo');
+        $canBatchChangePlan = $canBeChanged && hasPriv('projectstory', 'batchChangePlan') && $productID && $product;
     }
     else
     {
@@ -247,7 +253,7 @@ $fnGenerateFootToolbar = function() use ($lang, $app, $product, $productID, $pro
         $canBatchClose      = hasPriv($storyType, 'batchClose') && strtolower($browseType) != 'closedbyme' && strtolower($browseType) != 'closedstory';
         $canBatchReview     = $canBeChanged && hasPriv($storyType, 'batchReview');
         $canBatchAssignTo   = $canBeChanged && hasPriv($storyType, 'batchAssignTo');
-        $canBatchChangePlan = $canBeChanged && hasPriv($storyType, 'batchChangePlan') && $productID && $product && (($product->type != 'normal' && $branchID != 'all') || $product->type == 'normal');
+        $canBatchChangePlan = $canBeChanged && hasPriv($storyType, 'batchChangePlan') && $config->vision == 'rnd' && $productID && $product && (($product->type != 'normal' && $branchID != 'all') || $product->type == 'normal');
     }
 
     $canBatchChangeGrade   = $canBeChanged && hasPriv($storyType, 'batchChangeGrade') && count($gradePairs) > 1 && $config->{$storyType}->gradeRule == 'cross' && !$isProjectStory;
@@ -257,7 +263,7 @@ $fnGenerateFootToolbar = function() use ($lang, $app, $product, $productID, $pro
     $canBatchChangeParent  = $canBeChanged && hasPriv($storyType, 'batchChangeParent') && !($storyType == 'epic' && count($gradeGroup['epic']) < 2) && $app->tab == 'product';
     $canBatchUnlink        = $canBeChanged && $projectHasProduct && hasPriv('projectstory', 'batchUnlinkStory');
     $canBatchImportToLib   = $canBeChanged && $isProjectStory && in_array($this->config->edition, array('max', 'ipd')) && hasPriv('story', 'batchImportToLib') && helper::hasFeature('storylib');
-    $canBatchChangeRoadmap = $canBeChanged && hasPriv('story', 'batchChangeRoadmap') && $config->vision == 'or' && $storyType == 'requirement';
+    $canBatchChangeRoadmap = $canBeChanged && hasPriv($storyType, 'batchChangeRoadmap') && $config->vision == 'or' && ($storyType == 'requirement' || $storyType == 'epic');
     $canBatchAction        = $canBatchEdit || $canBatchClose || $canBatchReview || $canBatchChangeGrade || $canBatchChangeStage || $canBatchChangeModule || $canBatchChangePlan || $canBatchChangeParent || $canBatchAssignTo || $canBatchUnlink || $canBatchImportToLib || $canBatchChangeBranch || $canBatchChangeRoadmap;
 
     /* Remove empty data from data list. */
@@ -275,7 +281,7 @@ $fnGenerateFootToolbar = function() use ($lang, $app, $product, $productID, $pro
     foreach($branchTagOption as $branchID => $branchName)      $branchItems[]           = array('text' => $branchName, 'class' => 'batch-btn', 'data-formaction' => $this->createLink($isProjectStory ? 'projectstory' : $storyType, 'batchChangeBranch', "branchID=$branchID"));
     foreach($modules as $moduleID => $moduleName)              $moduleItems[]           = array('text' => $moduleName, 'class' => 'batch-btn', 'data-formaction' => $this->createLink($isProjectStory ? 'projectstory' : $storyType, 'batchChangeModule', "moduleID=$moduleID"));
     foreach($plans as $planID => $planName)                    $planItems[]             = array('text' => $planName,   'class' => 'batch-btn', 'data-formaction' => $this->createLink($isProjectStory ? 'projectstory' : $storyType, 'batchChangePlan', "planID=$planID"));
-    foreach($noclosedRoadmaps as $roadmapID => $roadmapName)   $roadmapItems[]          = array('text' => empty($roadmapName) ? $lang->null : $roadmapName, 'class' => 'batch-btn', 'data-formaction' => $this->createLink('story', 'batchChangeRoadmap', "roadmapID=$roadmapID"));
+    foreach($noclosedRoadmaps as $roadmapID => $roadmapName)   $roadmapItems[]          = array('text' => empty($roadmapName) ? $lang->null : $roadmapName, 'class' => 'batch-btn', 'data-formaction' => $this->createLink($storyType, 'batchChangeRoadmap', "roadmapID=$roadmapID"));
 
     foreach($lang->story->stageList as $key => $stageName)
     {
@@ -359,7 +365,7 @@ jsVar('modulePairs',    $modulePairs);
 jsVar('storyType',      $storyType);
 jsVar('checkedSummary', $checkedSummary);
 
-$queryMenuLink = createLink($app->rawModule, $app->rawMethod, $projectIDParam . "productID=$productID&branch=$branch&browseType=bySearch&param={queryID}");
+$queryMenuLink = createLink($app->rawModule, $app->rawMethod, $projectIDParam . "productID=$productID&branch=$branch&browseType=bySearch&param={queryID}&storyType=$storyType&orderBy=$orderBy&recTotal={$pager->recTotal}&recPerPage={$pager->recPerPage}&pageID={$pager->pageID}&projectID=$projectID");
 featureBar
 (
     $hideGrade ? null : to::leading
@@ -383,6 +389,7 @@ featureBar
             )
         )
     ),
+    set::param($param),
     set::current($storyBrowseType),
     set::link(createLink($app->rawModule, $app->rawMethod, $projectIDParam . "productID=$productID&branch=$branch&browseType={key}&param=$param&storyType=$storyType&orderBy=$orderBy&recTotal={$pager->recTotal}&recPerPage={$pager->recPerPage}&pageID={$pager->pageID}&projectID=$projectID")),
     set::queryMenuLinkCallback(array(fn($key) => str_replace('{queryID}', (string)$key, $queryMenuLink))),

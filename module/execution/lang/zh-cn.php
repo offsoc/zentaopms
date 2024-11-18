@@ -389,6 +389,7 @@ $lang->execution->copyTeamTitle        = "选择一个{$lang->project->common}�
 $lang->execution->confirmDelete                = "您确定删除{$lang->executionCommon}[%s]吗？";
 $lang->execution->confirmUnlinkMember          = "您确定从该{$lang->executionCommon}中移除该用户吗？";
 $lang->execution->confirmUnlinkStory           = "移除该需求后，该需求关联的用例将被移除，该需求关联的任务将被取消，请确认。";
+$lang->execution->confirmBatchUnlinkStory      = "移除需求后，需求关联的用例将被移除，需求关联的任务将被取消。";
 $lang->execution->confirmSync                  = "修改所属{$lang->projectCommon}后,为了保持数据的一致性，该执行所关联的{$lang->productCommon}、{$lang->SRCommon}、团队和白名单数据将会同步到新的{$lang->projectCommon}中，请知悉。";
 $lang->execution->confirmUnlinkExecutionStory  = "您确定从该{$lang->projectCommon}中移除该需求吗？";
 $lang->execution->notAllowedUnlinkStory        = "该{$lang->SRCommon}已经与{$lang->projectCommon}下{$lang->executionCommon}相关联，请从{$lang->executionCommon}中移除后再操作。";
@@ -438,6 +439,8 @@ $lang->execution->hasSuspendedOrClosedChildren = "阶段%s下的子阶段未全�
 $lang->execution->hasNotClosedChildren         = "阶段%s下的子阶段未全部关闭，无法修改，已过滤。";
 $lang->execution->hasStartedTask               = "%s%s下的任务已经开始，无法修改，已过滤。";
 $lang->execution->cannotManageProducts         = "当前{$lang->execution->common}的{$lang->project->common}为%s{$lang->project->common}，不能关联{$lang->productCommon}。";
+$lang->execution->confirmCloseExecution        = "该{$lang->executionCommon}下还有未关闭的任务：%s，您确定要关闭{$lang->executionCommon}吗？";
+$lang->execution->confirmBatchCloseExecution   = "%s中还有未关闭的任务，您确定要关闭{$lang->executionCommon}吗？";
 
 /* 统计。*/
 $lang->execution->charts = new stdclass();

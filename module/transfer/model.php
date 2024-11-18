@@ -70,6 +70,7 @@ class transferModel extends model
         if($module)
         {
             if(in_array($module, array('epic', 'requirement'))) $module = 'story';
+            if($module == 'caselib') $module = 'testcase';
 
             $this->loadModel($module);
             $this->moduleConfig     = $this->config->$module;
@@ -146,6 +147,7 @@ class transferModel extends model
         $transferFieldList = $this->transferConfig->fieldList; //生成一个完整的fieldList结构。
         if(is_string($this->moduleConfig->dateFields)) $this->moduleConfig->dateFields = explode(',', $this->moduleConfig->dateFields);
         if(is_string($this->moduleConfig->datetimeFields)) $this->moduleConfig->datetimeFields = explode(',', $this->moduleConfig->datetimeFields);
+        if(is_string($this->moduleConfig->textareaFields)) $this->moduleConfig->textareaFields = explode(',', $this->moduleConfig->textareaFields);
 
         $fieldList = array();
         /* build module fieldList. */
@@ -172,6 +174,7 @@ class transferModel extends model
 
             if(in_array($field, $this->moduleConfig->dateFields)) $moduleFieldList['control'] = 'datePicker';
             if(in_array($field, $this->moduleConfig->datetimeFields)) $moduleFieldList['control'] = 'datetimePicker';
+            if(in_array($field, $this->moduleConfig->textareaFields)) $moduleFieldList['control'] = 'textarea';
             $moduleFieldList['multiple'] = $moduleFieldList['control'] == 'multiple';
             if($moduleFieldList['control'] == 'select' || $moduleFieldList['control'] == 'multiple') $moduleFieldList['control'] = 'picker';
 
@@ -212,21 +215,19 @@ class transferModel extends model
 
         $moduleName = $this->app->rawModule;
         $methodName = $this->app->rawMethod;
-        $action     = $this->dao->select('*')->from(TABLE_WORKFLOWACTION)->where('module')->eq($moduleName)->andWhere('action')->eq($methodName)->fetch();
+        $groupID    = $this->loadModel('workflowgroup')->getGroupIDByData($moduleName, null);
+        $action     = $this->loadModel('workflowaction')->getByModuleAndAction($moduleName, $methodName, $groupID);
 
         if(empty($action)) return $fieldList;
         if($action->extensionType == 'none' and $action->buildin == 1) return $fieldList;
 
-        $layouts      = $this->loadModel('workflowlayout')->getFields($moduleName, $methodName);
-        $notEmptyRule = $this->loadModel('workflowrule')->getByTypeAndRule('system', 'notempty');
-
-        $workflowFields = $this->loadModel('workflowaction')->getFields($moduleName, $methodName);
+        $notEmptyRule   = $this->loadModel('workflowrule')->getByTypeAndRule('system', 'notempty');
+        $workflowFields = $this->workflowaction->getPageFields($moduleName, $methodName, true, null, 0, $groupID);
         foreach($workflowFields as $field)
         {
             if(empty($fieldList[$field->field])) continue;
             if(!empty($field->buildin)) continue;
             if(empty($field->show)) continue;
-            if(!isset($layouts[$field->field])) continue;
             if($field->control == 'file')
             {
                 unset($fieldList[$field->field]);
@@ -443,6 +444,7 @@ class transferModel extends model
         $this->moduleConfig->sysLangFields  = isset($moduleConfig->sysLangFields)  ? $moduleConfig->sysLangFields  : $transferConfig->sysLangFields;
         $this->moduleConfig->sysDataFields  = isset($moduleConfig->sysDataFields)  ? $moduleConfig->sysDataFields  : $transferConfig->sysDataFields;
         $this->moduleConfig->datetimeFields = isset($moduleConfig->datetimeFields) ? $moduleConfig->datetimeFields : $transferConfig->datetimeFields;
+        $this->moduleConfig->textareaFields = isset($moduleConfig->textareaFields) ? $moduleConfig->textareaFields : $transferConfig->textareaFields;
     }
 
     /**
@@ -682,7 +684,6 @@ class transferModel extends model
             /* Add table alias to field. */
             preg_match_all('/[`"]' . $this->config->db->prefix . $module .'[`"] AS ([\w]+) /', $queryCondition, $matches);
             if(isset($matches[1][0])) $selectKey = "{$matches[1][0]}.id";
-            if($module == 'case' && !empty($_SESSION['testcaseTransferParams']['taskID'])) $selectKey = 't1.id';
 
             $stmt = $this->dbh->query($queryCondition . ($this->post->exportType == 'selected' ? " AND $selectKey IN(" . ($checkedItem ? $checkedItem : '0') . ")" : ''));
             while($row = $stmt->fetch())
@@ -726,6 +727,7 @@ class transferModel extends model
                 /* 获取字段的控件类型。*/
                 /* Get field control type. */
                 $control = isset($fieldList[$field]['control']) ? $fieldList[$field]['control'] : '';
+                if(isset($control['control'])) $control = $control['control'];
 
                 /* 如果字段是下拉字段并且在excel里不是下拉框的形式时，根据fieldList->value查找value。*/
                 /* If the field is a dropdown field and the value in excel is not a dropdown box, the value is found by fieldList->value. */
@@ -881,6 +883,7 @@ class transferModel extends model
             $tmpArray = new stdClass();
             foreach($row as $currentColumn => $cellValue)
             {
+                $cellValue = trim((string)$cellValue);
                 /* 第一行是标题字段。*/
                 /* First row is title field. */
                 if($currentRow == 1)

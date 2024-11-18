@@ -56,15 +56,12 @@ $cols = $this->loadModel('datatable')->getSetting('execution');
 if($execution->type != 'stage') unset($cols['design']);
 
 $tableData = initTableData($tasks, $cols, $this->task);
-$tableData = array_map(
-    function($task)
-    {
-        if(helper::isZeroDate($task->deadline))   $task->deadline   = '';
-        if(helper::isZeroDate($task->estStarted)) $task->estStarted = '';
-        return $task;
-    },
-    $tableData
-);
+foreach($tableData as $task)
+{
+    $task->status = $this->processStatus('task', $task);
+    if(helper::isZeroDate($task->deadline))   $task->deadline   = '';
+    if(helper::isZeroDate($task->estStarted)) $task->estStarted = '';
+}
 
 if($config->edition == 'ipd')
 {
@@ -114,7 +111,7 @@ toolbar
     ) : null,
     $canCreate && $canBatchCreate ? btngroup
     (
-        btn(setClass('btn primary'), set::icon('plus'), set::url($createLink), $lang->task->create),
+        btn(setClass('btn primary createTask-btn'), set::icon('plus'), set::url($createLink), $lang->task->create),
         dropdown
         (
             btn(setClass('btn primary dropdown-toggle'),
@@ -123,7 +120,7 @@ toolbar
             set::placement('bottom-end')
         )
     ) : null,
-    $canCreate && !$canBatchCreate ? item(set($createItem + array('class' => 'btn primary', 'icon' => 'plus'))) : null,
+    $canCreate && !$canBatchCreate ? item(set($createItem + array('class' => 'btn primary createTask-btn', 'icon' => 'plus'))) : null,
     $canBatchCreate && !$canCreate ? item(set($batchCreateItem + array('class' => 'btn primary', 'icon' => 'plus'))) : null
 );
 
@@ -155,10 +152,11 @@ if($canBatchAction)
 {
     if($canBatchClose || $canBatchCancel)
     {
+        $batchCancelClass = $config->edition == 'open' ? 'ajax-btn' : 'ajax-cancel-btn';
         $batchItems = array
         (
             array('text' => $lang->close,        'innerClass' => 'batch-btn ajax-btn not-open-url', 'disabled' => !$canBatchClose, 'data-url' => createLink('task', 'batchClose')),
-            array('text' => $lang->task->cancel, 'innerClass' => 'batch-btn ajax-btn not-open-url', 'disabled' => !$canBatchCancel, 'data-url' => createLink('task', 'batchCancel'))
+            array('text' => $lang->task->cancel, 'innerClass' => "batch-btn $batchCancelClass not-open-url", 'disabled' => !$canBatchCancel, 'data-url' => createLink('task', 'batchCancel'))
         );
     }
 

@@ -72,7 +72,7 @@ if($efforts)
                 h::td($effort->id),
                 h::td($effort->date),
                 h::td(zget($users, $effort->account)),
-                h::td(html($effort->work)),
+                h::td(html($effort->work), setClass('break-all')),
                 h::td("{$effort->consumed} {$lang->task->suffixHour}"),
                 h::td("{$effort->left} {$lang->task->suffixHour}"),
                 h::td
@@ -205,7 +205,7 @@ else
             set::required(true),
             set::name('date'),
             set::label($lang->task->date),
-            set::width('120px'),
+            set::width('130px'),
             set::control(array('control' => 'date', 'id' => '$GID')),
             set::value(helper::today())
         ),

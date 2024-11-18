@@ -76,7 +76,8 @@ class picker extends wg
         'onPopShow?: function',             // 菜单显示时的回调函数。
         'onPopShown?: function',            // 菜单显示后的回调函数。
         'onPopHide?: function',             // 菜单隐藏时的回调函数。
-        'onPopHidden?: function'            // 菜单隐藏后的回调函数。
+        'onPopHidden?: function',           // 菜单隐藏后的回调函数。
+        'maxItemsCount?: int'               // 最大显示条目数。
     );
 
     /**
@@ -88,7 +89,8 @@ class picker extends wg
     protected function getPickerProps(): array
     {
         list($pickerProps, $restProps) = $this->props->split(array_keys(static::definedPropsList()));
-        $items = $pickerProps['items'];
+        $items = empty($pickerProps['items']) ? array() : $pickerProps['items'];
+        if(is_array($items) && isset($items['url']) && isset($items['method'])) $items = (object)$items;
         $pickerItems  = is_array($items) ? array() : $items;
         $hasZeroValue = false;
         $defaultValue = isset($pickerProps['value']) ? $pickerProps['value'] : (isset($pickerProps['defaultValue']) ? $pickerProps['defaultValue'] : '');
@@ -96,12 +98,14 @@ class picker extends wg
         if(is_array($defaultValue)) $defaultValue = implode($this->prop('valueSplitter', ','), $defaultValue);
         if(is_array($items) && !empty($items))
         {
+            $pinyinItems = ($pinyinKeys && !isset($item['keys']) && class_exists('common')) ? common::convert2Pinyin($items) : array();
             foreach($items as $key => $item)
             {
                 if(!is_array($item))           $item = array('text' => $item, 'value' => $key);
                 if(isset($item['value']) && !is_string($item['value'])) $item['value'] = strval($item['value']);
                 if(isset($item['value']) && $item['value'] === '0') $hasZeroValue  = true;
-                if($pinyinKeys && !isset($item['keys']) && class_exists('common')) $item['keys'] = implode(' ', common::convert2Pinyin(array($item['text'])));
+                if(!is_array($item['text'])) $item['keys'] = zget($pinyinItems, $item['text'], zget($item, 'keys', ''));
+                if(is_array($item['text']) && isset($item['hint']) && !is_array($item['hint'])) $item['keys'] = zget($pinyinItems, $item['hint'], zget($item, 'keys', ''));
                 $pickerItems[] = $item;
             }
         }

@@ -86,15 +86,15 @@ function buildBody(array $cols): form
 
     foreach($cols as $col)
     {
-        if($_SESSION['currentProductType'] == 'normal' && $col['name'] == 'branch') continue;
-        if($col['type']) $col = array_merge(getDefaultConfig($col['type']), $col);
+        if(zget($_SESSION, 'currentProductType', '') == 'normal' && $col['name'] == 'branch') continue;
+        if(isset($col['type'])) $col = array_merge(getDefaultConfig($col['type']), $col);
         if(!isset($col['fixed']) || empty($col['fixed'])) $col['fixed'] = 'no';
         $itemsList[$col['fixed']][] = array(
             'required' => isset($col['required']) && $col['required'] === true,
-            'title' => $col['title'],
-            'width' => $col['width'],
-            'name' => $col['name'],
-            'show' => $col['show']
+            'title'    => zget($col, 'title', ''),
+            'width'    => zget($col, 'width', ''),
+            'name'     => zget($col, 'name', ''),
+            'show'     => !empty($col['show'])
         );
     }
 
